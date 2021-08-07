@@ -1,9 +1,9 @@
-name: release-tsdr
+name: release
 on:
   push:
 
 env:
-  DOCKER_BASE_NAME: ghcr.io/${{ github.repository_owner }}/${{ github.repository_name }}/tsdr
+  DOCKER_BASE_NAME: ghcr.io/${{ github.repository_owner }}/${{ github.repository_name }}
 
 jobs:
   docker:
@@ -26,6 +26,5 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v2
         with:
-          context: tsdr
           push: true
           tags: ${{ env.DOCKER_BASE_NAME }}:latest
