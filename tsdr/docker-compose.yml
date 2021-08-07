@@ -1,8 +1,0 @@
-version: '3'
-
-services:
-  tsdr:
-    build: .
-    volumes:
-      - ./:/usr/src/app
-    entrypoint: ["/usr/src/app/tsdr.py"]
