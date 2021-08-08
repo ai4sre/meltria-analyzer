@@ -9,6 +9,7 @@ import sys
 import time
 from concurrent import futures
 from datetime import datetime
+from typing import Any, Tuple
 
 import numpy as np
 import pandas as pd
@@ -31,6 +32,14 @@ TARGET_DATA = {"containers": "all",
                "services": "all",
                "nodes": "all",
                "middlewares": "all"}
+
+ROOT_METRIC_LABEL = "s-front-end_latency"
+CHAOS_TO_CAUSE_METRIC_PREFIX = {
+    'pod-cpu-hog': 'cpu_',
+    'pod-memory-hog': 'memory_',
+    'pod-network-loss': 'network_',
+    'pod-network-latency': 'network_',
+}
 
 
 def reduce_series_with_cv(data_df):
@@ -405,10 +414,27 @@ def main():
               TSIFTER_METHOD, SIEVE_METHOD, file=sys.stderr)
         exit(-1)
 
+    # Check that the results include SLO metric
+    root_metrics: list[str] = []
+    for column in list(reduced_df.columns):
+        if column == ROOT_METRIC_LABEL:
+            root_metrics.append(column)
+
+    # Check that the results include cause metric
+    _, cause_metrics = check_cause_metrics(
+        list(reduced_df.columns),
+        metrics_meta['injected_chaos_type'],
+        metrics_meta['chaos_injected_component'],
+    )
+
     summary = {
         'tsdr_method': args.method,
         'data_file': args.datafile.split("/")[-1],
         'number_of_plots': PLOTS_NUM,
+        'label_checking_results': {
+            'root_metrics': root_metrics,
+            'cause_metrics': cause_metrics,
+        },
         'execution_time': {
             "reduce_series": elapsedTime['step1'],
             "clustering": elapsedTime['step2'],
