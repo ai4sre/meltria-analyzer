@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import argparse
 import base64
 import json
@@ -16,10 +14,11 @@ import numpy as np
 import pandas as pd
 import pcalg
 from IPython.display import Image
+from lib.metrics import check_cause_metrics
 from pgmpy import estimators
 
-from citest.fisher_z import ci_test_fisher_z
-from citest.fisher_z_pgmpy import fisher_z
+from .citest.fisher_z import ci_test_fisher_z
+from .citest.fisher_z_pgmpy import fisher_z
 
 SIGNIFICANCE_LEVEL = 0.05
 
@@ -65,13 +64,6 @@ SERVICE_CONTAINERS = {
 }
 
 ROOT_METRIC_NODE = "s-front-end_latency"
-
-CHAOS_TO_CAUSE_METRIC_PREFIX = {
-    'pod-cpu-hog': 'cpu_',
-    'pod-memory-hog': 'memory_',
-    'pod-network-loss': 'network_',
-    'pod-network-latency': 'network_',
-}
 
 
 def read_data_file(tsdr_result_file):
@@ -296,22 +288,12 @@ def find_dags(G: nx.Graph) -> nx.Graph:
     return G
 
 
-def check_cause_metrics(ng: nx.Graph, chaos_type: str, chaos_comp: str) -> Tuple[bool, List[Any]]:
-    prefix = CHAOS_TO_CAUSE_METRIC_PREFIX[chaos_type]
-    cause_metrics = []
-    for node in ng.nodes():
-        if re.match(f"^c-{chaos_comp}_{prefix}.+", node):
-            cause_metrics.append(node)
-    if len(cause_metrics) > 0:
-        return True, cause_metrics
-    return False, cause_metrics
-
-
 def diag(tsdr_file, citest_alpha, pc_stable, library, out_dir):
     reduced_df, metrics_dimension, clustering_info, mappings, metrics_meta = \
         read_data_file(tsdr_file)
     if ROOT_METRIC_NODE not in reduced_df.columns:
-        raise ValueError(f"{tsdr_file} has no root metric node: {ROOT_METRIC_NODE}")
+        raise ValueError(
+            f"{tsdr_file} has no root metric node: {ROOT_METRIC_NODE}")
 
     labels = {}
     for i in range(len(reduced_df.columns)):
@@ -332,15 +314,18 @@ def diag(tsdr_file, citest_alpha, pc_stable, library, out_dir):
             reduced_df, citest_alpha, pc_stable)
     else:
         raise ValueError('library should be pcalg or pgmpy')
-    
+
     print("--> Checking causal graph including chaos-injected metrics", file=sys.stderr)
     chaos_type = metrics_meta['injected_chaos_type']
     chaos_comp = metrics_meta['chaos_injected_component']
-    is_cause_metrics, cause_metric_nodes = check_cause_metrics(g, chaos_type, chaos_comp)
+    is_cause_metrics, cause_metric_nodes = check_cause_metrics(
+        list(g.nodes()), chaos_type, chaos_comp)
     if is_cause_metrics:
-        print(f"Found cause metric {cause_metric_nodes} in '{chaos_comp}' '{chaos_type}'", file=sys.stderr)
+        print(
+            f"Found cause metric {cause_metric_nodes} in '{chaos_comp}' '{chaos_type}'", file=sys.stderr)
     else:
-        print(f"Not found cause metric in '{chaos_comp}' '{chaos_type}'", file=sys.stderr)
+        print(
+            f"Not found cause metric in '{chaos_comp}' '{chaos_type}'", file=sys.stderr)
 
     agraph = nx.nx_agraph.to_agraph(g)
     img = agraph.draw(prog='sfdp', format='png')
@@ -354,7 +339,8 @@ def diag(tsdr_file, citest_alpha, pc_stable, library, out_dir):
         ts = datetime.now().strftime("%Y%m%d%H%M%S")
         imgfile = os.path.join(out_dir, ts) + '.png'
         plt.savefig(imgfile)
-        print(f"Saved the file of causal graph image to {imgfile}", file=sys.stderr)
+        print(
+            f"Saved the file of causal graph image to {imgfile}", file=sys.stderr)
 
         metadata = {
             'metrics_meta': metrics_meta,
@@ -398,7 +384,3 @@ def main():
 
     diag(args.tsdr_resultfile, args.citest_alpha,
          args.pc_stable, args.library, args.out_dir)
-
-
-if __name__ == '__main__':
-    main()
