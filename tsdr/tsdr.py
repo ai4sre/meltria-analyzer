@@ -11,7 +11,7 @@ from typing import Any, Tuple
 
 import numpy as np
 import pandas as pd
-from lib.metrics import check_cause_metrics
+from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
 from statsmodels.tsa.stattools import adfuller
@@ -31,8 +31,6 @@ TARGET_DATA = {"containers": "all",
                "services": "all",
                "nodes": "all",
                "middlewares": "all"}
-
-ROOT_METRIC_LABEL = "s-front-end_latency"
 
 
 def reduce_series_with_cv(data_df):

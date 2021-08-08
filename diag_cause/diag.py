@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pcalg
 from IPython.display import Image
-from lib.metrics import check_cause_metrics
+from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
 from pgmpy import estimators
 
 from .citest.fisher_z import ci_test_fisher_z

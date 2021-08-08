@@ -8,6 +8,8 @@ CHAOS_TO_CAUSE_METRIC_PREFIX = {
     'pod-network-latency': 'network_',
 }
 
+ROOT_METRIC_LABEL = "s-front-end_latency"
+
 
 def check_cause_metrics(metrics: list[str], chaos_type: str, chaos_comp: str
                         ) -> Tuple[bool, list[Any]]:
