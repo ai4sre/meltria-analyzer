@@ -48,24 +48,6 @@ def reduce_series_with_cv(data_df):
     return reduced_by_cv_df
 
 
-def reduce_series_with_adf(data_df, max_workers):
-    reduced_by_st_df = pd.DataFrame()
-    with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        future_to_col = {}
-        for col in data_df.columns:
-            data = data_df[col].values
-            if data.sum() == 0. or len(np.unique(data)) == 1 or np.isnan(data.sum()):
-                continue
-            future_to_col[executor.submit(adfuller, data)] = col
-        for future in futures.as_completed(future_to_col):
-            col = future_to_col[future]
-            p_val = future.result()[1]
-            if not np.isnan(p_val):
-                if p_val >= SIGNIFICANCE_LEVEL:
-                    reduced_by_st_df[col] = data_df[col]
-    return reduced_by_st_df
-
-
 def hierarchical_clustering(target_df, dist_func):
     series = target_df.values.T
     norm_series = util.z_normalization(series)
