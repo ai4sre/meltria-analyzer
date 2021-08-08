@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import argparse
 import json
 import os
@@ -9,17 +7,19 @@ import sys
 import time
 from concurrent import futures
 from datetime import datetime
+from typing import Any, Tuple
 
 import numpy as np
 import pandas as pd
+from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
 from statsmodels.tsa.stattools import adfuller
 
-from clustering.kshape import kshape
-from clustering.metricsnamecluster import cluster_words
-from clustering.sbd import sbd, silhouette_score
-from util import util
+from .clustering.kshape import kshape
+from .clustering.metricsnamecluster import cluster_words
+from .clustering.sbd import sbd, silhouette_score
+from .util import util
 
 TSIFTER_METHOD = 'tsifter'
 SIEVE_METHOD = 'sieve'
@@ -88,7 +88,8 @@ def hierarchical_clustering(target_df, dist_func):
         if len(cluster_metrics) == 2:
             # Select the representative metric at random
             shuffle_list = random.sample(cluster_metrics, len(cluster_metrics))
-            clustering_info[target_df.columns[shuffle_list[0]]] = [target_df.columns[shuffle_list[1]]]
+            clustering_info[target_df.columns[shuffle_list[0]]] = [
+                target_df.columns[shuffle_list[1]]]
             remove_list.append(target_df.columns[shuffle_list[1]])
         elif len(cluster_metrics) > 2:
             # Select medoid as the representative metric
@@ -104,7 +105,8 @@ def hierarchical_clustering(target_df, dist_func):
             for r in cluster_metrics:
                 if r != medoid:
                     remove_list.append(target_df.columns[r])
-                    clustering_info[target_df.columns[medoid]].append(target_df.columns[r])
+                    clustering_info[target_df.columns[medoid]].append(
+                        target_df.columns[r])
     return clustering_info, remove_list
 
 
@@ -232,7 +234,8 @@ def tsifter_clustering(reduced_by_st_df, services_list, max_workers):
                 ("s-{}_".format(ser), "c-{}_".format(ser), "c-{}-".format(ser), "m-{}_".format(ser), "m-{}-".format(ser)))]
             if len(target_df.columns) in [0, 1]:
                 continue
-            future_list.append(executor.submit(hierarchical_clustering, target_df, sbd))
+            future_list.append(executor.submit(
+                hierarchical_clustering, target_df, sbd))
         for future in futures.as_completed(future_list):
             c_info, remove_list = future.result()
             clustering_info.update(c_info)
@@ -255,7 +258,7 @@ def sieve_clustering(reduced_by_cv_df, services_list, max_workers):
             c_info, remove_list = kshape_clustering(target_df, ser, executor)
             clustering_info.update(c_info)
             reduced_df = reduced_df.drop(remove_list, axis=1)
-    
+
     return reduced_df, clustering_info
 
 
@@ -266,7 +269,8 @@ def run_tsifter(data_df, metrics_dimension, services_list, max_workers):
     reduced_by_st_df = tsifter_reduce_series(data_df, max_workers)
 
     time_adf = round(time.time() - start, 2)
-    metrics_dimension = util.count_metrics(metrics_dimension, reduced_by_st_df, 1)
+    metrics_dimension = util.count_metrics(
+        metrics_dimension, reduced_by_st_df, 1)
     metrics_dimension["total"].append(len(reduced_by_st_df.columns))
 
     # step2
@@ -290,7 +294,8 @@ def run_sieve(data_df, metrics_dimension, services_list, max_workers):
     reduced_by_st_df = sieve_reduce_series(data_df)
 
     time_cv = round(time.time() - start, 2)
-    metrics_dimension = util.count_metrics(metrics_dimension, reduced_by_st_df, 1)
+    metrics_dimension = util.count_metrics(
+        metrics_dimension, reduced_by_st_df, 1)
     metrics_dimension["total"].append(len(reduced_by_st_df.columns))
 
     # step2
@@ -317,18 +322,23 @@ def read_metrics_json(data_file):
             for metric in t:
                 if metric["metric_name"] not in TARGET_DATA[target] and TARGET_DATA[target] != "all":
                     continue
-                metric_name = metric["metric_name"].replace("container_", "").replace("node_", "")
+                metric_name = metric["metric_name"].replace(
+                    "container_", "").replace("node_", "")
                 target_name = metric[
-                    "{}_name".format(target[:-1]) if target != "middlewares" else "container_name"
+                    "{}_name".format(
+                        target[:-1]) if target != "middlewares" else "container_name"
                 ]
                 if target_name in ["queue-master", "rabbitmq", "session-db"]:
                     continue
                 # remove ';node-exporter' suffix of k8s node name.
                 target_name = re.sub(';node-exporter$', '', target_name)
-                column_name = "{}-{}_{}".format(target[0], target_name, metric_name)
-                data_df[column_name] = np.array(metric["values"], dtype=np.float64)[:, 1][-PLOTS_NUM:]
+                column_name = "{}-{}_{}".format(target[0],
+                                                target_name, metric_name)
+                data_df[column_name] = np.array(metric["values"], dtype=np.float64)[
+                    :, 1][-PLOTS_NUM:]
     data_df = data_df.round(4)
-    data_df = data_df.interpolate(method="spline", order=3, limit_direction="both")
+    data_df = data_df.interpolate(
+        method="spline", order=3, limit_direction="both")
     return data_df, raw_json['mappings'], raw_json['meta']
 
 
@@ -356,8 +366,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("datafile", help="metrics JSON data file")
     parser.add_argument("--method",
+                        choices=['tsifter', 'sieve'],
                         help="specify one of tsdr methods",
-                        type=str, default=TSIFTER_METHOD)
+                        default=TSIFTER_METHOD)
     parser.add_argument("--max-workers",
                         help="number of processes",
                         type=int, default=1)
@@ -392,10 +403,27 @@ def main():
               TSIFTER_METHOD, SIEVE_METHOD, file=sys.stderr)
         exit(-1)
 
+    # Check that the results include SLO metric
+    root_metrics: list[str] = []
+    for column in list(reduced_df.columns):
+        if column == ROOT_METRIC_LABEL:
+            root_metrics.append(column)
+
+    # Check that the results include cause metric
+    _, cause_metrics = check_cause_metrics(
+        list(reduced_df.columns),
+        metrics_meta['injected_chaos_type'],
+        metrics_meta['chaos_injected_component'],
+    )
+
     summary = {
         'tsdr_method': args.method,
         'data_file': args.datafile.split("/")[-1],
         'number_of_plots': PLOTS_NUM,
+        'label_checking_results': {
+            'root_metrics': root_metrics,
+            'cause_metrics': cause_metrics,
+        },
         'execution_time': {
             "reduce_series": elapsedTime['step1'],
             "clustering": elapsedTime['step2'],
@@ -412,7 +440,7 @@ def main():
 
     if args.results_dir:
         file_name = "{}_{}.json".format(
-                TSIFTER_METHOD, datetime.now().strftime("%Y%m%d%H%M%S"))
+            TSIFTER_METHOD, datetime.now().strftime("%Y%m%d%H%M%S"))
         result_dir = "./results/{}".format(args.datafile.split("/")[-1])
         if not os.path.isdir(result_dir):
             os.makedirs(result_dir)
@@ -425,14 +453,3 @@ def main():
     else:
         with open(args.out, mode='w') as f:
             json.dump(summary, f)
-
-
-if __name__ == '__main__':
-    # Disable multithreading in numpy.
-    # see https://stackoverflow.com/questions/30791550/limit-number-of-threads-in-numpy
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["OPENBLAS_NUM_THREADS"] = "1"
-    os.environ["MKL_NUM_THREADS"] = "1"
-    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-    os.environ["NUMEXPR_NUM_THREADS"] = "1"
-    main()

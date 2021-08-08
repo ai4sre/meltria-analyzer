@@ -5,9 +5,9 @@ services:
     build: .
     volumes:
       - .:/usr/src/app
-    entrypoint: ["/usr/src/app/tsdr/tsdr.py"]
+    entrypoint: ["/usr/src/app/tsdr.py"]
   diag-cause:
     build: .
     volumes:
       - .:/usr/src/app
-    entrypoint: ["/usr/src/app/diag-cause/diag.py"]
+    entrypoint: ["/usr/src/app/diag_cause.py"]
