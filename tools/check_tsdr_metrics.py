@@ -2,11 +2,8 @@
 
 import argparse
 import json
-import os
-import sys
 
-sys.path.append(os.path.dirname(__file__) + "/../lib")
-from metrics import ROOT_METRIC_LABEL, check_cause_metrics
+from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
 
 
 def main():

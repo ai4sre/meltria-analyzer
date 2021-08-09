@@ -2,15 +2,11 @@
 
 import argparse
 import json
-import os
 import sys
 from multiprocessing import cpu_count
 
-sys.path.append(os.path.dirname(__file__) + "/../tsdr")
-import tsdr
-
-sys.path.append(os.path.dirname(__file__) + "/../lib")
-from metrics import check_cause_metrics
+from lib.metrics import check_cause_metrics
+from tsdr import tsdr
 
 DIST_THRESHOLDS = [0.001, 0.01, 0.1]
 
@@ -24,7 +20,6 @@ def main():
 
     summary = {}
     for metrics_file in args.metricsfiles:
-        # read metric
         data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']

@@ -10,17 +10,15 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
 from statsmodels.tsa.stattools import adfuller
 
-from clustering.kshape import kshape
-from clustering.metricsnamecluster import cluster_words
-from clustering.sbd import sbd, silhouette_score
-from util import util
-
-sys.path.append(os.path.dirname(__file__) + "/../lib")
-from metrics import ROOT_METRIC_LABEL, check_cause_metrics
+from tsdr.clustering.kshape import kshape
+from tsdr.clustering.metricsnamecluster import cluster_words
+from tsdr.clustering.sbd import sbd, silhouette_score
+from tsdr.util import util
 
 TSIFTER_METHOD = 'tsifter'
 SIEVE_METHOD = 'sieve'
