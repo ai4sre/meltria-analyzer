@@ -7,19 +7,20 @@ import sys
 import time
 from concurrent import futures
 from datetime import datetime
-from typing import Any, Tuple
 
 import numpy as np
 import pandas as pd
-from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
 from statsmodels.tsa.stattools import adfuller
 
-from .clustering.kshape import kshape
-from .clustering.metricsnamecluster import cluster_words
-from .clustering.sbd import sbd, silhouette_score
-from .util import util
+from clustering.kshape import kshape
+from clustering.metricsnamecluster import cluster_words
+from clustering.sbd import sbd, silhouette_score
+from util import util
+
+sys.path.append(os.path.dirname(__file__) + "/../lib")
+from metrics import ROOT_METRIC_LABEL, check_cause_metrics
 
 TSIFTER_METHOD = 'tsifter'
 SIEVE_METHOD = 'sieve'
@@ -48,32 +49,14 @@ def reduce_series_with_cv(data_df):
     return reduced_by_cv_df
 
 
-def reduce_series_with_adf(data_df, max_workers):
-    reduced_by_st_df = pd.DataFrame()
-    with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        future_to_col = {}
-        for col in data_df.columns:
-            data = data_df[col].values
-            if data.sum() == 0. or len(np.unique(data)) == 1 or np.isnan(data.sum()):
-                continue
-            future_to_col[executor.submit(adfuller, data)] = col
-        for future in futures.as_completed(future_to_col):
-            col = future_to_col[future]
-            p_val = future.result()[1]
-            if not np.isnan(p_val):
-                if p_val >= SIGNIFICANCE_LEVEL:
-                    reduced_by_st_df[col] = data_df[col]
-    return reduced_by_st_df
-
-
-def hierarchical_clustering(target_df, dist_func):
+def hierarchical_clustering(target_df, dist_func, dist_threshold: float):
     series = target_df.values.T
     norm_series = util.z_normalization(series)
     dist = pdist(norm_series, metric=dist_func)
     # distance_list.extend(dist)
     dist_matrix = squareform(dist)
     z = linkage(dist, method="single", metric=dist_func)
-    labels = fcluster(z, t=THRESHOLD_DIST, criterion="distance")
+    labels = fcluster(z, t=dist_threshold, criterion="distance")
     cluster_dict = {}
     for i, v in enumerate(labels):
         if v not in cluster_dict:
@@ -200,7 +183,7 @@ def kshape_clustering(target_df, service_name, executor):
     return clustering_info, remove_list
 
 
-def tsifter_reduce_series(data_df, max_workers):
+def tsifter_reduce_series(data_df, max_workers, adf_alpha: float):
     reduced_by_st_df = pd.DataFrame()
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_col = {}
@@ -213,7 +196,7 @@ def tsifter_reduce_series(data_df, max_workers):
             col = future_to_col[future]
             p_val = future.result()[1]
             if not np.isnan(p_val):
-                if p_val >= SIGNIFICANCE_LEVEL:
+                if p_val >= adf_alpha:
                     reduced_by_st_df[col] = data_df[col]
     return reduced_by_st_df
 
@@ -222,7 +205,7 @@ def sieve_reduce_series(data_df):
     return reduce_series_with_cv(data_df)
 
 
-def tsifter_clustering(reduced_by_st_df, services_list, max_workers):
+def tsifter_clustering(reduced_by_st_df, services_list, max_workers, dist_threshold: float):
     clustering_info = {}
     reduced_df = reduced_by_st_df
 
@@ -235,7 +218,7 @@ def tsifter_clustering(reduced_by_st_df, services_list, max_workers):
             if len(target_df.columns) in [0, 1]:
                 continue
             future_list.append(executor.submit(
-                hierarchical_clustering, target_df, sbd))
+                hierarchical_clustering, target_df, sbd, dist_threshold))
         for future in futures.as_completed(future_list):
             c_info, remove_list = future.result()
             clustering_info.update(c_info)
@@ -262,11 +245,11 @@ def sieve_clustering(reduced_by_cv_df, services_list, max_workers):
     return reduced_df, clustering_info
 
 
-def run_tsifter(data_df, metrics_dimension, services_list, max_workers):
+def run_tsifter(data_df, metrics_dimension, services_list, max_workers, adf_alpha: float, dist_threshold: float):
     # step1
     start = time.time()
 
-    reduced_by_st_df = tsifter_reduce_series(data_df, max_workers)
+    reduced_by_st_df = tsifter_reduce_series(data_df, max_workers, adf_alpha)
 
     time_adf = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(
@@ -277,7 +260,7 @@ def run_tsifter(data_df, metrics_dimension, services_list, max_workers):
     start = time.time()
 
     reduced_df, clustering_info = tsifter_clustering(
-        reduced_by_st_df, services_list, max_workers)
+        reduced_by_st_df, services_list, max_workers, dist_threshold)
 
     time_clustering = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(metrics_dimension, reduced_df, 2)
@@ -362,6 +345,21 @@ def aggregate_dimension(data_df):
     return metrics_dimension
 
 
+def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs):
+    services = prepare_services_list(data_df)
+
+    metrics_dimension = aggregate_dimension(data_df)
+
+    if method == TSIFTER_METHOD:
+        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_tsifter(
+            data_df, metrics_dimension, services, max_workers,
+            kwargs['tsifter_adf_alpha'], kwargs['tsifter_clustering_threshold'])
+    elif method == SIEVE_METHOD:
+        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_sieve(
+            data_df, metrics_dimension, services, max_workers)
+    return elapsedTime, reduced_df, metrics_dimension, clustering_info
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("datafile", help="metrics JSON data file")
@@ -385,23 +383,24 @@ def main():
     parser.add_argument("--include-raw-data",
                         help="include time series to results",
                         action='store_true')
+    parser.add_argument("--tsifter-adf-alpha",
+                        type=float,
+                        default=SIGNIFICANCE_LEVEL,
+                        help='sigificance level for ADF test')
+    parser.add_argument("--tsifter-clustering-threshold",
+                        type=float,
+                        default=THRESHOLD_DIST,
+                        help='distance threshold for hierachical clustering')
     args = parser.parse_args()
 
-    data_df, mappings, metrics_meta = read_metrics_json(args.datafile)
-    services = prepare_services_list(data_df)
-
-    metrics_dimension = aggregate_dimension(data_df)
-
-    if args.method == TSIFTER_METHOD:
-        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_tsifter(
-            data_df, metrics_dimension, services, args.max_workers)
-    elif args.method == SIEVE_METHOD:
-        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_sieve(
-            data_df, metrics_dimension, services, args.max_workers)
-    else:
-        print("--method must be {} or {}",
-              TSIFTER_METHOD, SIEVE_METHOD, file=sys.stderr)
-        exit(-1)
+    data_df, mappings, metrics_meta = read_metrics_json(args.metricfile)
+    elapsedTime, reduced_df, metrics_dimension, clustering_info = run_tsdr(
+        data_df=data_df,
+        method=args.method,
+        max_workers=args.max_workers,
+        tsifter_adf_alpha=args.tsifter_adf_alpha,
+        tsifter_clustering_threshold=args.tsifter_clustering_threshold,
+    )
 
     # Check that the results include SLO metric
     root_metrics: list[str] = []
@@ -427,7 +426,7 @@ def main():
         'execution_time': {
             "reduce_series": elapsedTime['step1'],
             "clustering": elapsedTime['step2'],
-            "total": round(elapsedTime['step1']+elapsedTime['step2'], 2)
+            "total": round(elapsedTime['step1'] + elapsedTime['step2'], 2)
         },
         'metrics_dimension': metrics_dimension,
         'reduced_metrics': list(reduced_df.columns),

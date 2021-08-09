@@ -11,3 +11,8 @@ services:
     volumes:
       - .:/usr/src/app
     entrypoint: ["/usr/src/app/diag_cause.py"]
+  tsdr-combine:
+    build: .
+    volumes:
+      - .:/usr/src/app
+    entrypoint: ["/usr/src/app/tools/tsdr_combine_params.py"]
