@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def z_normalization(data):
     arr = []
     for d in data:
@@ -7,6 +8,7 @@ def z_normalization(data):
         std = d.std()
         arr.append((d - mean) / std)
     return np.array(arr)
+
 
 def count_metrics(metrics_dimension, dataframe, n):
     for col in dataframe.columns:
