@@ -5,23 +5,14 @@ services:
     build: .
     volumes:
       - .:/usr/src/app
-    working_dir: /usr/src/app
-    environment:
-      PYTHONPATH: /usr/src/app
     entrypoint: ["/usr/src/app/bin/tsdr_cli.py"]
   diag-cause:
     build: .
     volumes:
       - .:/usr/src/app
-    working_dir: /usr/src/app
-    environment:
-      PYTHONPATH: /usr/src/app
     entrypoint: ["/usr/src/app/bin/diag_cause_cli.py"]
   tsdr-combine:
     build: .
     volumes:
       - .:/usr/src/app
-    working_dir: /usr/src/app
-    environment:
-      PYTHONPATH: /usr/src/app
     entrypoint: ["/usr/src/app/tools/tsdr_combine_params.py"]

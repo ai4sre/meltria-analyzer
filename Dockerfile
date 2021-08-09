@@ -30,3 +30,4 @@ WORKDIR /usr/src/app
 COPY --from=builder /usr/src/app/requirements.txt .
 RUN pip install -r requirements.txt
 COPY . .
+ENV PYTHONPATH=/usr/src/app
