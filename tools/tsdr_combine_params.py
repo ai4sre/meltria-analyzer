@@ -10,7 +10,7 @@ from multiprocessing import cpu_count
 from lib.metrics import check_cause_metrics
 from tsdr import tsdr
 
-DIST_THRESHOLDS = [0.001, 0.01, 0.1]
+DIST_THRESHOLDS = [0.0001, 0.001, 0.01, 0.1]
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
 
             logging.info(f">> Running tsdr {metrics_file} [{key}] dict_threshold:{thresh} ...")
 
-            elapsedTime, reduced_df, _, _ = tsdr.run_tsdr(
+            elapsedTime, reduced_df, metrics_dimension, _ = tsdr.run_tsdr(
                 data_df=data_df,
                 method=tsdr.TSIFTER_METHOD,
                 max_workers=cpu_count(),
@@ -46,9 +46,14 @@ def main():
                 chaos_type=chaos_type,
                 chaos_comp=chaos_comp,
             )
-            results[key]['dict_threshold'][thresh] = {
+            results[key]['dist_threshold'][thresh] = {
                 'found_cause': ok,
-                'reduction_performance': {'reduced_series_num': len(reduced_df.columns)},
+                'reduction_performance': {
+                    'reduced_series_num': {
+                        'step1': metrics_dimension['total'][0],
+                        'step2': metrics_dimension['total'][1],
+                    },
+                },
                 'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
             }
 
