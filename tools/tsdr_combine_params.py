@@ -46,9 +46,11 @@ def main():
                 chaos_type=chaos_type,
                 chaos_comp=chaos_comp,
             )
-            results[key]['params']['dict_threshold'][thresh] = ok
-            results[key]['reduction_performance']['reduced_series_num'] = len(reduced_df.columns)
-            results[key]['execution_time'] = round(elapsedTime['step1'] + elapsedTime['step2'], 2)
+            results[key]['dict_threshold'][thresh] = {
+                'found_cause': ok,
+                'reduction_performance': {'reduced_series_num': len(reduced_df.columns)},
+                'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
+            }
 
     json.dump(results, sys.stdout, indent=4)
 
