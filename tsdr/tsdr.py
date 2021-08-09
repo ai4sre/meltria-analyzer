@@ -352,13 +352,11 @@ def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs
     metrics_dimension = aggregate_dimension(data_df)
 
     if method == TSIFTER_METHOD:
-        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_tsifter(
+        return run_tsifter(
             data_df, metrics_dimension, services, max_workers,
             kwargs['tsifter_adf_alpha'], kwargs['tsifter_clustering_threshold'])
     elif method == SIEVE_METHOD:
-        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_sieve(
-            data_df, metrics_dimension, services, max_workers)
-    return elapsedTime, reduced_df, metrics_dimension, clustering_info
+        return run_sieve(data_df, metrics_dimension, services, max_workers)
 
 
 def main():
