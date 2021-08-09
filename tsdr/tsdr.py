@@ -11,15 +11,17 @@ from typing import Any, Tuple
 
 import numpy as np
 import pandas as pd
-from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
 from statsmodels.tsa.stattools import adfuller
 
-from .clustering.kshape import kshape
-from .clustering.metricsnamecluster import cluster_words
-from .clustering.sbd import sbd, silhouette_score
-from .util import util
+from clustering.kshape import kshape
+from clustering.metricsnamecluster import cluster_words
+from clustering.sbd import sbd, silhouette_score
+from util import util
+
+sys.path.append(os.path.dirname(__file__) + "/../lib")
+from metrics import ROOT_METRIC_LABEL, check_cause_metrics
 
 TSIFTER_METHOD = 'tsifter'
 SIEVE_METHOD = 'sieve'
@@ -344,6 +346,21 @@ def aggregate_dimension(data_df):
     return metrics_dimension
 
 
+def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs):
+    services = prepare_services_list(data_df)
+
+    metrics_dimension = aggregate_dimension(data_df)
+
+    if method == TSIFTER_METHOD:
+        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_tsifter(
+            data_df, metrics_dimension, services, max_workers,
+            kwargs['tsifter_adf_alpha'], kwargs['tsifter_clustering_threshold'])
+    elif method == SIEVE_METHOD:
+        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_sieve(
+            data_df, metrics_dimension, services, max_workers)
+    return elapsedTime, reduced_df, metrics_dimension, clustering_info
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("datafile", help="metrics JSON data file")
@@ -377,21 +394,14 @@ def main():
                         help='distance threshold for hierachical clustering')
     args = parser.parse_args()
 
-    data_df, mappings, metrics_meta = read_metrics_json(args.datafile)
-    services = prepare_services_list(data_df)
-
-    metrics_dimension = aggregate_dimension(data_df)
-
-    if args.method == TSIFTER_METHOD:
-        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_tsifter(
-            data_df, metrics_dimension, services, args.max_workers, args.tsifter_adf_alpha, args.tsifter_clustering_threshold)
-    elif args.method == SIEVE_METHOD:
-        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_sieve(
-            data_df, metrics_dimension, services, args.max_workers)
-    else:
-        print("--method must be {} or {}",
-              TSIFTER_METHOD, SIEVE_METHOD, file=sys.stderr)
-        exit(-1)
+    data_df, mappings, metrics_meta = read_metrics_json(args.metricfile)
+    elapsedTime, reduced_df, metrics_dimension, clustering_info = run_tsdr(
+        data_df=data_df,
+        method=args.method,
+        max_workers=args.max_workers,
+        tsifter_adf_alpha=args.tsifter_adf_alpha,
+        tsifter_clustering_threshold=args.tsifter_clustering_threshold,
+    )
 
     # Check that the results include SLO metric
     root_metrics: list[str] = []
