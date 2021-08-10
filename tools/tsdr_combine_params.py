@@ -23,6 +23,14 @@ def main():
     parser.add_argument("metricsfiles",
                         nargs='+',
                         help="metrics output JSON file")
+    parser.add_argument('--dist-thresholds',
+                        default=DIST_THRESHOLDS,
+                        type=lambda s: [float(i) for i in s.split(',')],
+                        help='distance thresholds')
+    parser.add_argument('--adf-alphas',
+                        default=ADF_ALPHAS,
+                        type=lambda s: [float(i) for i in s.split(',')],
+                        help='sigificance levels for ADF test')
     args = parser.parse_args()
 
     y_trues = defaultdict(list)
@@ -32,8 +40,8 @@ def main():
         data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']
-        for alpha in ADF_ALPHAS:
-            for thresh in DIST_THRESHOLDS:
+        for alpha in args.adf_alphas:
+            for thresh in args.dist_thresholds:
                 key = f"{chaos_type}:{chaos_comp}"
 
                 logging.info(f">> Running tsdr {metrics_file} [{key}] dist_threshold:{thresh} ...")
@@ -65,8 +73,8 @@ def main():
                     'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
                 }
 
-    for alpha in ADF_ALPHAS:
-        for thresh in DIST_THRESHOLDS:
+    for alpha in args.adf_alphas:
+        for thresh in args.dist_thresholds:
             param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
             y_true, y_pred = y_trues[param_key], y_preds[param_key]
             tn, fp, fn, tp = confusion_matrix(
