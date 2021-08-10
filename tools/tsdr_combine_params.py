@@ -50,8 +50,9 @@ def main():
                 'found_cause': ok,
                 'reduction_performance': {
                     'reduced_series_num': {
-                        'step1': metrics_dimension['total'][0],
-                        'step2': metrics_dimension['total'][1],
+                        'step0': metrics_dimension['total'][0],
+                        'step1': metrics_dimension['total'][1],
+                        'step2': metrics_dimension['total'][2],
                     },
                 },
                 'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
