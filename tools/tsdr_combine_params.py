@@ -8,6 +8,8 @@ from collections import defaultdict
 from multiprocessing import cpu_count
 
 from lib.metrics import check_cause_metrics
+from sklearn.metrics import (accuracy_score, confusion_matrix, precision_score,
+                             recall_score)
 from tsdr import tsdr
 
 DIST_THRESHOLDS = [0.0001, 0.001, 0.01, 0.1]
@@ -22,6 +24,8 @@ def main():
                         help="metrics output JSON file")
     args = parser.parse_args()
 
+    y_trues = defaultdict(list)
+    y_preds = defaultdict(list)
     results = defaultdict(lambda: defaultdict(
         lambda: defaultdict(dict)
     ))
@@ -46,6 +50,8 @@ def main():
                 chaos_type=chaos_type,
                 chaos_comp=chaos_comp,
             )
+            y_trues[thresh].append(1)
+            y_preds[thresh].append(1 if ok else 0)
             results[key]['dist_threshold'][thresh] = {
                 'found_cause': ok,
                 'reduction_performance': {
@@ -57,6 +63,23 @@ def main():
                 },
                 'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
             }
+
+    for thresh in DIST_THRESHOLDS:
+        y_true, y_pred = y_trues[thresh], y_preds[thresh]
+        tn, fp, fn, tp = confusion_matrix(
+            y_true=y_true,
+            y_pred=y_pred,
+            labels=[0, 1],
+        ).ravel()
+        results['evaluation']['dist_threshold'][thresh] = {
+            'tp': int(tp),
+            'tn': int(tn),
+            'fp': int(fp),
+            'fn': int(fn),
+            'accuracy': accuracy_score(y_true, y_pred),
+            'precision': precision_score(y_true, y_pred),
+            'recall': recall_score(y_true, y_pred),
+        }
 
     json.dump(results, sys.stdout, indent=4)
 
