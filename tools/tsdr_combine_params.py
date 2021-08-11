@@ -93,6 +93,8 @@ def main():
                     'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
                 }
 
+                results[key]['original_metrics_meta'] = metrics_meta
+
                 reductions[param_key]['step1'].append(1 - (step1_series_num / series_num))
                 reductions[param_key]['step2'].append(1 - (step2_series_num / series_num))
 
