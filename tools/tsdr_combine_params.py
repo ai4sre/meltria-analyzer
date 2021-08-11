@@ -55,8 +55,9 @@ def main():
         for alpha in args.adf_alphas:
             for thresh in args.dist_thresholds:
                 key = f"{chaos_type}:{chaos_comp}"
+                param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
 
-                logging.info(f">> Running tsdr {metrics_file} [{key}] dist_threshold:{thresh} ...")
+                logging.info(f">> Running tsdr {metrics_file} {key} {param_key} ...")
 
                 elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
                     data_df=data_df,
@@ -65,8 +66,6 @@ def main():
                     tsifter_adf_alpha=alpha,
                     tsifter_clustering_threshold=thresh,
                 )
-
-                param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
 
                 has_cause_metrics = {'step1': False, 'step2': False}
                 for step, df in reduced_df_by_step.items():
