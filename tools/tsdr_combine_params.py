@@ -2,45 +2,109 @@
 
 import argparse
 import json
+import logging
+import statistics
 import sys
+from collections import defaultdict
 from multiprocessing import cpu_count
 
 from lib.metrics import check_cause_metrics
+from sklearn.metrics import (accuracy_score, confusion_matrix, precision_score,
+                             recall_score)
 from tsdr import tsdr
 
 DIST_THRESHOLDS = [0.001, 0.01, 0.1]
+ADF_ALPHAS = [0.01, 0.02, 0.05]
 
 
 def main():
+    logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("metricsfiles",
                         nargs='+',
                         help="metrics output JSON file")
+    parser.add_argument('--dist-thresholds',
+                        default=DIST_THRESHOLDS,
+                        type=lambda s: [float(i) for i in s.split(',')],
+                        help='distance thresholds')
+    parser.add_argument('--adf-alphas',
+                        default=ADF_ALPHAS,
+                        type=lambda s: [float(i) for i in s.split(',')],
+                        help='sigificance levels for ADF test')
     args = parser.parse_args()
 
-    summary = {}
+    y_trues = defaultdict(list)
+    y_preds = defaultdict(list)
+    reductions = defaultdict(lambda: {
+        'step1': [],
+        'step2': [],
+    })
+    results = defaultdict(lambda: defaultdict(dict))
     for metrics_file in args.metricsfiles:
         data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']
-        for thresh in DIST_THRESHOLDS:
-            _, reduced_df, _, _ = tsdr.run_tsdr(
-                data_df=data_df,
-                method=tsdr.TSIFTER_METHOD,
-                max_workers=cpu_count(),
-                tsifter_adf_alpha=tsdr.SIGNIFICANCE_LEVEL,
-                tsifter_clustering_threshold=thresh,
-            )
-            ok, _ = check_cause_metrics(
-                metrics=list(reduced_df.columns),
-                chaos_type=chaos_type,
-                chaos_comp=chaos_comp,
-            )
-            key = f"{chaos_type}:{chaos_comp}"
-            summary.setdefault(key, {})
-            summary[key][thresh] = ok
+        for alpha in args.adf_alphas:
+            for thresh in args.dist_thresholds:
+                key = f"{chaos_type}:{chaos_comp}"
 
-    json.dump(summary, sys.stdout, indent=4)
+                logging.info(f">> Running tsdr {metrics_file} [{key}] dist_threshold:{thresh} ...")
+
+                elapsedTime, reduced_df, metrics_dimension, _ = tsdr.run_tsdr(
+                    data_df=data_df,
+                    method=tsdr.TSIFTER_METHOD,
+                    max_workers=cpu_count(),
+                    tsifter_adf_alpha=alpha,
+                    tsifter_clustering_threshold=thresh,
+                )
+                ok, _ = check_cause_metrics(
+                    metrics=list(reduced_df.columns),
+                    chaos_type=chaos_type,
+                    chaos_comp=chaos_comp,
+                )
+                param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
+                y_trues[param_key].append(1)
+                y_preds[param_key].append(1 if ok else 0)
+                series_num: int = metrics_dimension['total'][0]
+                step1_series_num: int = metrics_dimension['total'][1]
+                step2_series_num: int = metrics_dimension['total'][2]
+                results[key][param_key] = {
+                    'found_cause': ok,
+                    'reduction_performance': {
+                        'reduced_series_num': {
+                            'step0': series_num,
+                            'step1': step1_series_num,
+                            'step2': step2_series_num,
+                        },
+                    },
+                    'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
+                }
+                reductions[param_key]['step1'].append(1 - (step1_series_num / series_num))
+                reductions[param_key]['step2'].append(1 - (step2_series_num / series_num))
+
+    for alpha in args.adf_alphas:
+        for thresh in args.dist_thresholds:
+            param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
+            y_true, y_pred = y_trues[param_key], y_preds[param_key]
+            tn, fp, fn, tp = confusion_matrix(
+                y_true=y_true, y_pred=y_pred, labels=[0, 1],
+            ).ravel()
+            results['evaluation'][param_key] = {
+                'tp': int(tp),
+                'tn': int(tn),
+                'fp': int(fp),
+                'fn': int(fn),
+                'accuracy': accuracy_score(y_true, y_pred),
+                'precision': precision_score(y_true, y_pred),
+                'recall': recall_score(y_true, y_pred),
+                'reduction_rate': {
+                    'step1': statistics.mean(reductions[param_key]['step1']),
+                    'step2': statistics.mean(reductions[param_key]['step2']),
+                },
+            }
+
+    json.dump(results, sys.stdout, indent=4)
 
 
 if __name__ == '__main__':

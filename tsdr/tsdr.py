@@ -7,6 +7,7 @@ import sys
 import time
 from concurrent import futures
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -243,7 +244,8 @@ def sieve_clustering(reduced_by_cv_df, services_list, max_workers):
     return reduced_df, clustering_info
 
 
-def run_tsifter(data_df, metrics_dimension, services_list, max_workers, adf_alpha: float, dist_threshold: float):
+def run_tsifter(data_df, metrics_dimension, services_list, max_workers, adf_alpha: float, dist_threshold: float
+                ) -> tuple[dict[str, float], pd.DataFrame, dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
@@ -268,7 +270,8 @@ def run_tsifter(data_df, metrics_dimension, services_list, max_workers, adf_alph
         reduced_df, metrics_dimension, clustering_info
 
 
-def run_sieve(data_df, metrics_dimension, services_list, max_workers):
+def run_sieve(data_df, metrics_dimension, services_list, max_workers
+              ) -> tuple[dict[str, float], pd.DataFrame, dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
@@ -293,7 +296,7 @@ def run_sieve(data_df, metrics_dimension, services_list, max_workers):
         reduced_df, metrics_dimension, clustering_info
 
 
-def read_metrics_json(data_file):
+def read_metrics_json(data_file: os.PathLike) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
     with open(data_file) as f:
         raw_json = json.load(f)
     raw_data = pd.read_json(data_file)
@@ -315,8 +318,7 @@ def read_metrics_json(data_file):
                 target_name = re.sub(';node-exporter$', '', target_name)
                 column_name = "{}-{}_{}".format(target[0],
                                                 target_name, metric_name)
-                data_df[column_name] = np.array(metric["values"], dtype=np.float64)[
-                    :, 1][-PLOTS_NUM:]
+                data_df[column_name] = np.array(metric["values"], dtype=np.float64)[:, 1][-PLOTS_NUM:]
     data_df = data_df.round(4)
     data_df = data_df.interpolate(
         method="spline", order=3, limit_direction="both")
@@ -343,19 +345,18 @@ def aggregate_dimension(data_df):
     return metrics_dimension
 
 
-def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs):
+def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs
+             ) -> tuple[dict[str, float], pd.DataFrame, dict[str, Any], dict[str, Any]]:
     services = prepare_services_list(data_df)
 
     metrics_dimension = aggregate_dimension(data_df)
 
     if method == TSIFTER_METHOD:
-        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_tsifter(
+        return run_tsifter(
             data_df, metrics_dimension, services, max_workers,
             kwargs['tsifter_adf_alpha'], kwargs['tsifter_clustering_threshold'])
     elif method == SIEVE_METHOD:
-        elapsedTime, reduced_df, metrics_dimension, clustering_info = run_sieve(
-            data_df, metrics_dimension, services, max_workers)
-    return elapsedTime, reduced_df, metrics_dimension, clustering_info
+        return run_sieve(data_df, metrics_dimension, services, max_workers)
 
 
 def main():
