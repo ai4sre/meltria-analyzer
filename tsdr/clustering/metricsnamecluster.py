@@ -4,6 +4,7 @@
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 
+
 def jaro_distance(ying, yang):
     if isinstance(ying, bytes) or isinstance(yang, bytes):
         raise TypeError(_no_bytes_err)
@@ -55,6 +56,7 @@ def jaro_distance(ying, yang):
               (common_chars-trans_count) / common_chars)) / 3
     return weight
 
+
 def cluster_words(words, service_name, size):
     stopwords = ["GET", "POST", "total", "http-requests", service_name, "-", "_"]
     cleaned_words = []
@@ -62,6 +64,7 @@ def cluster_words(words, service_name, size):
         for stopword in stopwords:
             word = word.replace(stopword, "")
         cleaned_words.append(word)
+
     def distance(coord):
         i, j = coord
         return 1 - jaro_distance(cleaned_words[i], cleaned_words[j])
