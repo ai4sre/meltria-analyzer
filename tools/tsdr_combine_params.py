@@ -32,6 +32,7 @@ def main():
                         default=ADF_ALPHAS,
                         type=lambda s: [float(i) for i in s.split(',')],
                         help='sigificance levels for ADF test')
+    parser.add_argument('--out', help='output file path')
     args = parser.parse_args()
 
     y_trues = defaultdict(lambda: {
@@ -115,7 +116,11 @@ def main():
                     'reduction_rate': statistics.mean(reductions[param_key][step]),
                 }
 
-    json.dump(results, sys.stdout, indent=4)
+    if args.out is None:
+        json.dump(results, sys.stdout, indent=4)
+    else:
+        with open(args.out, mode='w') as f:
+            json.dump(results, f)
 
 
 if __name__ == '__main__':
