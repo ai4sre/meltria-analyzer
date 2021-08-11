@@ -363,7 +363,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("datafile", help="metrics JSON data file")
     parser.add_argument("--method",
-                        choices=['tsifter', 'sieve'],
+                        choices=[TSIFTER_METHOD, SIEVE_METHOD],
                         help="specify one of tsdr methods",
                         default=TSIFTER_METHOD)
     parser.add_argument("--max-workers",
