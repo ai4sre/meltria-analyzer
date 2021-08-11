@@ -3,6 +3,7 @@
 import argparse
 import json
 import logging
+import statistics
 import sys
 from collections import defaultdict
 from multiprocessing import cpu_count
@@ -35,6 +36,10 @@ def main():
 
     y_trues = defaultdict(list)
     y_preds = defaultdict(list)
+    reductions = defaultdict(lambda: {
+        'step1': [],
+        'step2': [],
+    })
     results = defaultdict(lambda: defaultdict(dict))
     for metrics_file in args.metricsfiles:
         data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
@@ -61,26 +66,29 @@ def main():
                 param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
                 y_trues[param_key].append(1)
                 y_preds[param_key].append(1 if ok else 0)
+                series_num: int = metrics_dimension['total'][0]
+                step1_series_num: int = metrics_dimension['total'][1]
+                step2_series_num: int = metrics_dimension['total'][2]
                 results[key][param_key] = {
                     'found_cause': ok,
                     'reduction_performance': {
                         'reduced_series_num': {
-                            'step0': metrics_dimension['total'][0],
-                            'step1': metrics_dimension['total'][1],
-                            'step2': metrics_dimension['total'][2],
+                            'step0': series_num,
+                            'step1': step1_series_num,
+                            'step2': step2_series_num,
                         },
                     },
                     'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
                 }
+                reductions[param_key]['step1'].append(1 - (step1_series_num / series_num))
+                reductions[param_key]['step2'].append(1 - (step2_series_num / series_num))
 
     for alpha in args.adf_alphas:
         for thresh in args.dist_thresholds:
             param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
             y_true, y_pred = y_trues[param_key], y_preds[param_key]
             tn, fp, fn, tp = confusion_matrix(
-                y_true=y_true,
-                y_pred=y_pred,
-                labels=[0, 1],
+                y_true=y_true, y_pred=y_pred, labels=[0, 1],
             ).ravel()
             results['evaluation'][param_key] = {
                 'tp': int(tp),
@@ -90,6 +98,10 @@ def main():
                 'accuracy': accuracy_score(y_true, y_pred),
                 'precision': precision_score(y_true, y_pred),
                 'recall': recall_score(y_true, y_pred),
+                'reduction_rate': {
+                    'step1': statistics.mean(reductions[param_key]['step1']),
+                    'step2': statistics.mean(reductions[param_key]['step2']),
+                },
             }
 
     json.dump(results, sys.stdout, indent=4)
