@@ -22,7 +22,7 @@ from .citest.fisher_z_pgmpy import fisher_z
 
 SIGNIFICANCE_LEVEL = 0.05
 
-TARGET_DATA = {
+TARGET_DATA: dict[str, list[str]] = {
     "containers": [],  # all
     "services": ["throughput", "latency"],
     "nodes": [
@@ -36,7 +36,7 @@ TARGET_DATA = {
     # "middlewares": "all"}
 }
 
-CONTAINER_CALL_GRAPH = {
+CONTAINER_CALL_GRAPH: dict[str, list[str]] = {
     "front-end": ["orders", "carts", "user", "catalogue"],
     "catalogue": ["front-end", "catalogue-db"],
     "catalogue-db": ["catalogue"],
@@ -53,7 +53,7 @@ CONTAINER_CALL_GRAPH = {
     "session-db": ["front-end"]
 }
 
-SERVICE_CONTAINERS = {
+SERVICE_CONTAINERS: dict[str, list[str]] = {
     "carts": ["carts", "carts-db"],
     "payment": ["payment"],
     "shipping": ["shipping"],
@@ -66,28 +66,26 @@ SERVICE_CONTAINERS = {
 ROOT_METRIC_NODE = "s-front-end_latency"
 
 
-def read_data_file(tsdr_result_file):
+def read_data_file(tsdr_result_file: os.PathLike
+                   ) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     tsdr_result = json.load(open(tsdr_result_file))
     reduced_df = pd.DataFrame.from_dict(
         tsdr_result['reduced_metrics_raw_data'])
 
     # Filter by specified target metrics
+    containers_df, services_df, nodes_df, middlewares_df = None, None, None, None
     if 'containers' in TARGET_DATA:
-        metrics = TARGET_DATA['containers']
         containers_df = reduced_df.filter(
-            regex=f"^c-.+({'|'.join(metrics)})$")
+            regex=f"^c-.+({'|'.join(TARGET_DATA['containers'])})$")
     if 'services' in TARGET_DATA:
-        metrics = TARGET_DATA['services']
         services_df = reduced_df.filter(
-            regex=f"^s-.+({'|'.join(metrics)})$")
+            regex=f"^s-.+({'|'.join(TARGET_DATA['services'])})$")
     if 'nodes' in TARGET_DATA:
-        metrics = TARGET_DATA['nodes']
         nodes_df = reduced_df.filter(
-            regex=f"^n-.+({'|'.join(metrics)})$")
+            regex=f"^n-.+({'|'.join(TARGET_DATA['nodes'])})$")
     if 'middlewares' in TARGET_DATA:
-        metrics = TARGET_DATA['middlewares']
         middlewares_df = reduced_df.filter(
-            regex=f"^m-.+({'|'.join(metrics)})$")
+            regex=f"^m-.+({'|'.join(TARGET_DATA['middlewares'])})$")
 
     df = pd.concat([containers_df, services_df, nodes_df], axis=1)
     return df, tsdr_result['metrics_dimension'], \
