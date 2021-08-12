@@ -54,10 +54,10 @@ def main():
         chaos_comp: str = metrics_meta['chaos_injected_component']
         for alpha in args.adf_alphas:
             for thresh in args.dist_thresholds:
-                key = f"{chaos_type}:{chaos_comp}"
+                case = f"{chaos_type}:{chaos_comp}"
                 param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
 
-                logging.info(f">> Running tsdr {metrics_file} {key} {param_key} ...")
+                logging.info(f">> Running tsdr {metrics_file} {case} {param_key} ...")
 
                 elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
                     data_df=data_df,
@@ -81,7 +81,7 @@ def main():
                 series_num: int = metrics_dimension['total'][0]
                 step1_series_num: int = metrics_dimension['total'][1]
                 step2_series_num: int = metrics_dimension['total'][2]
-                results[key][param_key] = {
+                results[case][param_key] = {
                     'found_cause': has_cause_metrics,
                     'reduction_performance': {
                         'reduced_series_num': {
@@ -93,7 +93,7 @@ def main():
                     'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
                 }
 
-                results[key]['original_metrics_meta'] = metrics_meta
+                results[case]['original_metrics_meta'] = metrics_meta
 
                 reductions[param_key]['step1'].append(1 - (step1_series_num / series_num))
                 reductions[param_key]['step2'].append(1 - (step2_series_num / series_num))
