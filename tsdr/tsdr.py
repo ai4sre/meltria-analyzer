@@ -387,7 +387,7 @@ def main():
                         help='distance threshold for hierachical clustering')
     args = parser.parse_args()
 
-    data_df, mappings, metrics_meta = read_metrics_json(args.metricfile)
+    data_df, mappings, metrics_meta = read_metrics_json(args.datafile)
     elapsedTime, reduced_df_by_step, metrics_dimension, clustering_info = run_tsdr(
         data_df=data_df,
         method=args.method,
