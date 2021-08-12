@@ -32,10 +32,17 @@ def main():
                         default=ADF_ALPHAS,
                         type=lambda s: [float(i) for i in s.split(',')],
                         help='sigificance levels for ADF test')
+    parser.add_argument('--out', help='output file path')
     args = parser.parse_args()
 
-    y_trues = defaultdict(list)
-    y_preds = defaultdict(list)
+    y_trues = defaultdict(lambda: {
+        'step1': [],
+        'step2': [],
+    })
+    y_preds = defaultdict(lambda: {
+        'step1': [],
+        'step2': [],
+    })
     reductions = defaultdict(lambda: {
         'step1': [],
         'step2': [],
@@ -47,30 +54,35 @@ def main():
         chaos_comp: str = metrics_meta['chaos_injected_component']
         for alpha in args.adf_alphas:
             for thresh in args.dist_thresholds:
-                key = f"{chaos_type}:{chaos_comp}"
+                case = f"{chaos_type}:{chaos_comp}"
+                param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
 
-                logging.info(f">> Running tsdr {metrics_file} [{key}] dist_threshold:{thresh} ...")
+                logging.info(f">> Running tsdr {metrics_file} {case} {param_key} ...")
 
-                elapsedTime, reduced_df, metrics_dimension, _ = tsdr.run_tsdr(
+                elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
                     data_df=data_df,
                     method=tsdr.TSIFTER_METHOD,
                     max_workers=cpu_count(),
                     tsifter_adf_alpha=alpha,
                     tsifter_clustering_threshold=thresh,
                 )
-                ok, _ = check_cause_metrics(
-                    metrics=list(reduced_df.columns),
-                    chaos_type=chaos_type,
-                    chaos_comp=chaos_comp,
-                )
-                param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
-                y_trues[param_key].append(1)
-                y_preds[param_key].append(1 if ok else 0)
+
+                has_cause_metrics = {'step1': False, 'step2': False}
+                for step, df in reduced_df_by_step.items():
+                    ok, _ = check_cause_metrics(
+                        metrics=list(df.columns),
+                        chaos_type=chaos_type,
+                        chaos_comp=chaos_comp,
+                    )
+                    has_cause_metrics[step] = ok
+                    y_trues[param_key][step].append(1)
+                    y_preds[param_key][step].append(1 if ok else 0)
+
                 series_num: int = metrics_dimension['total'][0]
                 step1_series_num: int = metrics_dimension['total'][1]
                 step2_series_num: int = metrics_dimension['total'][2]
-                results[key][param_key] = {
-                    'found_cause': ok,
+                results[case][param_key] = {
+                    'found_cause': has_cause_metrics,
                     'reduction_performance': {
                         'reduced_series_num': {
                             'step0': series_num,
@@ -80,31 +92,36 @@ def main():
                     },
                     'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
                 }
+
+                results[case]['original_metrics_meta'] = metrics_meta
+
                 reductions[param_key]['step1'].append(1 - (step1_series_num / series_num))
                 reductions[param_key]['step2'].append(1 - (step2_series_num / series_num))
 
     for alpha in args.adf_alphas:
         for thresh in args.dist_thresholds:
             param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
-            y_true, y_pred = y_trues[param_key], y_preds[param_key]
-            tn, fp, fn, tp = confusion_matrix(
-                y_true=y_true, y_pred=y_pred, labels=[0, 1],
-            ).ravel()
-            results['evaluation'][param_key] = {
-                'tp': int(tp),
-                'tn': int(tn),
-                'fp': int(fp),
-                'fn': int(fn),
-                'accuracy': accuracy_score(y_true, y_pred),
-                'precision': precision_score(y_true, y_pred),
-                'recall': recall_score(y_true, y_pred),
-                'reduction_rate': {
-                    'step1': statistics.mean(reductions[param_key]['step1']),
-                    'step2': statistics.mean(reductions[param_key]['step2']),
-                },
-            }
+            for step in ['step1', 'step2']:
+                y_true, y_pred = y_trues[param_key][step], y_preds[param_key][step]
+                tn, fp, fn, tp = confusion_matrix(
+                    y_true=y_true, y_pred=y_pred, labels=[0, 1],
+                ).ravel()
+                results['evaluation'][param_key][step] = {
+                    'tp': int(tp),
+                    'tn': int(tn),
+                    'fp': int(fp),
+                    'fn': int(fn),
+                    'accuracy': accuracy_score(y_true, y_pred),
+                    'precision': precision_score(y_true, y_pred),
+                    'recall': recall_score(y_true, y_pred),
+                    'reduction_rate': statistics.mean(reductions[param_key][step]),
+                }
 
-    json.dump(results, sys.stdout, indent=4)
+    if args.out is None:
+        json.dump(results, sys.stdout, indent=4)
+    else:
+        with open(args.out, mode='w') as f:
+            json.dump(results, f)
 
 
 if __name__ == '__main__':

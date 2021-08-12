@@ -204,15 +204,13 @@ def sieve_reduce_series(data_df):
     return reduce_series_with_cv(data_df)
 
 
-def tsifter_clustering(reduced_by_st_df, services_list, max_workers, dist_threshold: float):
+def tsifter_clustering(reduced_df, services_list, max_workers, dist_threshold: float):
     clustering_info = {}
-    reduced_df = reduced_by_st_df
-
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         # Clustering metrics by service including services, containers and middlewares metrics
         future_list = []
         for ser in services_list:
-            target_df = reduced_by_st_df.loc[:, reduced_by_st_df.columns.str.startswith(
+            target_df = reduced_df.loc[:, reduced_df.columns.str.startswith(
                 ("s-{}_".format(ser), "c-{}_".format(ser), "c-{}-".format(ser), "m-{}_".format(ser), "m-{}-".format(ser)))]
             if len(target_df.columns) in [0, 1]:
                 continue
@@ -226,14 +224,13 @@ def tsifter_clustering(reduced_by_st_df, services_list, max_workers, dist_thresh
     return reduced_df, clustering_info
 
 
-def sieve_clustering(reduced_by_cv_df, services_list, max_workers):
+def sieve_clustering(reduced_df, services_list, max_workers):
     clustering_info = {}
-    reduced_df = reduced_by_cv_df
 
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         # Clustering metrics by services including services, containers and middlewares
         for ser in services_list:
-            target_df = reduced_by_cv_df.loc[:, reduced_by_cv_df.columns.str.startswith(
+            target_df = reduced_df.loc[:, reduced_df.columns.str.startswith(
                 ("s-{}_".format(ser), "c-{}_".format(ser), "c-{}-".format(ser), "m-{}_".format(ser), "m-{}-".format(ser)))]
             if len(target_df.columns) in [0, 1]:
                 continue
@@ -245,7 +242,7 @@ def sieve_clustering(reduced_by_cv_df, services_list, max_workers):
 
 
 def run_tsifter(data_df, metrics_dimension, services_list, max_workers, adf_alpha: float, dist_threshold: float
-                ) -> tuple[dict[str, float], pd.DataFrame, dict[str, Any], dict[str, Any]]:
+                ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
@@ -260,18 +257,18 @@ def run_tsifter(data_df, metrics_dimension, services_list, max_workers, adf_alph
     start = time.time()
 
     reduced_df, clustering_info = tsifter_clustering(
-        reduced_by_st_df, services_list, max_workers, dist_threshold)
+        reduced_by_st_df.copy(), services_list, max_workers, dist_threshold)
 
     time_clustering = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(metrics_dimension, reduced_df, 2)
     metrics_dimension["total"].append(len(reduced_df.columns))
 
     return {'step1': time_adf, 'step2': time_clustering}, \
-        reduced_df, metrics_dimension, clustering_info
+        {'step1': reduced_by_st_df, 'step2': reduced_df}, metrics_dimension, clustering_info
 
 
 def run_sieve(data_df, metrics_dimension, services_list, max_workers
-              ) -> tuple[dict[str, float], pd.DataFrame, dict[str, Any], dict[str, Any]]:
+              ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
@@ -286,14 +283,14 @@ def run_sieve(data_df, metrics_dimension, services_list, max_workers
     start = time.time()
 
     reduced_df, clustering_info = sieve_clustering(
-        reduced_by_st_df, services_list, max_workers)
+        reduced_by_st_df.copy(), services_list, max_workers)
 
     time_clustering = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(metrics_dimension, reduced_df, 2)
     metrics_dimension["total"].append(len(reduced_df.columns))
 
     return {'step1': time_cv, 'step2': time_clustering}, \
-        reduced_df, metrics_dimension, clustering_info
+        {'step1': reduced_by_st_df, 'step2': reduced_df}, metrics_dimension, clustering_info
 
 
 def read_metrics_json(data_file: os.PathLike) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
@@ -314,8 +311,6 @@ def read_metrics_json(data_file: os.PathLike) -> tuple[pd.DataFrame, dict[str, A
                 ]
                 if target_name in ["queue-master", "rabbitmq", "session-db"]:
                     continue
-                # remove ';node-exporter' suffix of k8s node name.
-                target_name = re.sub(';node-exporter$', '', target_name)
                 column_name = "{}-{}_{}".format(target[0],
                                                 target_name, metric_name)
                 data_df[column_name] = np.array(metric["values"], dtype=np.float64)[:, 1][-PLOTS_NUM:]
@@ -346,7 +341,7 @@ def aggregate_dimension(data_df):
 
 
 def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs
-             ) -> tuple[dict[str, float], pd.DataFrame, dict[str, Any], dict[str, Any]]:
+             ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     services = prepare_services_list(data_df)
 
     metrics_dimension = aggregate_dimension(data_df)
@@ -393,13 +388,15 @@ def main():
     args = parser.parse_args()
 
     data_df, mappings, metrics_meta = read_metrics_json(args.metricfile)
-    elapsedTime, reduced_df, metrics_dimension, clustering_info = run_tsdr(
+    elapsedTime, reduced_df_by_step, metrics_dimension, clustering_info = run_tsdr(
         data_df=data_df,
         method=args.method,
         max_workers=args.max_workers,
         tsifter_adf_alpha=args.tsifter_adf_alpha,
         tsifter_clustering_threshold=args.tsifter_clustering_threshold,
     )
+
+    reduced_df = reduced_df_by_step['step2']  # final result
 
     # Check that the results include SLO metric
     root_metrics: list[str] = []
