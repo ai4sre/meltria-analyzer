@@ -8,7 +8,7 @@ import sys
 from collections import defaultdict
 from multiprocessing import cpu_count
 
-from lib.metrics import check_cause_metrics
+from lib.metrics import check_tsdr_ground_truth_by_route
 from sklearn.metrics import (accuracy_score, confusion_matrix, precision_score,
                              recall_score)
 from tsdr import tsdr
@@ -67,14 +67,19 @@ def main():
                     tsifter_clustering_threshold=thresh,
                 )
 
-                has_cause_metrics = {'step1': False, 'step2': False}
+                has_cause_metrics = {
+                    'step1': {'ok': False, 'metrics': None, },
+                    'step2': {'ok': False, 'metrics': None, },
+                }
                 for step, df in reduced_df_by_step.items():
-                    ok, _ = check_cause_metrics(
+                    ok, found_metrics = check_tsdr_ground_truth_by_route(
                         metrics=list(df.columns),
                         chaos_type=chaos_type,
                         chaos_comp=chaos_comp,
                     )
-                    has_cause_metrics[step] = ok
+                    has_cause_metrics[step]['ok'] = ok
+                    has_cause_metrics[step]['metrics'] = found_metrics
+
                     y_trues[param_key][step].append(1)
                     y_preds[param_key][step].append(1 if ok else 0)
 
@@ -82,7 +87,7 @@ def main():
                 step1_series_num: int = metrics_dimension['total'][1]
                 step2_series_num: int = metrics_dimension['total'][2]
                 results[case][param_key] = {
-                    'found_cause': has_cause_metrics,
+                    'found_cause_path': has_cause_metrics,
                     'reduction_performance': {
                         'reduced_series_num': {
                             'step0': series_num,
