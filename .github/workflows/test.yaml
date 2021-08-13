@@ -27,6 +27,17 @@ jobs:
             gcc \
             graphviz \
             graphviz-dev
+      - name: Cache python packages
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-python-packages
+        with:
+          path: ~/.local
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
       - name: Install Poetry
         run: |
           curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py | python -
