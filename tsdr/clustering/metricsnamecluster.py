@@ -7,7 +7,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 
 def jaro_distance(ying, yang):
     if isinstance(ying, bytes) or isinstance(yang, bytes):
-        raise TypeError(_no_bytes_err)
+        raise TypeError('ying required type of bytes')
 
     ying_len = len(ying)
     yang_len = len(yang)
