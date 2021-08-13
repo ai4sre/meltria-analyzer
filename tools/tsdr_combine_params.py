@@ -9,8 +9,7 @@ from collections import defaultdict
 from multiprocessing import cpu_count
 
 from lib.metrics import check_tsdr_ground_truth_by_route
-from sklearn.metrics import (accuracy_score, confusion_matrix, precision_score,
-                             recall_score)
+from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
 
 DIST_THRESHOLDS = [0.001, 0.01, 0.1]
@@ -117,7 +116,6 @@ def main():
                     'fp': int(fp),
                     'fn': int(fn),
                     'accuracy': accuracy_score(y_true, y_pred),
-                    'precision': precision_score(y_true, y_pred),
                     'recall': recall_score(y_true, y_pred),
                     'reduction_rate': statistics.mean(reductions[param_key][step]),
                 }
