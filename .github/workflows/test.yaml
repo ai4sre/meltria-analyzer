@@ -7,7 +7,8 @@ env:
 
 jobs:
   linting:
-    runs-os: ubuntu-latest
+    name: Run python linting
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
@@ -21,6 +22,7 @@ jobs:
           flake8 .
           black . --check
           isort .
+
   pytest:
     needs: linting
     name: Run tests with pytest
