@@ -14,7 +14,8 @@ import numpy as np
 import pandas as pd
 import pcalg
 from IPython.display import Image
-from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
+from lib.metrics import (CONTAINER_CALL_GRAPH, ROOT_METRIC_LABEL,
+                         SERVICE_CONTAINERS, check_cause_metrics)
 from pgmpy import estimators
 
 from .citest.fisher_z import ci_test_fisher_z
@@ -35,35 +36,6 @@ TARGET_DATA: dict[str, list[str]] = {
     ],
     # "middlewares": "all"}
 }
-
-CONTAINER_CALL_GRAPH: dict[str, list[str]] = {
-    "front-end": ["orders", "carts", "user", "catalogue"],
-    "catalogue": ["front-end", "catalogue-db"],
-    "catalogue-db": ["catalogue"],
-    "orders": ["front-end", "orders-db", "carts", "user", "payement", "shipping"],
-    "orders-db": ["orders"],
-    "user": ["front-end", "user-db", "orders"],
-    "user-db": ["user"],
-    "payment": ["orders"],
-    "shipping": ["orders", "rabbitmq"],
-    "queue-master": ["rabbitmq"],
-    "rabbitmq": ["shipping", "queue-master"],
-    "carts": ["front-end", "carts-db", "orders"],
-    "carts-db": ["carts"],
-    "session-db": ["front-end"]
-}
-
-SERVICE_CONTAINERS: dict[str, list[str]] = {
-    "carts": ["carts", "carts-db"],
-    "payment": ["payment"],
-    "shipping": ["shipping"],
-    "front-end": ["front-end"],
-    "user": ["user", "user-db"],
-    "catalogue": ["catalogue", "catalogue-db"],
-    "orders": ["orders", "orders-db"]
-}
-
-ROOT_METRIC_NODE = "s-front-end_latency"
 
 
 def read_data_file(tsdr_result_file: os.PathLike
@@ -270,7 +242,7 @@ def find_dags(G: nx.Graph) -> nx.Graph:
     remove_nodes = []
     undirected_G = G.to_undirected()
     for node in G.nodes():
-        if not nx.has_path(undirected_G, node, ROOT_METRIC_NODE):
+        if not nx.has_path(undirected_G, node, ROOT_METRIC_LABEL):
             remove_nodes.append(node)
             continue
         if re.match("^s-", node):
@@ -289,9 +261,9 @@ def find_dags(G: nx.Graph) -> nx.Graph:
 def diag(tsdr_file, citest_alpha, pc_stable, library, out_dir):
     reduced_df, metrics_dimension, clustering_info, mappings, metrics_meta = \
         read_data_file(tsdr_file)
-    if ROOT_METRIC_NODE not in reduced_df.columns:
+    if ROOT_METRIC_LABEL not in reduced_df.columns:
         raise ValueError(
-            f"{tsdr_file} has no root metric node: {ROOT_METRIC_NODE}")
+            f"{tsdr_file} has no root metric node: {ROOT_METRIC_LABEL}")
 
     labels = {}
     for i in range(len(reduced_df.columns)):
