@@ -25,6 +25,7 @@ mypy = "^0.910"
 autopep8 = "^1.5.7"
 pytest = "^6.2.4"
 pytest-cov = "^2.12.1"
+ipykernel = "^6.2.0"
 
 [build-system]
 requires = ["poetry>=0.12"]
