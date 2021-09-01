@@ -51,12 +51,12 @@ def main():
     parser.add_argument('--out', help='output file path')
     args = parser.parse_args()
 
-    results = defaultdict(lambda: {
-        'sli': [],
-        'cause_metrics': [],
-        'service_sli': [],
-        'dashboard_url': [],
-    })
+    results = defaultdict(lambda: list({
+        'sli': BkpsStatus,
+        'cause_metrics': BkpsStatus,
+        'service_sli': BkpsStatus,
+        'dashboard_url': ''
+    }))
     for metrics_file in args.metricsfiles:
         data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         chaos_type: str = metrics_meta['injected_chaos_type']
@@ -79,10 +79,12 @@ def main():
         service_sli = f"s-{service_name}_latency"
         service_sli_status = detect_bkps(data_df[service_sli].to_numpy()) if service_sli in data_df else None
 
-        results[case]['sli'].append(sli_status)
-        results[case]['cause_metrics'].append(cause_metrics_status)
-        results[case]['service_sli'].append(service_sli_status)
-        results[case]['dashboard_url'].append(dashboard_url)
+        results[case].append({
+            'sli': sli_status,
+            'cause_metrics': cause_metrics_status,
+            'service_sli': service_sli_status,
+            'dashboard_url': dashboard_url,
+        })
 
     if args.out is None:
         json.dump(results, sys.stdout, indent=4)
