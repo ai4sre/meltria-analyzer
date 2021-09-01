@@ -55,11 +55,13 @@ def main():
         'sli': [],
         'cause_metrics': [],
         'service_sli': [],
+        'dashboard_url': [],
     })
     for metrics_file in args.metricsfiles:
         data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']
+        dashboard_url: str = metrics_meta['grafana_dashboard_url']
         case: str = f"{chaos_type}:{chaos_comp}"
 
         logging.info(f">> Running verify_metrics {metrics_file} {case} ...")
@@ -80,6 +82,7 @@ def main():
         results[case]['sli'].append(sli_status)
         results[case]['cause_metrics'].append(cause_metrics_status)
         results[case]['service_sli'].append(service_sli_status)
+        results[case]['dashboard_url'].append(dashboard_url)
 
     if args.out is None:
         json.dump(results, sys.stdout, indent=4)
