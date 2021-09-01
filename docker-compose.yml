@@ -16,3 +16,8 @@ services:
     volumes:
       - .:/usr/src/app
     entrypoint: ["/usr/src/app/tools/eval_tsdr.py"]
+  verify-metrics:
+    build: .
+    volumes:
+      - .:/usr/src/app
+    entrypoint: ["/usr/src/app/tools/verify_metrics.py"]
