@@ -15,6 +15,7 @@ from tsdr import tsdr
 
 TIME_INTERVAL_SEC = 15
 
+
 class BkpsStatus(int, Enum):
     NOT_FOUND = 1
     FOUND_OUTSIDE_OF_CHAOS = 2
