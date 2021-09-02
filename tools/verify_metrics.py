@@ -10,10 +10,10 @@ from enum import Enum
 import lib.metrics
 import numpy as np
 import ruptures as rpt
+from statsmodels.tsa import stattools
 from tsdr import tsdr
 
 TIME_INTERVAL_SEC = 15
-
 
 class BkpsStatus(int, Enum):
     NOT_FOUND = 1
@@ -21,9 +21,17 @@ class BkpsStatus(int, Enum):
     FOUND_INSIDE_OF_CHAOS = 3
 
 
-def detect_bkps(samples: np.ndarray, n_bkps=2, model='l2', chaos_duration_min=5) -> BkpsStatus:
+def detect_bkps(samples: np.ndarray, n_bkps=2, model='l2', chaos_duration_min=5, adf_alpha=0.05) -> BkpsStatus:
     """detect breaking points
+    1. Check stationality with ADF test
+    2. Search breaking poitnts with ruptures binary segmentation
     """
+
+    p_val = stattools.adfuller(samples)[1]
+    if p_val <= adf_alpha:
+        logging.info(p_val)
+        return BkpsStatus.NOT_FOUND
+
     algo = rpt.Binseg(model=model).fit(samples)
     try:
         result: list[int] = algo.predict(n_bkps=n_bkps)
