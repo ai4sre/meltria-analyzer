@@ -59,12 +59,7 @@ def main():
     parser.add_argument('--out', help='output file path')
     args = parser.parse_args()
 
-    results = defaultdict(lambda: list({
-        'sli': BkpsStatus,
-        'cause_metrics': BkpsStatus,
-        'service_sli': BkpsStatus,
-        'dashboard_url': ''
-    }))
+    results = defaultdict(lambda: list())
     for metrics_file in args.metricsfiles:
         data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         chaos_type: str = metrics_meta['injected_chaos_type']
