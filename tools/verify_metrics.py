@@ -112,7 +112,7 @@ def main():
     elif args.out_format == 'csv':
         if args.out is not None:
             sys.stdout = open(args.out, 'w', newline='')
-        writer = csv.writer(sys.stdout, delimiter=' ',
+        writer = csv.writer(sys.stdout, delimiter=',',
                             quotechar='|', quoting=csv.QUOTE_MINIMAL)
         # case, no, metric_type, metric_name, sttaus(str), status(int), dashboard_url
         for case, entries in results.items():
