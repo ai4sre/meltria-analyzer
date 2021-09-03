@@ -96,5 +96,6 @@ def main():
         with open(args.out, mode='w') as f:
             json.dump(results, f)
 
+
 if __name__ == '__main__':
     main()
