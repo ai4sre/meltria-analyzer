@@ -119,9 +119,14 @@ def main():
             for i, entry in enumerate(entries):
                 for metric_type in ['sli', 'service_sli', 'cause_metrics']:
                     for metric_name, status in entry[metric_type].items():
-                        writer.writerow([
-                            case, str(i), metric_type, metric_name, status.name, status.value, entry['dashboard_url']
-                        ])
+                        if status is None:
+                            writer.writerow([
+                                case, str(i), metric_type, metric_name, '', 0, entry['dashboard_url']
+                            ])
+                        else:
+                            writer.writerow([
+                                case, str(i), metric_type, metric_name, status.name, status.value, entry['dashboard_url']
+                            ])
 
         sys.stdout = sys.__stdout__
     else:
