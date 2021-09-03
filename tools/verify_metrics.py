@@ -10,7 +10,9 @@ from enum import Enum
 
 import lib.metrics
 import numpy as np
+import pandas as pd
 import ruptures as rpt
+from scipy import interpolate
 from statsmodels.tsa import stattools
 from tsdr import tsdr
 
@@ -23,7 +25,12 @@ class BkpsStatus(int, Enum):
     FOUND_INSIDE_OF_CHAOS = 3
 
 
-def detect_bkps(samples: np.ndarray, n_bkps=2, model='l2', chaos_duration_min=5, adf_alpha=0.05) -> BkpsStatus:
+def detect_bkps(samples: pd.Series, n_bkps=2, model='l2', chaos_duration_min=5, adf_alpha=0.05) -> BkpsStatus:
+    samples = samples.interpolate(method="spline", order=3, limit_direction="both")
+    return _detect_bkps(samples.to_numpy(), n_bkps, model, chaos_duration_min, adf_alpha)
+
+
+def _detect_bkps(samples: np.ndarray, n_bkps, model, chaos_duration_min, adf_alpha) -> BkpsStatus:
     """detect breaking points
     1. Check stationality with ADF test
     2. Search breaking poitnts with ruptures binary segmentation
@@ -67,7 +74,7 @@ def main():
 
     results = defaultdict(lambda: list())
     for metrics_file in args.metricsfiles:
-        data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
+        data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file, interporate=False)
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']
         dashboard_url: str = metrics_meta['grafana_dashboard_url']
@@ -76,18 +83,18 @@ def main():
         logging.info(f">> Running verify_metrics {metrics_file} {case} ...")
 
         sli = 's-front-end_latency'
-        sli_status = detect_bkps(data_df[sli].to_numpy())
+        sli_status = detect_bkps(data_df[sli])
 
         _, cause_metrics = lib.metrics.check_cause_metrics(list(data_df.columns), chaos_type, chaos_comp)
-        cause_metrics_series = data_df[cause_metrics].values
+        cause_metrics_series = data_df[cause_metrics]
         cause_metrics_status = {}
-        for feature, samples in zip(cause_metrics, cause_metrics_series):
+        for feature, samples in cause_metrics_series.items():
             status = detect_bkps(samples)
             cause_metrics_status[feature] = status
 
         service_name = chaos_comp.split('-')[0]
         service_sli = f"s-{service_name}_latency"
-        service_sli_status = detect_bkps(data_df[service_sli].to_numpy()) if service_sli in data_df else None
+        service_sli_status = detect_bkps(data_df[service_sli]) if service_sli in data_df else None
 
         results[case].append({
             'sli': {sli: sli_status},

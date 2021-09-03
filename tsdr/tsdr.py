@@ -293,7 +293,7 @@ def run_sieve(data_df, metrics_dimension, services_list, max_workers
         {'step1': reduced_by_st_df, 'step2': reduced_df}, metrics_dimension, clustering_info
 
 
-def read_metrics_json(data_file: os.PathLike) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
+def read_metrics_json(data_file: os.PathLike, interporate: bool = True) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
     with open(data_file) as f:
         raw_json = json.load(f)
     raw_data = pd.read_json(data_file)
@@ -315,8 +315,9 @@ def read_metrics_json(data_file: os.PathLike) -> tuple[pd.DataFrame, dict[str, A
                                                 target_name, metric_name)
                 data_df[column_name] = np.array(metric["values"], dtype=np.float64)[:, 1][-PLOTS_NUM:]
     data_df = data_df.round(4)
-    data_df = data_df.interpolate(
-        method="spline", order=3, limit_direction="both")
+    if interporate:
+        data_df = data_df.interpolate(
+            method="spline", order=3, limit_direction="both")
     return data_df, raw_json['mappings'], raw_json['meta']
 
 
