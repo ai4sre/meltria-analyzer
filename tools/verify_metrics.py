@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import csv
 import json
 import logging
 import sys
@@ -58,6 +59,10 @@ def main():
                         nargs='+',
                         help="metrics output JSON file")
     parser.add_argument('--out', help='output file path')
+    parser.add_argument('--out-format',
+                        choices=['json', 'csv'],
+                        default='json',
+                        help='output format')
     args = parser.parse_args()
 
     results = defaultdict(lambda: list())
@@ -70,7 +75,8 @@ def main():
 
         logging.info(f">> Running verify_metrics {metrics_file} {case} ...")
 
-        sli_status = detect_bkps(data_df['s-front-end_latency'].to_numpy())
+        sli = 's-front-end_latency'
+        sli_status = detect_bkps(data_df[sli].to_numpy())
 
         _, cause_metrics = lib.metrics.check_cause_metrics(list(data_df.columns), chaos_type, chaos_comp)
         cause_metrics_series = data_df[cause_metrics].values
@@ -84,17 +90,35 @@ def main():
         service_sli_status = detect_bkps(data_df[service_sli].to_numpy()) if service_sli in data_df else None
 
         results[case].append({
-            'sli': sli_status,
+            'sli': {sli: sli_status},
             'cause_metrics': cause_metrics_status,
-            'service_sli': service_sli_status,
+            'service_sli': {service_sli: service_sli_status},
             'dashboard_url': dashboard_url,
         })
 
-    if args.out is None:
-        json.dump(results, sys.stdout, indent=4)
+    if args.out_format == 'json':
+        if args.out is None:
+            json.dump(results, sys.stdout, indent=4)
+        else:
+            with open(args.out, mode='w') as f:
+                json.dump(results, f)
+    elif args.out_format == 'csv':
+        if args.out is not None:
+            sys.stdout = open(args.out, 'w', newline='')
+        writer = csv.writer(sys.stdout, delimiter=' ',
+                            quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        # case, no, metric_type, metric_name, status(int), sttaus(str), dashboard_url
+        for case, entries in results.items():
+            for i, entry in enumerate(entries):
+                for metric_type in ['sli', 'service_sli', 'cause_metrics']:
+                    for metric_name, status in entry[metric_type].items():
+                        writer.writerow([
+                            case, str(i), metric_type, metric_name, int(status), status, entry['dashboard_url']
+                        ])
+
+        sys.stdout = sys.__stdout__
     else:
-        with open(args.out, mode='w') as f:
-            json.dump(results, f)
+        pass
 
 
 if __name__ == '__main__':
