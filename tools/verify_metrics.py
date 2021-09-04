@@ -25,12 +25,7 @@ class BkpsStatus(int, Enum):
     FOUND_INSIDE_OF_CHAOS = 3
 
 
-def detect_bkps(samples: pd.Series, n_bkps=2, model='l2', chaos_duration_min=5, adf_alpha=0.05) -> BkpsStatus:
-    samples = samples.interpolate(method="spline", order=3, limit_direction="both")
-    return _detect_bkps(samples.to_numpy(), n_bkps, model, chaos_duration_min, adf_alpha)
-
-
-def _detect_bkps(samples: np.ndarray, n_bkps, model, chaos_duration_min, adf_alpha) -> BkpsStatus:
+def detect_bkps(samples: np.ndarray, n_bkps=2, model='l2', chaos_duration_min=5, adf_alpha=0.05) -> BkpsStatus:
     """detect breaking points
     1. Check stationality with ADF test
     2. Search breaking poitnts with ruptures binary segmentation
@@ -62,6 +57,7 @@ def detect_sigma(samples: np.ndarray, sigma: int, chaos_duration_min=5) -> BkpsS
     """
     anomaly detection with 3-sigma rule
     """
+
     minus, plus = samples.mean() - sigma * samples.std(), samples.mean() + sigma * samples.std()
     chaos_plots: int = chaos_duration_min * 60//TIME_INTERVAL_SEC + 1
     chaos_injected_pt: int = len(samples) - chaos_plots
@@ -75,8 +71,10 @@ def detect_sigma(samples: np.ndarray, sigma: int, chaos_duration_min=5) -> BkpsS
 
 
 def detect_anomaly(method: str, samples: pd.Series, chaos_duration_min=5) -> BkpsStatus:
+    samples = samples.interpolate(method="spline", order=3, limit_direction="both")
+
     if method == 'bkps':
-        return detect_bkps(samples=samples, chaos_duration_min=chaos_duration_min)
+        return detect_bkps(samples=samples.to_numpy(), chaos_duration_min=chaos_duration_min)
     elif method == '3sigma':
         return detect_sigma(samples=samples.to_numpy(), sigma=3, chaos_duration_min=chaos_duration_min)
     elif method == '2sigma':
