@@ -33,7 +33,7 @@ TARGET_DATA = {"containers": "all",
                "middlewares": "all"}
 
 
-def reduce_series_with_cv(data_df):
+def reduce_series_with_cv(data_df, cv_threshold=0.002):
     reduced_by_cv_df = pd.DataFrame()
     for col in data_df.columns:
         data = data_df[col].values
@@ -43,7 +43,7 @@ def reduce_series_with_cv(data_df):
             cv = 0
         else:
             cv = std / mean
-        if cv > 0.002:
+        if cv > cv_threshold:
             reduced_by_cv_df[col] = data_df[col]
     return reduced_by_cv_df
 
