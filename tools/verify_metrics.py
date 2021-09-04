@@ -50,12 +50,41 @@ def _detect_bkps(samples: np.ndarray, n_bkps, model, chaos_duration_min, adf_alp
 
     if result[0] == len(samples):  # not found breaking points
         return BkpsStatus.NOT_FOUND
-    chaos_plots: int = chaos_duration_min * 60//TIME_INTERVAL_SEC
+    chaos_plots: int = chaos_duration_min * 60//TIME_INTERVAL_SEC + 1
     chaos_injected_pt: int = len(samples) - chaos_plots
     for bkp in result:
         if bkp < chaos_injected_pt:
             return BkpsStatus.FOUND_OUTSIDE_OF_CHAOS
     return BkpsStatus.FOUND_INSIDE_OF_CHAOS
+
+
+def detect_sigma(samples: np.ndarray, sigma: int, chaos_duration_min=5) -> BkpsStatus:
+    """
+    anomaly detection with 3-sigma rule
+    """
+    minus, plus = samples.mean() - sigma * samples.std(), samples.mean() + sigma * samples.std()
+    chaos_plots: int = chaos_duration_min * 60//TIME_INTERVAL_SEC + 1
+    chaos_injected_pt: int = len(samples) - chaos_plots
+    for i, x in enumerate(samples):
+        if x <= minus or x >= plus:
+            if i < chaos_injected_pt:
+                return BkpsStatus.FOUND_OUTSIDE_OF_CHAOS
+            if i >= chaos_injected_pt:
+                return BkpsStatus.FOUND_INSIDE_OF_CHAOS
+    return BkpsStatus.NOT_FOUND
+
+
+def detect_anomaly(method: str, samples: pd.Series, chaos_duration_min=5) -> BkpsStatus:
+    if method == 'bkps':
+        return detect_bkps(samples=samples, chaos_duration_min=chaos_duration_min)
+    elif method == '3sigma':
+        return detect_sigma(samples=samples.to_numpy(), sigma=3, chaos_duration_min=chaos_duration_min)
+    elif method == '2sigma':
+        return detect_sigma(samples=samples.to_numpy(), sigma=2, chaos_duration_min=chaos_duration_min)
+    elif method == '1sigma':
+        return detect_sigma(samples=samples.to_numpy(), sigma=1, chaos_duration_min=chaos_duration_min)
+    else:
+        raise ValueError(f"{method} must be bkps or 3sigma")
 
 
 def main():
@@ -70,6 +99,10 @@ def main():
                         choices=['json', 'csv'],
                         default='json',
                         help='output format')
+    parser.add_argument('--ad-method',
+                        choices=['bkps', '1sigma', '2sigma', '3sigma'],
+                        default='2sigma',
+                        help='anomaly detection method')
     args = parser.parse_args()
 
     results = defaultdict(lambda: list())
@@ -83,18 +116,18 @@ def main():
         logging.info(f">> Running verify_metrics {metrics_file} {case} ...")
 
         sli = 's-front-end_latency'
-        sli_status = detect_bkps(data_df[sli])
+        sli_status = detect_anomaly(args.ad_method, data_df[sli])
 
         _, cause_metrics = lib.metrics.check_cause_metrics(list(data_df.columns), chaos_type, chaos_comp)
         cause_metrics_series = data_df[cause_metrics]
         cause_metrics_status = {}
         for feature, samples in cause_metrics_series.items():
-            status = detect_bkps(samples)
+            status = detect_anomaly(args.ad_method, samples)
             cause_metrics_status[feature] = status
 
         service_name = chaos_comp.split('-')[0]
         service_sli = f"s-{service_name}_latency"
-        service_sli_status = detect_bkps(data_df[service_sli]) if service_sli in data_df else None
+        service_sli_status = detect_anomaly(args.ad_method, data_df[service_sli]) if service_sli in data_df else None
 
         results[case].append({
             'sli': {sli: sli_status},
