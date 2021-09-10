@@ -62,7 +62,7 @@ def detect_sigma(samples: np.ndarray, sigma: int, chaos_duration_min=5) -> BkpsS
     chaos_plots: int = chaos_duration_min * 60//TIME_INTERVAL_SEC + 1
     chaos_injected_pt: int = len(samples) - chaos_plots
     for i, x in enumerate(samples):
-        if x <= minus or x >= plus:
+        if x < minus or x > plus:
             if i < chaos_injected_pt:
                 return BkpsStatus.FOUND_OUTSIDE_OF_CHAOS
             if i >= chaos_injected_pt:
