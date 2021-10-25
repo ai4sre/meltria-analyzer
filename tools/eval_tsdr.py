@@ -58,13 +58,17 @@ def main():
 
                 logging.info(f">> Running tsdr {metrics_file} {case} {param_key} ...")
 
-                elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
-                    data_df=data_df,
-                    method=tsdr.TSIFTER_METHOD,
-                    max_workers=cpu_count(),
-                    tsifter_adf_alpha=alpha,
-                    tsifter_clustering_threshold=thresh,
-                )
+                try:
+                    elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
+                        data_df=data_df,
+                        method=tsdr.TSIFTER_METHOD,
+                        max_workers=cpu_count(),
+                        tsifter_adf_alpha=alpha,
+                        tsifter_clustering_threshold=thresh,
+                    )
+                except ValueError as e:
+                    logging.warning(f">> Skip {case} because of {e}")
+                    continue
 
                 has_cause_metrics = {
                     'step1': {'ok': False, 'metrics': None, },
