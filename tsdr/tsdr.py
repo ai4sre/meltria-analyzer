@@ -319,8 +319,8 @@ def read_metrics_json(data_file: os.PathLike, interporate: bool = True) -> tuple
         try:
             data_df = data_df.interpolate(
                 method="spline", order=3, limit_direction="both")
-        except: # To cacth `dfitpack.error: (m>k) failed for hidden m: fpcurf0:m=3`
-            raise ValueError("calculating spline error")
+        except:  # To cacth `dfitpack.error: (m>k) failed for hidden m: fpcurf0:m=3`
+            raise ValueError("calculating spline error") from None
     return data_df, raw_json['mappings'], raw_json['meta']
 
 
