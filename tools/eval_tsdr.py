@@ -48,9 +48,14 @@ def main():
     })
     results = defaultdict(lambda: defaultdict(dict))
     for metrics_file in args.metricsfiles:
-        data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
+        try:
+            data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
+        except ValueError as e:
+            logging.warning(f">> Skip {metrics_file} because of {e}")
+            continue
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']
+
         for alpha in args.adf_alphas:
             for thresh in args.dist_thresholds:
                 case = f"{chaos_type}:{chaos_comp}"
@@ -58,17 +63,13 @@ def main():
 
                 logging.info(f">> Running tsdr {metrics_file} {case} {param_key} ...")
 
-                try:
-                    elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
-                        data_df=data_df,
-                        method=tsdr.TSIFTER_METHOD,
-                        max_workers=cpu_count(),
-                        tsifter_adf_alpha=alpha,
-                        tsifter_clustering_threshold=thresh,
-                    )
-                except ValueError as e:
-                    logging.warning(f">> Skip {case} because of {e}")
-                    continue
+                elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
+                    data_df=data_df,
+                    method=tsdr.TSIFTER_METHOD,
+                    max_workers=cpu_count(),
+                    tsifter_adf_alpha=alpha,
+                    tsifter_clustering_threshold=thresh,
+                )
 
                 has_cause_metrics = {
                     'step1': {'ok': False, 'metrics': None, },
