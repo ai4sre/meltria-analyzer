@@ -12,8 +12,12 @@ from lib.metrics import check_tsdr_ground_truth_by_route
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
 
+# algorithms
+STEP1_METHODS = ['df', 'adf']
+
+# parameters
 DIST_THRESHOLDS = [0.001, 0.01, 0.1]
-ADF_ALPHAS = [0.01, 0.02, 0.05]
+STEP1_ALPHAS = [0.01, 0.02, 0.05]
 
 
 def main():
@@ -23,14 +27,18 @@ def main():
     parser.add_argument("metricsfiles",
                         nargs='+',
                         help="metrics output JSON file")
+    parser.add_argument('--step1-method',
+                        default='df',
+                        choices=STEP1_METHODS,
+                        help='step1 method')
     parser.add_argument('--dist-thresholds',
                         default=DIST_THRESHOLDS,
                         type=lambda s: [float(i) for i in s.split(',')],
                         help='distance thresholds')
-    parser.add_argument('--adf-alphas',
-                        default=ADF_ALPHAS,
+    parser.add_argument('--step1-alphas',
+                        default=STEP1_ALPHAS,
                         type=lambda s: [float(i) for i in s.split(',')],
-                        help='sigificance levels for ADF test')
+                        help='sigificance levels for step1 test')
     parser.add_argument('--out', help='output file path')
     args = parser.parse_args()
 
@@ -56,10 +64,10 @@ def main():
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']
 
-        for alpha in args.adf_alphas:
+        for alpha in args.step1_alphas:
             for thresh in args.dist_thresholds:
                 case = f"{chaos_type}:{chaos_comp}"
-                param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
+                param_key = f"step1_alpha:{alpha},dist_threshold:{thresh}"
 
                 logging.info(f">> Running tsdr {metrics_file} {case} {param_key} ...")
 
@@ -67,7 +75,8 @@ def main():
                     data_df=data_df,
                     method=tsdr.TSIFTER_METHOD,
                     max_workers=cpu_count(),
-                    tsifter_adf_alpha=alpha,
+                    tsifter_step1_method=args.step1_method,
+                    tsifter_step1_alpha=alpha,
                     tsifter_clustering_threshold=thresh,
                 )
 
@@ -107,14 +116,17 @@ def main():
                 reductions[param_key]['step1'].append(1 - (step1_series_num / series_num))
                 reductions[param_key]['step2'].append(1 - (step2_series_num / series_num))
 
-    for alpha in args.adf_alphas:
+    for alpha in args.step1_alphas:
         for thresh in args.dist_thresholds:
-            param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
+            param_key = f"step1_alpha:{alpha},dist_threshold:{thresh}"
             for step in ['step1', 'step2']:
                 y_true, y_pred = y_trues[param_key][step], y_preds[param_key][step]
                 tn, fp, fn, tp = confusion_matrix(
                     y_true=y_true, y_pred=y_pred, labels=[0, 1],
                 ).ravel()
+                if len(reductions[param_key][step]) < 1:
+                    logging.info(f"the result of ({param_key},{step}) is missing")
+                    continue
                 results['evaluation'][param_key][step] = {
                     'tp': int(tp),
                     'tn': int(tn),

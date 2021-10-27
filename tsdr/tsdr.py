@@ -182,7 +182,7 @@ def kshape_clustering(target_df, service_name, executor):
     return clustering_info, remove_list
 
 
-def tsifter_reduce_series(data_df, max_workers, adf_alpha: float):
+def tsifter_reduce_series(data_df, max_workers: int, step1_method: str, step1_alpha: float):
     reduced_by_st_df = pd.DataFrame()
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_col = {}
@@ -190,12 +190,17 @@ def tsifter_reduce_series(data_df, max_workers, adf_alpha: float):
             data = data_df[col].values
             if data.sum() == 0. or len(np.unique(data)) == 1 or np.isnan(data.sum()):
                 continue
-            future_to_col[executor.submit(adfuller, data)] = col
+            if step1_method == 'adf':
+                future_to_col[executor.submit(adfuller, data)] = col
+            elif step1_method == 'df':
+                future_to_col[executor.submit(adfuller, data, maxlag=1, autolag=None)] = col
+            else:
+                raise ValueError('step1_method must be adf or df')
         for future in futures.as_completed(future_to_col):
             col = future_to_col[future]
             p_val = future.result()[1]
             if not np.isnan(p_val):
-                if p_val >= adf_alpha:
+                if p_val >= step1_alpha:
                     reduced_by_st_df[col] = data_df[col]
     return reduced_by_st_df
 
@@ -241,12 +246,13 @@ def sieve_clustering(reduced_df, services_list, max_workers):
     return reduced_df, clustering_info
 
 
-def run_tsifter(data_df, metrics_dimension, services_list, max_workers, adf_alpha: float, dist_threshold: float
+def run_tsifter(data_df, metrics_dimension, services_list, max_workers,
+                step1_method: str, step1_alpha: float, dist_threshold: float
                 ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
-    reduced_by_st_df = tsifter_reduce_series(data_df, max_workers, adf_alpha)
+    reduced_by_st_df = tsifter_reduce_series(data_df, max_workers, step1_method, step1_alpha)
 
     time_adf = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(
@@ -353,7 +359,7 @@ def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs
     if method == TSIFTER_METHOD:
         return run_tsifter(
             data_df, metrics_dimension, services, max_workers,
-            kwargs['tsifter_adf_alpha'], kwargs['tsifter_clustering_threshold'])
+            kwargs['tsifter_step1_method'], kwargs['tsifter_step1_alpha'], kwargs['tsifter_clustering_threshold'])
     elif method == SIEVE_METHOD:
         return run_sieve(data_df, metrics_dimension, services, max_workers)
 
