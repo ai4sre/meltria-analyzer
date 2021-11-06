@@ -148,7 +148,7 @@ def main():
     run['scores/fp'] = fp
     run['scores/fn'] = fn
     run['scores/tp'] = tp
-    run['scores/accuracy'] = (tp + tn) // (tn + fp + fn + tp)
+    run['scores/accuracy'] = (tp + tn) / (tn + fp + fn + tp)
     run['scores/reduction_rate'] = scores_df['reduction_rate'].mean()
 
     run.stop()
