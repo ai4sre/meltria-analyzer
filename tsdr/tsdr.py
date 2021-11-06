@@ -182,8 +182,8 @@ def kshape_clustering(target_df, service_name, executor):
     return clustering_info, remove_list
 
 
-def tsifter_reduce_series(data_df, max_workers: int, step1_method: str, step1_alpha: float):
-    reduced_by_st_df = pd.DataFrame()
+def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
+                          step1_method: str, step1_alpha: float) -> pd.DataFrame:
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_col = {}
         for col in data_df.columns:
@@ -196,13 +196,14 @@ def tsifter_reduce_series(data_df, max_workers: int, step1_method: str, step1_al
                 future_to_col[executor.submit(adfuller, data, maxlag=1, autolag=None)] = col
             else:
                 raise ValueError('step1_method must be adf or df')
+        reduced_cols: list[str] = []
         for future in futures.as_completed(future_to_col):
             col = future_to_col[future]
             p_val = future.result()[1]
             if not np.isnan(p_val):
                 if p_val >= step1_alpha:
-                    reduced_by_st_df[col] = data_df[col]
-    return reduced_by_st_df
+                    reduced_cols.append(col)
+    return data_df[reduced_cols]
 
 
 def sieve_reduce_series(data_df):
