@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
 import logging
+import os
 import statistics
-import sys
 from collections import defaultdict
 from multiprocessing import cpu_count
 
+import neptune.new as neptune
+import pandas as pd
 from lib.metrics import check_tsdr_ground_truth_by_route
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
@@ -42,20 +43,12 @@ def main():
     parser.add_argument('--out', help='output file path')
     args = parser.parse_args()
 
-    y_trues = defaultdict(lambda: {
-        'step1': [],
-        'step2': [],
-    })
-    y_preds = defaultdict(lambda: {
-        'step1': [],
-        'step2': [],
-    })
-    reductions = defaultdict(lambda: {
-        'step1': [],
-        'step2': [],
-    })
-    results = defaultdict(lambda: defaultdict(dict))
+    run = neptune.init()
+
+    dataset = pd.DataFrame()
     for metrics_file in args.metricsfiles:
+        # https://docs.neptune.ai/api-reference/neptune#.init
+
         try:
             data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         except ValueError as e:
@@ -63,85 +56,100 @@ def main():
             continue
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']
+        data_df['chaos_type'] = chaos_type
+        data_df['chaos_comp'] = chaos_comp
+        data_df['metrics_file'] = os.path.basename(metrics_file)
+        dataset = dataset.append(data_df)
 
-        for alpha in args.step1_alphas:
-            for thresh in args.dist_thresholds:
-                case = f"{chaos_type}:{chaos_comp}"
-                param_key = f"step1_alpha:{alpha},dist_threshold:{thresh}"
-
-                logging.info(f">> Running tsdr {metrics_file} {case} {param_key} ...")
-
-                elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
-                    data_df=data_df,
-                    method=tsdr.TSIFTER_METHOD,
-                    max_workers=cpu_count(),
-                    tsifter_step1_method=args.step1_method,
-                    tsifter_step1_alpha=alpha,
-                    tsifter_clustering_threshold=thresh,
-                )
-
-                has_cause_metrics = {
-                    'step1': {'ok': False, 'metrics': None, },
-                    'step2': {'ok': False, 'metrics': None, },
-                }
-                for step, df in reduced_df_by_step.items():
-                    ok, found_metrics = check_tsdr_ground_truth_by_route(
-                        metrics=list(df.columns),
-                        chaos_type=chaos_type,
-                        chaos_comp=chaos_comp,
-                    )
-                    has_cause_metrics[step]['ok'] = ok
-                    has_cause_metrics[step]['metrics'] = found_metrics
-
-                    y_trues[param_key][step].append(1)
-                    y_preds[param_key][step].append(1 if ok else 0)
-
-                series_num: int = metrics_dimension['total'][0]
-                step1_series_num: int = metrics_dimension['total'][1]
-                step2_series_num: int = metrics_dimension['total'][2]
-                results[case][param_key] = {
-                    'found_cause_path': has_cause_metrics,
-                    'reduction_performance': {
-                        'reduced_series_num': {
-                            'step0': series_num,
-                            'step1': step1_series_num,
-                            'step2': step2_series_num,
-                        },
-                    },
-                    'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
-                }
-
-                results[case]['original_metrics_meta'] = metrics_meta
-
-                reductions[param_key]['step1'].append(1 - (step1_series_num / series_num))
-                reductions[param_key]['step2'].append(1 - (step2_series_num / series_num))
+    dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file'], inplace=True)
 
     for alpha in args.step1_alphas:
         for thresh in args.dist_thresholds:
-            param_key = f"step1_alpha:{alpha},dist_threshold:{thresh}"
-            for step in ['step1', 'step2']:
-                y_true, y_pred = y_trues[param_key][step], y_preds[param_key][step]
-                tn, fp, fn, tp = confusion_matrix(
-                    y_true=y_true, y_pred=y_pred, labels=[0, 1],
-                ).ravel()
-                if len(reductions[param_key][step]) < 1:
-                    logging.info(f"the result of ({param_key},{step}) is missing")
-                    continue
-                results['evaluation'][param_key][step] = {
-                    'tp': int(tp),
-                    'tn': int(tn),
-                    'fp': int(fp),
-                    'fn': int(fn),
-                    'accuracy': accuracy_score(y_true, y_pred),
-                    'recall': recall_score(y_true, y_pred),
-                    'reduction_rate': statistics.mean(reductions[param_key][step]),
-                }
+            run['parameters'] = {
+                'step1_model': args.step1_method,
+                'step1_alpha': alpha,
+                'step2_dist_threshold': thresh,
+            }
 
-    if args.out is None:
-        json.dump(results, sys.stdout, indent=4)
-    else:
-        with open(args.out, mode='w') as f:
-            json.dump(results, f)
+            scores_df = pd.DataFrame()
+
+            for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
+                case = f"{chaos_type}:{chaos_comp}"
+                param_key = f"step1_alpha:{alpha},dist_threshold:{thresh}"
+
+                y_true_by_step: dict[str, list[int]] = defaultdict(lambda: list())
+                y_pred_by_step: dict[str, list[int]] = defaultdict(lambda: list())
+                reductions: dict[str, list[float]] = defaultdict(lambda: list())
+
+                for (metrics_file), data_df in sub_df.groupby(level=0):
+                    logging.info(f">> Running tsdr {metrics_file} {case} {param_key} ...")
+
+                    elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
+                        data_df=data_df,
+                        method=tsdr.TSIFTER_METHOD,
+                        max_workers=cpu_count(),
+                        tsifter_step1_method=args.step1_method,
+                        tsifter_step1_alpha=alpha,
+                        tsifter_clustering_threshold=thresh,
+                    )
+
+                    series_num: dict[str, float] = {
+                        'total': metrics_dimension['total'][0],
+                        'step1': metrics_dimension['total'][1],
+                        'step2': metrics_dimension['total'][2],
+                    }
+
+                    for step, df in reduced_df_by_step.items():
+                        ok, found_metrics = check_tsdr_ground_truth_by_route(
+                            metrics=list(df.columns),
+                            chaos_type=chaos_type,
+                            chaos_comp=chaos_comp,
+                        )
+                        y_true_by_step[step].append(1)
+                        y_pred_by_step[step].append(1 if ok else 0)
+                        reductions[step].append(1 - (series_num[step] / series_num['total']))
+
+                for step, y_true in y_true_by_step.items():
+                    y_pred = y_pred_by_step[step]
+                    tn, fp, fn, tp = confusion_matrix(
+                        y_true=y_true, y_pred=y_pred, labels=[0, 1],
+                    ).ravel()
+                    accuracy = accuracy_score(y_true, y_pred)
+                    recall = recall_score(y_true, y_pred)
+                    reduction_rate = statistics.mean(reductions[step])
+                    scores = {
+                        'tn': tn,
+                        'fp': fp,
+                        'fn': fn,
+                        'tp': tp,
+                        'accuracy': accuracy,
+                        'recall': recall,
+                        'reduction_rate': reduction_rate,
+                    }
+                    label = {
+                        'chaos_type': chaos_type,
+                        'chaos_comp': chaos_comp,
+                        'step': step,
+                    }
+                    meta_key = f"data/{chaos_type}/{chaos_comp}/{step}/scores"
+                    for k, v in scores.items():
+                        run[meta_key+'/'+k] = v
+                    scores_df = scores_df.append(
+                        pd.DataFrame(dict(label, **scores), index=['chaos_type', 'chaos_comp']))
+
+            # multiindexing
+            scores_df.set_index(['chaos_type', 'chaos_comp'], inplace=True)
+            # TODO: aggregate scores by chaos cases
+            tn = scores_df['tn'].sum()
+            fp = scores_df['fp'].sum()
+            fn = scores_df['fn'].sum()
+            tp = scores_df['tp'].sum()
+            run['scores/tn'] = tn
+            run['scores/fp'] = fp
+            run['scores/fn'] = fn
+            run['scores/tp'] = tp
+            run['scores/accuracy'] = (tp + tn) / (tn + fp + fn + tp)
+            run['scores/reduction_rate'] = scores_df['reduction_rate'].mean()
 
 
 if __name__ == '__main__':
