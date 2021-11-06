@@ -28,6 +28,6 @@ RUN set -eux; \
 WORKDIR /usr/src/app
 
 COPY --from=builder /usr/src/app/requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt --ignore-installed --no-deps
 COPY . .
 ENV PYTHONPATH=/usr/src/app
