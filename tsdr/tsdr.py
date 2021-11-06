@@ -305,6 +305,7 @@ def read_metrics_json(data_file: os.PathLike, interporate: bool = True) -> tuple
         raw_json = json.load(f)
     raw_data = pd.read_json(data_file)
     data_df = pd.DataFrame()
+    metrics_name_to_values: dict[str, np.ndarray] = {}
     for target in TARGET_DATA:
         for t in raw_data[target].dropna():
             for metric in t:
@@ -318,10 +319,12 @@ def read_metrics_json(data_file: os.PathLike, interporate: bool = True) -> tuple
                 ]
                 if target_name in ["queue-master", "rabbitmq", "session-db"]:
                     continue
-                column_name = "{}-{}_{}".format(target[0],
+                metric_name = "{}-{}_{}".format(target[0],
                                                 target_name, metric_name)
-                data_df[column_name] = np.array(metric["values"], dtype=np.float64)[:, 1][-PLOTS_NUM:]
-    data_df = data_df.round(4)
+                metrics_name_to_values[metric_name] = np.array(
+                    metric["values"], dtype=np.float64,
+                )[:, 1][-PLOTS_NUM:]
+    data_df = pd.DataFrame(metrics_name_to_values).round(4)
     if interporate:
         try:
             data_df = data_df.interpolate(
