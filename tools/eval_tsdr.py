@@ -28,6 +28,9 @@ def main():
     parser.add_argument("metricsfiles",
                         nargs='+',
                         help="metrics output JSON file")
+    parser.add_argument("--dataset-id",
+                        type=str,
+                        help='dataset id like "b2qdj"')
     parser.add_argument('--step1-method',
                         default='df',
                         choices=STEP1_METHODS,
@@ -44,6 +47,7 @@ def main():
     args = parser.parse_args()
 
     run = neptune.init()
+    run['dataset/id'] = args.dataset_id
 
     dataset = pd.DataFrame()
     for metrics_file in args.metricsfiles:
