@@ -131,9 +131,6 @@ def main():
                 'chaos_comp': chaos_comp,
                 'step': step,
             }
-            meta_key = f"data/{chaos_type}/{chaos_comp}/{step}/scores"
-            for k, v in scores.items():
-                run[meta_key+'/'+k] = v
             scores_df = scores_df.append(
                 pd.DataFrame(dict(label, **scores), index=['chaos_type', 'chaos_comp']))
 
@@ -151,7 +148,7 @@ def main():
     run['scores/accuracy'] = (tp + tn) / (tn + fp + fn + tp)
     run['scores/reduction_rate'] = scores_df['reduction_rate'].mean()
 
-    run['scores/all'].upload(neptune.types.File.as_html(scores_df))
+    run['scores/table'].upload(neptune.types.File.as_html(scores_df))
 
     run.stop()
 
