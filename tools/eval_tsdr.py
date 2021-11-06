@@ -44,9 +44,13 @@ def main():
                         type=lambda s: [float(i) for i in s.split(',')],
                         help='sigificance levels for step1 test')
     parser.add_argument('--out', help='output file path')
+    parser.add_argument('--neptune-mode',
+                        choices=['online', 'offline', 'debug'],
+                        default='online',
+                        help='specify neptune mode')
     args = parser.parse_args()
 
-    run = neptune.init()
+    run = neptune.init(mode=args.neptune_mode)
     run['dataset/id'] = args.dataset_id
 
     dataset = pd.DataFrame()
