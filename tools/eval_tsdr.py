@@ -45,6 +45,7 @@ def main():
                         help='specify neptune mode')
     args = parser.parse_args()
 
+    # Setup neptune.ai client
     run = neptune.init(mode=args.neptune_mode)
     run['dataset/id'] = args.dataset_id
     run['dataset/num_metrics_files'] = len(args.metricsfiles)
@@ -56,8 +57,6 @@ def main():
 
     dataset = pd.DataFrame()
     for metrics_file in args.metricsfiles:
-        # https://docs.neptune.ai/api-reference/neptune#.init
-
         try:
             data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         except ValueError as e:
