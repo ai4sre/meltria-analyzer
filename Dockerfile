@@ -22,6 +22,8 @@ RUN set -eux; \
     gcc \
     graphviz \
     graphviz-dev \
+    # for neptune-client
+    git \
   ; \
   rm -rf /var/lib/apt/lists/*
 
