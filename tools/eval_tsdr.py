@@ -47,6 +47,7 @@ def main():
 
     run = neptune.init(mode=args.neptune_mode)
     run['dataset/id'] = args.dataset_id
+    run['dataset/num_metrics_files'] = len(args.metricsfiles)
     run['parameters'] = {
         'step1_model': args.step1_method,
         'step1_alpha': args.step1_alpha,
