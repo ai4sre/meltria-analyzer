@@ -73,7 +73,12 @@ def main():
 
     dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file'], inplace=True)
 
-    scores_df = pd.DataFrame()
+    scores_df = pd.DataFrame(
+        columns=['chaos_type', 'chaos_comp', 'step',
+                 'tn', 'fp', 'fn', 'tp', 'accuracy', 'recall',
+                 'reduction_rate'],
+        index=['chaos_type', 'chaos_comp', 'step']
+    ).dropna()
     tests_df = pd.DataFrame(
         columns=['chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok', 'found_metrics'],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'step'],
@@ -138,25 +143,13 @@ def main():
             accuracy = accuracy_score(y_true, y_pred)
             recall = recall_score(y_true, y_pred)
             reduction_rate = statistics.mean(reductions[step])
-            scores = {
-                'tn': tn,
-                'fp': fp,
-                'fn': fn,
-                'tp': tp,
-                'accuracy': accuracy,
-                'recall': recall,
-                'reduction_rate': reduction_rate,
-            }
-            label = {
-                'chaos_type': chaos_type,
-                'chaos_comp': chaos_comp,
-                'step': step,
-            }
             scores_df = scores_df.append(
-                pd.DataFrame(dict(label, **scores), index=['chaos_type', 'chaos_comp']))
+                pd.Series(
+                    [chaos_type, chaos_comp, step, tn, fp, fn, tp, accuracy, recall, reduction_rate],
+                    index=scores_df.columns,
+                ), ignore_index=True,
+            )
 
-    # multiindexing
-    scores_df.set_index(['chaos_type', 'chaos_comp'], inplace=True)
     # TODO: aggregate scores by chaos cases
     tn = scores_df['tn'].sum()
     fp = scores_df['fp'].sum()
