@@ -7,6 +7,7 @@ import statistics
 from collections import defaultdict
 from multiprocessing import cpu_count
 
+import matplotlib.pyplot as plt
 import neptune.new as neptune
 import pandas as pd
 from lib.metrics import check_tsdr_ground_truth_by_route
@@ -15,6 +16,7 @@ from tsdr import tsdr
 
 # algorithms
 STEP1_METHODS = ['df', 'adf']
+
 
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
@@ -72,6 +74,7 @@ def main():
     dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file'], inplace=True)
 
     scores_df = pd.DataFrame()
+    tests_df = pd.DataFrame()
 
     for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
         case = f"{chaos_type}:{chaos_comp}"
@@ -106,8 +109,30 @@ def main():
                 y_true_by_step[step].append(1)
                 y_pred_by_step[step].append(1 if ok else 0)
                 reductions[step].append(1 - (series_num[step] / series_num['total']))
-                run[f"check/{chaos_type}/{chaos_comp}/{step}/{metrics_file}/found"] = ok
-                run[f"check/{chaos_type}/{chaos_comp}/{step}/{metrics_file}/series"] = found_metrics
+                label = {
+                    'chaos_type': chaos_type,
+                    'chaos_comp': chaos_comp,
+                    'metrics_file': metrics_file,
+                    'step': step,
+                }
+                test_results = {
+                    'ok': ok,
+                    'found_metrics': ','.join(found_metrics),
+                }
+                tests_df = tests_df.append(
+                    pd.DataFrame(
+                        dict(label, **test_results),
+                        index=['chaos_type', 'chaos_comp', 'metrics_file', 'step'],
+                    ),
+                )
+
+                # upload found_metrics plot images to neptune.ai
+                if len(found_metrics) < 1:
+                    continue
+                fig = plt.figure()
+                df.plot.line(subplots=True, layout=(2, -1), figsize=(6, 6), sharex=False)
+                run['tests/figures'].log(neptune.types.File.as_image(fig))
+                plt.close(fig=fig)
 
         for step, y_true in y_true_by_step.items():
             y_pred = y_pred_by_step[step]
@@ -149,6 +174,9 @@ def main():
     run['scores/reduction_rate'] = scores_df['reduction_rate'].mean()
 
     run['scores/table'].upload(neptune.types.File.as_html(scores_df))
+
+    tests_df.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'step'], inplace=True)
+    run['tests/table'].upload(neptune.types.File.as_html(tests_df))
 
     run.stop()
 
