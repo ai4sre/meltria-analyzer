@@ -74,7 +74,10 @@ def main():
     dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file'], inplace=True)
 
     scores_df = pd.DataFrame()
-    tests_df = pd.DataFrame()
+    tests_df = pd.DataFrame(
+        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok', 'found_metrics'],
+        index=['chaos_type', 'chaos_comp', 'metrics_file', 'step'],
+    ).dropna()
 
     for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
         case = f"{chaos_type}:{chaos_comp}"
@@ -100,6 +103,8 @@ def main():
                 'step2': metrics_dimension['total'][2],
             }
 
+            step: str
+            df: pd.DataFrame
             for step, df in reduced_df_by_step.items():
                 ok, found_metrics = check_tsdr_ground_truth_by_route(
                     metrics=list(df.columns),
@@ -109,21 +114,12 @@ def main():
                 y_true_by_step[step].append(1)
                 y_pred_by_step[step].append(1 if ok else 0)
                 reductions[step].append(1 - (series_num[step] / series_num['total']))
-                label = {
-                    'chaos_type': chaos_type,
-                    'chaos_comp': chaos_comp,
-                    'metrics_file': metrics_file,
-                    'step': step,
-                }
-                test_results = {
-                    'ok': ok,
-                    'found_metrics': ','.join(found_metrics),
-                }
                 tests_df = tests_df.append(
-                    pd.DataFrame(
-                        dict(label, **test_results),
-                        index=['chaos_type', 'chaos_comp', 'metrics_file', 'step'],
+                    pd.Series(
+                        [chaos_type, chaos_comp, metrics_file, step, ok, ','.join(found_metrics)],
+                        index=tests_df.columns,
                     ),
+                    ignore_index=True,
                 )
 
                 # upload found_metrics plot images to neptune.ai
@@ -172,10 +168,7 @@ def main():
     run['scores/tp'] = tp
     run['scores/accuracy'] = (tp + tn) / (tn + fp + fn + tp)
     run['scores/reduction_rate'] = scores_df['reduction_rate'].mean()
-
     run['scores/table'].upload(neptune.types.File.as_html(scores_df))
-
-    tests_df.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'step'], inplace=True)
     run['tests/table'].upload(neptune.types.File.as_html(tests_df))
 
     run.stop()
