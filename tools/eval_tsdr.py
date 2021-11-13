@@ -130,6 +130,7 @@ def main():
                 # upload found_metrics plot images to neptune.ai
                 if len(found_metrics) < 1:
                     continue
+                found_metrics.sort()
                 fig, axes = plt.subplots(nrows=len(found_metrics), ncols=1)
                 # reset_index removes extra index texts from the generated figure.
                 df[found_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
