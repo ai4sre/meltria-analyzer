@@ -130,8 +130,9 @@ def main():
                 # upload found_metrics plot images to neptune.ai
                 if len(found_metrics) < 1:
                     continue
-                fig = plt.figure()
-                df.plot.line(subplots=True, layout=(2, -1), figsize=(6, 6), sharex=False)
+                fig, axes = plt.subplots(nrows=len(found_metrics), ncols=1)
+                df[found_metrics].plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+                fig.subtitle(f"{chaos_type}-{chaos_comp}-{metrics_file}")
                 run['tests/figures'].log(neptune.types.File.as_image(fig))
                 plt.close(fig=fig)
 
