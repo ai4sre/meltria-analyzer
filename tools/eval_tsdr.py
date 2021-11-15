@@ -153,7 +153,8 @@ def main():
                 ), ignore_index=True,
             )
 
-    # TODO: aggregate scores by chaos cases
+    run['tests/table'].upload(neptune.types.File.as_html(tests_df))
+
     tn = scores_df['tn'].sum()
     fp = scores_df['fp'].sum()
     fn = scores_df['fn'].sum()
@@ -163,9 +164,23 @@ def main():
     run['scores/fn'] = fn
     run['scores/tp'] = tp
     run['scores/accuracy'] = (tp + tn) / (tn + fp + fn + tp)
-    run['scores/reduction_rate'] = scores_df['reduction_rate'].mean()
+    run['scores/reduction_rate'] = {
+        'mean': scores_df['reduction_rate'].mean(),
+        'max': scores_df['reduction_rate'].max(),
+        'min': scores_df['reduction_rate'].min(),
+    }
     run['scores/table'].upload(neptune.types.File.as_html(scores_df))
-    run['tests/table'].upload(neptune.types.File.as_html(tests_df))
+    df_by_chaos_type = scores_df.groupby(['chaos_type', 'step']).agg(
+        {
+            'tn': 'sum',
+            'fp': 'sum',
+            'fn': 'sum',
+            'tp': 'sum',
+            'reduction_rate': 'mean',
+        },
+    )
+    df_by_chaos_type['accuracy'] = (df_by_chaos_type['tp'] + df_by_chaos_type['tn']) / (df_by_chaos_type['tn'] + df_by_chaos_type['fp'] + df_by_chaos_type['fn'] + df_by_chaos_type['tp'])
+    run['scores/table_grouped_by_chaos_type'] = df_by_chaos_type
 
     run.stop()
 
