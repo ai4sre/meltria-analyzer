@@ -195,6 +195,11 @@ def main():
     scores_df_by_chaos_comp = get_scores_by_index(scores_df, ['chaos_comp', 'step'])
     run['scores/table_grouped_by_chaos_comp'].upload(neptune.types.File.as_html(scores_df_by_chaos_comp))
 
+    logger.info(tests_df.head())
+    logger.info(scores_df.head())
+    logger.info(scores_df_by_chaos_type.head())
+    logger.info(scores_df_by_chaos_comp.head())
+
     run.stop()
 
 
