@@ -1,19 +1,38 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
 import logging
+import os
 import statistics
-import sys
 from collections import defaultdict
 from multiprocessing import cpu_count
 
+import matplotlib.pyplot as plt
+import neptune.new as neptune
+import pandas as pd
 from lib.metrics import check_tsdr_ground_truth_by_route
+from neptune.new.integrations.python_logger import NeptuneHandler
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
 
-DIST_THRESHOLDS = [0.001, 0.01, 0.1]
-ADF_ALPHAS = [0.01, 0.02, 0.05]
+# see https://docs.neptune.ai/api-reference/integrations/python-logger
+logger = logging.getLogger('root_experiment')
+logger.setLevel(logging.INFO)
+
+# algorithms
+STEP1_METHODS = ['df', 'adf']
+
+
+def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
+    df = scores_df.groupby(indexes).agg({
+        'tn': 'sum',
+        'fp': 'sum',
+        'fn': 'sum',
+        'tp': 'sum',
+        'reduction_rate': 'mean',
+    })
+    df['accuracy'] = (df['tp'] + df['tn']) / (df['tn'] + df['fp'] + df['fn'] + df['tp'])
+    return df
 
 
 def main():
@@ -23,108 +42,165 @@ def main():
     parser.add_argument("metricsfiles",
                         nargs='+',
                         help="metrics output JSON file")
-    parser.add_argument('--dist-thresholds',
-                        default=DIST_THRESHOLDS,
-                        type=lambda s: [float(i) for i in s.split(',')],
+    parser.add_argument("--dataset-id",
+                        type=str,
+                        help='dataset id like "b2qdj"')
+    parser.add_argument('--step1-method',
+                        default='df',
+                        choices=STEP1_METHODS,
+                        help='step1 method')
+    parser.add_argument('--step1-alpha',
+                        type=float,
+                        default=0.01,
+                        help='sigificance levels for step1 test')
+    parser.add_argument('--dist-threshold',
+                        type=float,
+                        default=0.001,
                         help='distance thresholds')
-    parser.add_argument('--adf-alphas',
-                        default=ADF_ALPHAS,
-                        type=lambda s: [float(i) for i in s.split(',')],
-                        help='sigificance levels for ADF test')
     parser.add_argument('--out', help='output file path')
+    parser.add_argument('--neptune-mode',
+                        choices=['async', 'offline', 'debug'],
+                        default='async',
+                        help='specify neptune mode')
     args = parser.parse_args()
 
-    y_trues = defaultdict(lambda: {
-        'step1': [],
-        'step2': [],
-    })
-    y_preds = defaultdict(lambda: {
-        'step1': [],
-        'step2': [],
-    })
-    reductions = defaultdict(lambda: {
-        'step1': [],
-        'step2': [],
-    })
-    results = defaultdict(lambda: defaultdict(dict))
+    # Setup neptune.ai client
+    run = neptune.init(mode=args.neptune_mode)
+    npt_handler = NeptuneHandler(run=run)
+    logger.addHandler(npt_handler)
+    run['dataset/id'] = args.dataset_id
+    run['dataset/num_metrics_files'] = len(args.metricsfiles)
+    run['parameters'] = {
+        'step1_model': args.step1_method,
+        'step1_alpha': args.step1_alpha,
+        'step2_dist_threshold': args.dist_threshold,
+    }
+
+    dataset = pd.DataFrame()
     for metrics_file in args.metricsfiles:
-        data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
+        try:
+            data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
+        except ValueError as e:
+            logger.warning(f">> Skip {metrics_file} because of {e}")
+            continue
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']
-        for alpha in args.adf_alphas:
-            for thresh in args.dist_thresholds:
-                case = f"{chaos_type}:{chaos_comp}"
-                param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
+        data_df['chaos_type'] = chaos_type
+        data_df['chaos_comp'] = chaos_comp
+        data_df['metrics_file'] = os.path.basename(metrics_file)
+        dataset = dataset.append(data_df)
 
-                logging.info(f">> Running tsdr {metrics_file} {case} {param_key} ...")
+    dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file'], inplace=True)
 
-                elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
-                    data_df=data_df,
-                    method=tsdr.TSIFTER_METHOD,
-                    max_workers=cpu_count(),
-                    tsifter_adf_alpha=alpha,
-                    tsifter_clustering_threshold=thresh,
+    scores_df = pd.DataFrame(
+        columns=['chaos_type', 'chaos_comp', 'step',
+                 'tn', 'fp', 'fn', 'tp', 'accuracy', 'recall',
+                 'reduction_rate'],
+        index=['chaos_type', 'chaos_comp', 'step']
+    ).dropna()
+    tests_df = pd.DataFrame(
+        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok', 'found_metrics'],
+        index=['chaos_type', 'chaos_comp', 'metrics_file', 'step'],
+    ).dropna()
+
+    for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
+        case = f"{chaos_type}:{chaos_comp}"
+        y_true_by_step: dict[str, list[int]] = defaultdict(lambda: list())
+        y_pred_by_step: dict[str, list[int]] = defaultdict(lambda: list())
+        reductions: dict[str, list[float]] = defaultdict(lambda: list())
+
+        for (metrics_file), data_df in sub_df.groupby(level=2):
+            logger.info(f">> Running tsdr {metrics_file} {case} ...")
+
+            elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
+                data_df=data_df,
+                method=tsdr.TSIFTER_METHOD,
+                max_workers=cpu_count(),
+                tsifter_step1_method=args.step1_method,
+                tsifter_step1_alpha=args.step1_alpha,
+                tsifter_clustering_threshold=args.dist_threshold,
+            )
+
+            series_num: dict[str, float] = {
+                'total': metrics_dimension['total'][0],
+                'step1': metrics_dimension['total'][1],
+                'step2': metrics_dimension['total'][2],
+            }
+
+            step: str
+            df: pd.DataFrame
+            for step, df in reduced_df_by_step.items():
+                ok, found_metrics = check_tsdr_ground_truth_by_route(
+                    metrics=list(df.columns),
+                    chaos_type=chaos_type,
+                    chaos_comp=chaos_comp,
+                )
+                y_true_by_step[step].append(1)
+                y_pred_by_step[step].append(1 if ok else 0)
+                reductions[step].append(1 - (series_num[step] / series_num['total']))
+                tests_df = tests_df.append(
+                    pd.Series(
+                        [chaos_type, chaos_comp, metrics_file, step, ok, ','.join(found_metrics)],
+                        index=tests_df.columns,
+                    ),
+                    ignore_index=True,
                 )
 
-                has_cause_metrics = {
-                    'step1': {'ok': False, 'metrics': None, },
-                    'step2': {'ok': False, 'metrics': None, },
-                }
-                for step, df in reduced_df_by_step.items():
-                    ok, found_metrics = check_tsdr_ground_truth_by_route(
-                        metrics=list(df.columns),
-                        chaos_type=chaos_type,
-                        chaos_comp=chaos_comp,
-                    )
-                    has_cause_metrics[step]['ok'] = ok
-                    has_cause_metrics[step]['metrics'] = found_metrics
+                # upload found_metrics plot images to neptune.ai
+                if len(found_metrics) < 1:
+                    continue
+                found_metrics.sort()
+                fig, axes = plt.subplots(nrows=len(found_metrics), ncols=1)
+                # reset_index removes extra index texts from the generated figure.
+                df[found_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+                fig.suptitle(f"{chaos_type}_{chaos_comp}_{metrics_file}")
+                run['tests/figures'].log(neptune.types.File.as_image(fig))
+                plt.close(fig=fig)
 
-                    y_trues[param_key][step].append(1)
-                    y_preds[param_key][step].append(1 if ok else 0)
+        for step, y_true in y_true_by_step.items():
+            y_pred = y_pred_by_step[step]
+            tn, fp, fn, tp = confusion_matrix(
+                y_true=y_true, y_pred=y_pred, labels=[0, 1],
+            ).ravel()
+            accuracy = accuracy_score(y_true, y_pred)
+            recall = recall_score(y_true, y_pred)
+            reduction_rate = statistics.mean(reductions[step])
+            scores_df = scores_df.append(
+                pd.Series(
+                    [chaos_type, chaos_comp, step, tn, fp, fn, tp, accuracy, recall, reduction_rate],
+                    index=scores_df.columns,
+                ), ignore_index=True,
+            )
 
-                series_num: int = metrics_dimension['total'][0]
-                step1_series_num: int = metrics_dimension['total'][1]
-                step2_series_num: int = metrics_dimension['total'][2]
-                results[case][param_key] = {
-                    'found_cause_path': has_cause_metrics,
-                    'reduction_performance': {
-                        'reduced_series_num': {
-                            'step0': series_num,
-                            'step1': step1_series_num,
-                            'step2': step2_series_num,
-                        },
-                    },
-                    'execution_time': round(elapsedTime['step1'] + elapsedTime['step2'], 2),
-                }
+    run['tests/table'].upload(neptune.types.File.as_html(tests_df))
 
-                results[case]['original_metrics_meta'] = metrics_meta
+    tn = scores_df['tn'].sum()
+    fp = scores_df['fp'].sum()
+    fn = scores_df['fn'].sum()
+    tp = scores_df['tp'].sum()
+    run['scores/tn'] = tn
+    run['scores/fp'] = fp
+    run['scores/fn'] = fn
+    run['scores/tp'] = tp
+    run['scores/accuracy'] = (tp + tn) / (tn + fp + fn + tp)
+    run['scores/reduction_rate'] = {
+        'mean': scores_df['reduction_rate'].mean(),
+        'max': scores_df['reduction_rate'].max(),
+        'min': scores_df['reduction_rate'].min(),
+    }
+    run['scores/table'].upload(neptune.types.File.as_html(scores_df))
 
-                reductions[param_key]['step1'].append(1 - (step1_series_num / series_num))
-                reductions[param_key]['step2'].append(1 - (step2_series_num / series_num))
+    scores_df_by_chaos_type = get_scores_by_index(scores_df, ['chaos_type', 'step'])
+    run['scores/table_grouped_by_chaos_type'].upload(neptune.types.File.as_html(scores_df_by_chaos_type))
+    scores_df_by_chaos_comp = get_scores_by_index(scores_df, ['chaos_comp', 'step'])
+    run['scores/table_grouped_by_chaos_comp'].upload(neptune.types.File.as_html(scores_df_by_chaos_comp))
 
-    for alpha in args.adf_alphas:
-        for thresh in args.dist_thresholds:
-            param_key = f"adf_alpha:{alpha},dist_threshold:{thresh}"
-            for step in ['step1', 'step2']:
-                y_true, y_pred = y_trues[param_key][step], y_preds[param_key][step]
-                tn, fp, fn, tp = confusion_matrix(
-                    y_true=y_true, y_pred=y_pred, labels=[0, 1],
-                ).ravel()
-                results['evaluation'][param_key][step] = {
-                    'tp': int(tp),
-                    'tn': int(tn),
-                    'fp': int(fp),
-                    'fn': int(fn),
-                    'accuracy': accuracy_score(y_true, y_pred),
-                    'recall': recall_score(y_true, y_pred),
-                    'reduction_rate': statistics.mean(reductions[param_key][step]),
-                }
+    logger.info(tests_df.head())
+    logger.info(scores_df.head())
+    logger.info(scores_df_by_chaos_type.head())
+    logger.info(scores_df_by_chaos_comp.head())
 
-    if args.out is None:
-        json.dump(results, sys.stdout, indent=4)
-    else:
-        with open(args.out, mode='w') as f:
-            json.dump(results, f)
+    run.stop()
 
 
 if __name__ == '__main__':

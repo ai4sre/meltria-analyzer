@@ -1,6 +1,8 @@
 name: release
 on:
   push:
+    branches:
+      - main
 
 env:
   DOCKER_BASE_NAME: ghcr.io/${{github.repository}}

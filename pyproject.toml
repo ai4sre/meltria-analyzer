@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "terrrarium-analyzer"
+name = "meltria-analyzer"
 version = "0.1.0"
 description = ""
 authors = ["tsurubee","yuuk1"]
@@ -19,6 +19,8 @@ pygraphviz = "^1.7"
 pgmpy = "^0.1.15"
 Jinja2 = "^3.0.1"
 ruptures = "^1.1.4"
+arch = "^5.0.1"
+neptune-client = "^0.13.1"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.9.2"

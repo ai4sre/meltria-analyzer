@@ -32,7 +32,7 @@ def detect_bkps(samples: np.ndarray, n_bkps=2, model='l2', chaos_duration_min=5,
     """
 
     p_val = stattools.adfuller(samples)[1]
-    if p_val <= adf_alpha:
+    if p_val < adf_alpha:
         logging.info(p_val)
         return BkpsStatus.NOT_FOUND
 

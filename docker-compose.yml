@@ -16,6 +16,8 @@ services:
     volumes:
       - .:/usr/src/app
     entrypoint: ["/usr/src/app/tools/eval_tsdr.py"]
+    env_file:
+      - .env.local
   verify-metrics:
     build: .
     volumes:

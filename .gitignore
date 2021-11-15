@@ -3,3 +3,5 @@
 .venv
 .ipynb_checkpoints
 .mypy_cache
+.env.local
+.neptune

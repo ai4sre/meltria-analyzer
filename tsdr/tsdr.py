@@ -182,22 +182,28 @@ def kshape_clustering(target_df, service_name, executor):
     return clustering_info, remove_list
 
 
-def tsifter_reduce_series(data_df, max_workers, adf_alpha: float):
-    reduced_by_st_df = pd.DataFrame()
+def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
+                          step1_method: str, step1_alpha: float) -> pd.DataFrame:
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_col = {}
         for col in data_df.columns:
             data = data_df[col].values
             if data.sum() == 0. or len(np.unique(data)) == 1 or np.isnan(data.sum()):
                 continue
-            future_to_col[executor.submit(adfuller, data)] = col
+            if step1_method == 'adf':
+                future_to_col[executor.submit(adfuller, data)] = col
+            elif step1_method == 'df':
+                future_to_col[executor.submit(adfuller, data, maxlag=1, autolag=None)] = col
+            else:
+                raise ValueError('step1_method must be adf or df')
+        reduced_cols: list[str] = []
         for future in futures.as_completed(future_to_col):
             col = future_to_col[future]
             p_val = future.result()[1]
             if not np.isnan(p_val):
-                if p_val >= adf_alpha:
-                    reduced_by_st_df[col] = data_df[col]
-    return reduced_by_st_df
+                if p_val >= step1_alpha:
+                    reduced_cols.append(col)
+    return data_df[reduced_cols]
 
 
 def sieve_reduce_series(data_df):
@@ -241,12 +247,13 @@ def sieve_clustering(reduced_df, services_list, max_workers):
     return reduced_df, clustering_info
 
 
-def run_tsifter(data_df, metrics_dimension, services_list, max_workers, adf_alpha: float, dist_threshold: float
+def run_tsifter(data_df, metrics_dimension, services_list, max_workers,
+                step1_method: str, step1_alpha: float, dist_threshold: float
                 ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
-    reduced_by_st_df = tsifter_reduce_series(data_df, max_workers, adf_alpha)
+    reduced_by_st_df = tsifter_reduce_series(data_df, max_workers, step1_method, step1_alpha)
 
     time_adf = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(
@@ -298,6 +305,7 @@ def read_metrics_json(data_file: os.PathLike, interporate: bool = True) -> tuple
         raw_json = json.load(f)
     raw_data = pd.read_json(data_file)
     data_df = pd.DataFrame()
+    metrics_name_to_values: dict[str, np.ndarray] = {}
     for target in TARGET_DATA:
         for t in raw_data[target].dropna():
             for metric in t:
@@ -311,13 +319,18 @@ def read_metrics_json(data_file: os.PathLike, interporate: bool = True) -> tuple
                 ]
                 if target_name in ["queue-master", "rabbitmq", "session-db"]:
                     continue
-                column_name = "{}-{}_{}".format(target[0],
+                metric_name = "{}-{}_{}".format(target[0],
                                                 target_name, metric_name)
-                data_df[column_name] = np.array(metric["values"], dtype=np.float64)[:, 1][-PLOTS_NUM:]
-    data_df = data_df.round(4)
+                metrics_name_to_values[metric_name] = np.array(
+                    metric["values"], dtype=np.float64,
+                )[:, 1][-PLOTS_NUM:]
+    data_df = pd.DataFrame(metrics_name_to_values).round(4)
     if interporate:
-        data_df = data_df.interpolate(
-            method="spline", order=3, limit_direction="both")
+        try:
+            data_df = data_df.interpolate(
+                method="spline", order=3, limit_direction="both")
+        except:  # To cacth `dfitpack.error: (m>k) failed for hidden m: fpcurf0:m=3`
+            raise ValueError("calculating spline error") from None
     return data_df, raw_json['mappings'], raw_json['meta']
 
 
@@ -350,7 +363,7 @@ def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs
     if method == TSIFTER_METHOD:
         return run_tsifter(
             data_df, metrics_dimension, services, max_workers,
-            kwargs['tsifter_adf_alpha'], kwargs['tsifter_clustering_threshold'])
+            kwargs['tsifter_step1_method'], kwargs['tsifter_step1_alpha'], kwargs['tsifter_clustering_threshold'])
     elif method == SIEVE_METHOD:
         return run_sieve(data_df, metrics_dimension, services, max_workers)
 
