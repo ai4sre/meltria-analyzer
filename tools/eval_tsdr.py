@@ -182,6 +182,18 @@ def main():
     df_by_chaos_type['accuracy'] = (df_by_chaos_type['tp'] + df_by_chaos_type['tn']) / (df_by_chaos_type['tn'] + df_by_chaos_type['fp'] + df_by_chaos_type['fn'] + df_by_chaos_type['tp'])
     run['scores/table_grouped_by_chaos_type'] = df_by_chaos_type
 
+    df_by_chaos_comp = scores_df.groupby(['chaos_comp', 'step']).agg(
+        {
+            'tn': 'sum',
+            'fp': 'sum',
+            'fn': 'sum',
+            'tp': 'sum',
+            'reduction_rate': 'mean',
+        },
+    )
+    df_by_chaos_comp['accuracy'] = (df_by_chaos_comp['tp'] + df_by_chaos_comp['tn']) / (df_by_chaos_comp['tn'] + df_by_chaos_comp['fp'] + df_by_chaos_comp['fn'] + df_by_chaos_comp['tp'])
+    run['scores/table_grouped_by_chaos_comp'] = df_by_chaos_comp
+
     run.stop()
 
 
