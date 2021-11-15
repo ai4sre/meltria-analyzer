@@ -11,8 +11,13 @@ import matplotlib.pyplot as plt
 import neptune.new as neptune
 import pandas as pd
 from lib.metrics import check_tsdr_ground_truth_by_route
+from neptune.new.integrations.python_logger import NeptuneHandler
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
+
+# see https://docs.neptune.ai/api-reference/integrations/python-logger
+logger = logging.getLogger('root_experiment')
+logger.setLevel(logging.INFO)
 
 # algorithms
 STEP1_METHODS = ['df', 'adf']
@@ -61,6 +66,8 @@ def main():
 
     # Setup neptune.ai client
     run = neptune.init(mode=args.neptune_mode)
+    npt_handler = NeptuneHandler(run=run)
+    logger.addHandler(npt_handler)
     run['dataset/id'] = args.dataset_id
     run['dataset/num_metrics_files'] = len(args.metricsfiles)
     run['parameters'] = {
@@ -103,7 +110,7 @@ def main():
         reductions: dict[str, list[float]] = defaultdict(lambda: list())
 
         for (metrics_file), data_df in sub_df.groupby(level=2):
-            logging.info(f">> Running tsdr {metrics_file} {case} ...")
+            logger.info(f">> Running tsdr {metrics_file} {case} ...")
 
             elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
                 data_df=data_df,
@@ -182,8 +189,11 @@ def main():
         'min': scores_df['reduction_rate'].min(),
     }
     run['scores/table'].upload(neptune.types.File.as_html(scores_df))
-    run['scores/table_grouped_by_chaos_type'] = get_scores_by_index(scores_df, ['chaos_type', 'step'])
-    run['scores/table_grouped_by_chaos_comp'] = get_scores_by_index(scores_df, ['chaos_comp', 'step'])
+
+    scores_df_by_chaos_type = get_scores_by_index(scores_df, ['chaos_type', 'step'])
+    run['scores/table_grouped_by_chaos_type'].upload(neptune.types.File.as_html(scores_df_by_chaos_type))
+    scores_df_by_chaos_comp = get_scores_by_index(scores_df, ['chaos_comp', 'step'])
+    run['scores/table_grouped_by_chaos_comp'].upload(neptune.types.File.as_html(scores_df_by_chaos_comp))
 
     run.stop()
 
