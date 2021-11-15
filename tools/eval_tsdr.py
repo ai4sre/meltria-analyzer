@@ -18,6 +18,18 @@ from tsdr import tsdr
 STEP1_METHODS = ['df', 'adf']
 
 
+def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
+    df = scores_df.groupby(indexes).agg({
+        'tn': 'sum',
+        'fp': 'sum',
+        'fn': 'sum',
+        'tp': 'sum',
+        'reduction_rate': 'mean',
+    })
+    df['accuracy'] = (df['tp'] + df['tn']) / (df['tn'] + df['fp'] + df['fn'] + df['tp'])
+    return df
+
+
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
 
@@ -170,29 +182,8 @@ def main():
         'min': scores_df['reduction_rate'].min(),
     }
     run['scores/table'].upload(neptune.types.File.as_html(scores_df))
-    df_by_chaos_type = scores_df.groupby(['chaos_type', 'step']).agg(
-        {
-            'tn': 'sum',
-            'fp': 'sum',
-            'fn': 'sum',
-            'tp': 'sum',
-            'reduction_rate': 'mean',
-        },
-    )
-    df_by_chaos_type['accuracy'] = (df_by_chaos_type['tp'] + df_by_chaos_type['tn']) / (df_by_chaos_type['tn'] + df_by_chaos_type['fp'] + df_by_chaos_type['fn'] + df_by_chaos_type['tp'])
-    run['scores/table_grouped_by_chaos_type'] = df_by_chaos_type
-
-    df_by_chaos_comp = scores_df.groupby(['chaos_comp', 'step']).agg(
-        {
-            'tn': 'sum',
-            'fp': 'sum',
-            'fn': 'sum',
-            'tp': 'sum',
-            'reduction_rate': 'mean',
-        },
-    )
-    df_by_chaos_comp['accuracy'] = (df_by_chaos_comp['tp'] + df_by_chaos_comp['tn']) / (df_by_chaos_comp['tn'] + df_by_chaos_comp['fp'] + df_by_chaos_comp['fn'] + df_by_chaos_comp['tp'])
-    run['scores/table_grouped_by_chaos_comp'] = df_by_chaos_comp
+    run['scores/table_grouped_by_chaos_type'] = get_scores_by_index(scores_df, ['chaos_type', 'step'])
+    run['scores/table_grouped_by_chaos_comp'] = get_scores_by_index(scores_df, ['chaos_comp', 'step'])
 
     run.stop()
 
