@@ -81,7 +81,7 @@ def main():
         try:
             data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         except ValueError as e:
-            logging.warning(f">> Skip {metrics_file} because of {e}")
+            logger.warning(f">> Skip {metrics_file} because of {e}")
             continue
         chaos_type: str = metrics_meta['injected_chaos_type']
         chaos_comp: str = metrics_meta['chaos_injected_component']
