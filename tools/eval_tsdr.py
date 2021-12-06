@@ -5,7 +5,9 @@ import logging
 import os
 import statistics
 from collections import defaultdict
+from concurrent import futures
 from multiprocessing import cpu_count
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import neptune.new as neptune
@@ -21,6 +23,21 @@ logger.setLevel(logging.INFO)
 
 # algorithms
 STEP1_METHODS = ['df', 'adf']
+
+
+def read_metrics_file(metrics_file: str) -> Optional[pd.DataFrame]:
+    logger.info(f">> Loading metrics file {metrics_file} ...")
+    try:
+        data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
+    except ValueError as e:
+        logger.warning(f">> Skip {metrics_file} because of {e}")
+        return None
+    chaos_type: str = metrics_meta['injected_chaos_type']
+    chaos_comp: str = metrics_meta['chaos_injected_component']
+    data_df['chaos_type'] = chaos_type
+    data_df['chaos_comp'] = chaos_comp
+    data_df['metrics_file'] = os.path.basename(metrics_file)
+    return data_df
 
 
 def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
@@ -77,19 +94,14 @@ def main():
     }
 
     dataset = pd.DataFrame()
-    for metrics_file in args.metricsfiles:
-        logger.info(f">> Loading metrics file {metrics_file} ...")
-        try:
-            data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
-        except ValueError as e:
-            logger.warning(f">> Skip {metrics_file} because of {e}")
-            continue
-        chaos_type: str = metrics_meta['injected_chaos_type']
-        chaos_comp: str = metrics_meta['chaos_injected_component']
-        data_df['chaos_type'] = chaos_type
-        data_df['chaos_comp'] = chaos_comp
-        data_df['metrics_file'] = os.path.basename(metrics_file)
-        dataset = dataset.append(data_df)
+    with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+        future_list = []
+        for metrics_file in args.metricsfiles:
+            future_list.append(executor.submit(read_metrics_file, metrics_file))
+        for future in futures.as_completed(future_list):
+            data_df = future.result()
+            if data_df is not None:
+                dataset = dataset.append(data_df)
     logger.info("Loading all metrics files is done")
 
     dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file'], inplace=True)
