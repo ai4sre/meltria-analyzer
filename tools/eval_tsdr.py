@@ -167,7 +167,7 @@ def main():
                 fig, axes = plt.subplots(nrows=len(found_metrics), ncols=1)
                 # reset_index removes extra index texts from the generated figure.
                 df[found_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-                fig.suptitle(f"{chaos_type}:{chaos_comp}:{step}\t{metrics_file}")
+                fig.suptitle(f"{chaos_type}:{chaos_comp}:{step}    {metrics_file}")
                 run['tests/figures'].log(neptune.types.File.as_image(fig))
                 plt.close(fig=fig)
 
