@@ -78,6 +78,7 @@ def main():
 
     dataset = pd.DataFrame()
     for metrics_file in args.metricsfiles:
+        logger.info(f">> Loading metrics file {metrics_file} ...")
         try:
             data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
         except ValueError as e:
@@ -89,6 +90,7 @@ def main():
         data_df['chaos_comp'] = chaos_comp
         data_df['metrics_file'] = os.path.basename(metrics_file)
         dataset = dataset.append(data_df)
+    logger.info("Loading all metrics files is done")
 
     dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file'], inplace=True)
 
