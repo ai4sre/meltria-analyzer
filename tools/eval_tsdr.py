@@ -160,21 +160,21 @@ def main():
                     ignore_index=True,
                 )
 
-                # upload found_metrics plot images to neptune.ai
-                _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
-                    metrics=list(data_df.columns),  # pre-reduced data frame
-                    chaos_type=chaos_type,
-                    chaos_comp=chaos_comp,
-                )
-                if len(ground_truth_metrics) < 1:
-                    continue
-                ground_truth_metrics.sort()
-                fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
-                # reset_index removes extra index texts from the generated figure.
-                data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-                fig.suptitle(f"{chaos_type}:{chaos_comp}:{step}    {metrics_file}")
-                run['tests/figures'].log(neptune.types.File.as_image(fig))
-                plt.close(fig=fig)
+            # upload found_metrics plot images to neptune.ai
+            _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
+                metrics=list(data_df.columns),  # pre-reduced data frame
+                chaos_type=chaos_type,
+                chaos_comp=chaos_comp,
+            )
+            if len(ground_truth_metrics) < 1:
+                continue
+            ground_truth_metrics.sort()
+            fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
+            # reset_index removes extra index texts from the generated figure.
+            data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+            fig.suptitle(f"{chaos_type}:{chaos_comp}    {metrics_file}")
+            run['tests/figures'].log(neptune.types.File.as_image(fig))
+            plt.close(fig=fig)
 
         for step, y_true in y_true_by_step.items():
             y_pred = y_pred_by_step[step]
