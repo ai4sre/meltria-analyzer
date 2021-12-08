@@ -406,7 +406,8 @@ def main():
         data_df=data_df,
         method=args.method,
         max_workers=args.max_workers,
-        tsifter_adf_alpha=args.tsifter_adf_alpha,
+        tsifter_step1_method='df',
+        tsifter_step1_alpha=args.tsifter_adf_alpha,
         tsifter_clustering_threshold=args.tsifter_clustering_threshold,
     )
 
