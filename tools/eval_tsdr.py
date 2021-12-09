@@ -37,6 +37,7 @@ def read_metrics_file(metrics_file: str) -> Optional[pd.DataFrame]:
     data_df['chaos_type'] = chaos_type
     data_df['chaos_comp'] = chaos_comp
     data_df['metrics_file'] = os.path.basename(metrics_file)
+    data_df['grafana_dashboard_url'] = metrics_meta['grafana_dashboard_url']
     return data_df
 
 
@@ -104,7 +105,7 @@ def main():
                 dataset = dataset.append(data_df)
     logger.info("Loading all metrics files is done")
 
-    dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file'], inplace=True)
+    dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'], inplace=True)
 
     scores_df = pd.DataFrame(
         columns=['chaos_type', 'chaos_comp', 'step',
@@ -113,8 +114,8 @@ def main():
         index=['chaos_type', 'chaos_comp', 'step']
     ).dropna()
     tests_df = pd.DataFrame(
-        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok', 'found_metrics'],
-        index=['chaos_type', 'chaos_comp', 'metrics_file', 'step'],
+        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok', 'found_metrics', 'grafana_dashboard_url'],
+        index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url', 'step'],
     ).dropna()
 
     for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
@@ -123,7 +124,7 @@ def main():
         y_pred_by_step: dict[str, list[int]] = defaultdict(lambda: list())
         reductions: dict[str, list[float]] = defaultdict(lambda: list())
 
-        for (metrics_file), data_df in sub_df.groupby(level=2):
+        for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             logger.info(f">> Running tsdr {metrics_file} {case} ...")
 
             elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
@@ -154,7 +155,11 @@ def main():
                 reductions[step].append(1 - (series_num[step] / series_num['total']))
                 tests_df = tests_df.append(
                     pd.Series(
-                        [chaos_type, chaos_comp, metrics_file, step, ok, ','.join(found_metrics)],
+                        [
+                            chaos_type, chaos_comp, metrics_file, step, ok,
+                            ','.join(found_metrics),
+                            grafana_dashboard_url,
+                        ],
                         index=tests_df.columns,
                     ),
                     ignore_index=True,
