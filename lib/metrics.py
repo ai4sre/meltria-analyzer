@@ -102,19 +102,8 @@ def check_tsdr_ground_truth_by_route(metrics: list[str], chaos_type: str, chaos_
     gt_metrics_routes: list[list[str]] = TSDR_GROUND_TRUTH[chaos_type][chaos_comp]
     routes_ok: list[tuple[bool, list[str]]] = []
     for gt_route in gt_metrics_routes:
-        match_metrics: list[str] = []
-        gt_metrics_ok = {metric: False for metric in gt_route}
-        for metric in metrics:
-            for metric_pattern in gt_route:
-                if re.match(metric_pattern, metric):
-                    gt_metrics_ok[metric_pattern] = True
-                    match_metrics.append(metric)
-        for ok in gt_metrics_ok.values():
-            if not ok:
-                # return partially correct metrics
-                routes_ok.append((False, match_metrics))
-                break
-        routes_ok.append((True, match_metrics))
+        ok, match_metrics = check_route(metrics, gt_route)
+        routes_ok.append((ok, match_metrics))
     for ok, match_metrics in routes_ok:
         if ok:
             return True, match_metrics
@@ -127,6 +116,21 @@ def check_tsdr_ground_truth_by_route(metrics: list[str], chaos_type: str, chaos_
             max_len = len(match_metrics)
             longest_match_metrics = match_metrics
     return False, longest_match_metrics
+
+
+def check_route(metrics: list[str], gt_route: list[str]) -> tuple[bool, list[str]]:
+    match_metrics: list[str] = []
+    gt_metrics_ok = {metric: False for metric in gt_route}
+    for metric in metrics:
+        for metric_pattern in gt_route:
+            if re.match(metric_pattern, metric):
+                gt_metrics_ok[metric_pattern] = True
+                match_metrics.append(metric)
+    for ok in gt_metrics_ok.values():
+        if not ok:
+            # return partially correct metrics
+            return False, match_metrics
+    return True, match_metrics
 
 
 def check_cause_metrics(metrics: list[str], chaos_type: str, chaos_comp: str
