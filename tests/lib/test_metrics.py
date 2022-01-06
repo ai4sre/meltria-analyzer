@@ -55,3 +55,19 @@ def test_check_tsdr_ground_truth_by_route():
         's-user_latency',
     ]
     assert found_metrics == expected
+
+    # only front-end
+    metrics = [
+        'c-front-end_cpu_usage_seconds_total',
+        'c-front-end_cpu_user_seconds_total',
+        'c-front-end_db_file_descriptors',
+        's-front-end_latency',
+    ]
+    ok, found_metrics = check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'front-end')
+    assert ok is True
+    expected = [
+        'c-front-end_cpu_usage_seconds_total',
+        'c-front-end_cpu_user_seconds_total',
+        's-front-end_latency',
+    ]
+    assert found_metrics == expected

@@ -83,13 +83,12 @@ def generate_tsdr_ground_truth() -> dict[str, Any]:
 
             # allow to match any of multiple routes
             for stos_route in stos_routes:
-                if stos_route == ():
-                    continue
                 metrics_patterns: list[str] = []
                 # add cause metrics pattern
                 metrics_patterns.append(f"^c-{ctnr}_{metric_prefix}.+")
                 metrics_patterns.append(f"^s-{cause_service}_.+")
-                metrics_patterns.append(f"^s-({'|'.join(stos_route)})_.+")
+                if stos_route != ():
+                    metrics_patterns.append(f"^s-({'|'.join(stos_route)})_.+")
                 routes.append(metrics_patterns)
     return all_gt_routes
 
