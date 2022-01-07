@@ -28,6 +28,7 @@ CONTAINER_CALL_GRAPH: dict[str, list[str]] = {
     "session-db": ["front-end"]
 }
 
+# Use list of tuple because of supporting multiple routes
 SERVICE_TO_SERVICES: dict[str, list[str]] = {
     'orders': ['front-end'],
     'carts': ['orders', 'front-end'],
@@ -36,6 +37,16 @@ SERVICE_TO_SERVICES: dict[str, list[str]] = {
     'payment': ['orders'],
     'shipping': ['orders'],
     'front-end': [],
+}
+
+SERVICE_TO_SERVICE_ROUTES: dict[str, list[tuple[str, ...]]] = {
+    'orders': [('front-end',)],
+    'carts': [('orders', 'front-end'), ('front-end',)],
+    'user': [('orders', 'front-end'), ('front-end',)],
+    'catalogue': [('front-end',)],
+    'payment': [('orders',)],
+    'shipping': [('orders',)],
+    'front-end': [()],
 }
 
 SERVICE_CONTAINERS: dict[str, list[str]] = {
@@ -60,23 +71,26 @@ def generate_containers_to_service() -> dict[str, str]:
 
 
 def generate_tsdr_ground_truth() -> dict[str, Any]:
-    route: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    all_gt_routes: dict[str, dict[str, list[list[str]]]] = defaultdict(lambda: defaultdict(list))
     ctos: dict[str, str] = generate_containers_to_service()
     for chaos, metric_prefix in CHAOS_TO_CAUSE_METRIC_PREFIX.items():
         for ctnr in CONTAINER_CALL_GRAPH.keys():
             if ctnr in SKIP_CONTAINERS:
                 continue
-            metrics: list[str] = route[chaos][ctnr]
-            metrics.append(f"^c-{ctnr}_{metric_prefix}.+")
-            service: str = ctos[ctnr]
-            metrics.append(f"^s-{service}_.+")
-            src_dep_services = SERVICE_TO_SERVICES[service]
-            for src in src_dep_services:
-                if src == 'front-end':
-                    metrics.append(ROOT_METRIC_LABEL)
-                    continue
-                metrics.append(f"^s-{src}_.+")
-    return route
+            routes: list[list[str]] = all_gt_routes[chaos][ctnr]
+            cause_service: str = ctos[ctnr]
+            stos_routes: list[tuple[str, ...]] = SERVICE_TO_SERVICE_ROUTES[cause_service]
+
+            # allow to match any of multiple routes
+            for stos_route in stos_routes:
+                metrics_patterns: list[str] = []
+                # add cause metrics pattern
+                metrics_patterns.append(f"^c-{ctnr}_{metric_prefix}.+")
+                metrics_patterns.append(f"^s-{cause_service}_.+")
+                if stos_route != ():
+                    metrics_patterns.append(f"^s-({'|'.join(stos_route)})_.+")
+                routes.append(metrics_patterns)
+    return all_gt_routes
 
 
 TSDR_GROUND_TRUTH: dict[str, Any] = generate_tsdr_ground_truth()
@@ -84,13 +98,32 @@ TSDR_GROUND_TRUTH: dict[str, Any] = generate_tsdr_ground_truth()
 
 def check_tsdr_ground_truth_by_route(metrics: list[str], chaos_type: str, chaos_comp: str
                                      ) -> tuple[bool, list[str]]:
-    gt_metrics: list[str] = TSDR_GROUND_TRUTH[chaos_type][chaos_comp]
-    gt_metrics_ok = {metric: False for metric in gt_metrics}
+    gt_metrics_routes: list[list[str]] = TSDR_GROUND_TRUTH[chaos_type][chaos_comp]
+    routes_ok: list[tuple[bool, list[str]]] = []
+    for gt_route in gt_metrics_routes:
+        ok, match_metrics = check_route(metrics, gt_route)
+        routes_ok.append((ok, match_metrics))
+    for ok, match_metrics in routes_ok:
+        if ok:
+            return True, match_metrics
+
+    # return longest match_metrics in routes_ok
+    max_len = 0
+    longest_match_metrics: list[str] = []
+    for _, match_metrics in routes_ok:
+        if max_len < len(match_metrics):
+            max_len = len(match_metrics)
+            longest_match_metrics = match_metrics
+    return False, longest_match_metrics
+
+
+def check_route(metrics: list[str], gt_route: list[str]) -> tuple[bool, list[str]]:
     match_metrics: list[str] = []
+    gt_metrics_ok = {metric: False for metric in gt_route}
     for metric in metrics:
-        for matcher in gt_metrics:
-            if re.match(matcher, metric):
-                gt_metrics_ok[matcher] = True
+        for metric_pattern in gt_route:
+            if re.match(metric_pattern, metric):
+                gt_metrics_ok[metric_pattern] = True
                 match_metrics.append(metric)
     for ok in gt_metrics_ok.values():
         if not ok:
