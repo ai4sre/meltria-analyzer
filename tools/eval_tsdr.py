@@ -107,6 +107,10 @@ def main():
 
     dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'], inplace=True)
 
+    clustering_df = pd.DataFrame(
+        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'representative_metric', 'sub_metrics'],
+        index=['chaos_type', 'chaos_comp', 'metrics_file', 'representative_metric', 'sub_metrics'],
+    ).dropna()
     scores_df = pd.DataFrame(
         columns=['chaos_type', 'chaos_comp', 'step',
                  'tn', 'fp', 'fn', 'tp', 'accuracy', 'recall',
@@ -127,7 +131,7 @@ def main():
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             logger.info(f">> Running tsdr {metrics_file} {case} ...")
 
-            elapsedTime, reduced_df_by_step, metrics_dimension, _ = tsdr.run_tsdr(
+            elapsedTime, reduced_df_by_step, metrics_dimension, clustering_info = tsdr.run_tsdr(
                 data_df=data_df,
                 method=tsdr.TSIFTER_METHOD,
                 max_workers=cpu_count(),
@@ -135,6 +139,18 @@ def main():
                 tsifter_step1_alpha=args.step1_alpha,
                 tsifter_clustering_threshold=args.dist_threshold,
             )
+
+            for representative_metric, sub_metrics in clustering_info.items():
+                clustering_df = clustering_df.append(
+                    pd.Series(
+                        [
+                            chaos_type, chaos_comp, metrics_file,
+                            representative_metric, ','.join(sub_metrics),
+                        ],
+                        index=clustering_df.columns,
+                    ),
+                    ignore_index=True,
+                )
 
             series_num: dict[str, float] = {
                 'total': metrics_dimension['total'][0],
@@ -196,6 +212,8 @@ def main():
                 ), ignore_index=True,
             )
 
+    run['progress/clustering_results'].upload(neptune.types.File.as_html(clustering_df))
+
     run['tests/table'].upload(neptune.types.File.as_html(tests_df))
 
     tn = scores_df['tn'].sum()
@@ -223,6 +241,7 @@ def main():
     logger.info(scores_df.head())
     logger.info(scores_df_by_chaos_type.head())
     logger.info(scores_df_by_chaos_comp.head())
+    logger.info(clustering_df.head())
 
     run.stop()
 
