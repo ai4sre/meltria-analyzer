@@ -130,6 +130,24 @@ def main():
         num_series: dict[str, list[float]] = defaultdict(lambda: list())
 
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
+            logger.info(f">> Uploading plot figures of {metrics_file} {case} ...")
+
+            # upload found_metrics plot images to neptune.ai
+            _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
+                metrics=list(data_df.columns),  # pre-reduced data frame
+                chaos_type=chaos_type,
+                chaos_comp=chaos_comp,
+            )
+            if len(ground_truth_metrics) < 1:
+                continue
+            ground_truth_metrics.sort()
+            fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
+            # reset_index removes extra index texts from the generated figure.
+            data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+            fig.suptitle(f"{chaos_type}:{chaos_comp}    {metrics_file}")
+            run[f"dataset/figures/{chaos_type}/{chaos_comp}"].log(neptune.types.File.as_image(fig))
+            plt.close(fig=fig)
+
             logger.info(f">> Running tsdr {metrics_file} {case} ...")
 
             elapsedTime, reduced_df_by_step, metrics_dimension, clustering_info = tsdr.run_tsdr(
@@ -150,7 +168,7 @@ def main():
                     subplots=True, figsize=(6, 6), sharex=False, ax=axes)
                 fig.suptitle(
                     f"{chaos_type}:{chaos_comp}    {metrics_file}  rep:{representative_metric}")
-                run[f"progress/clustering_ts_figures/{chaos_type}/{chaos_comp}"].log(
+                run[f"tests/clustering_ts_figures/{chaos_type}/{chaos_comp}"].log(
                     neptune.types.File.as_image(fig))
                 plt.close(fig=fig)
 
@@ -196,21 +214,6 @@ def main():
                     ignore_index=True,
                 )
 
-            # upload found_metrics plot images to neptune.ai
-            _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
-                metrics=list(data_df.columns),  # pre-reduced data frame
-                chaos_type=chaos_type,
-                chaos_comp=chaos_comp,
-            )
-            if len(ground_truth_metrics) < 1:
-                continue
-            ground_truth_metrics.sort()
-            fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
-            # reset_index removes extra index texts from the generated figure.
-            data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-            fig.suptitle(f"{chaos_type}:{chaos_comp}    {metrics_file}")
-            run[f"tests/figures/{chaos_type}/{chaos_comp}"].log(neptune.types.File.as_image(fig))
-            plt.close(fig=fig)
 
         mean_num_series_str: str = '/'.join(
             [f"{statistics.mean(num_series[s])}" for s in ['total', 'step1', 'step2']]
@@ -232,7 +235,7 @@ def main():
                 ), ignore_index=True,
             )
 
-    run['progress/clustering_results'].upload(neptune.types.File.as_html(clustering_df))
+    run['tests/clustering_results'].upload(neptune.types.File.as_html(clustering_df))
 
     run['tests/table'].upload(neptune.types.File.as_html(tests_df))
 
