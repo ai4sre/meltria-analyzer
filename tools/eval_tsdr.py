@@ -11,6 +11,7 @@ from typing import Optional
 
 import matplotlib.pyplot as plt
 import neptune.new as neptune
+import numpy as np
 import pandas as pd
 from lib.metrics import check_tsdr_ground_truth_by_route
 from neptune.new.integrations.python_logger import NeptuneHandler
@@ -126,7 +127,6 @@ def main():
         case = f"{chaos_type}:{chaos_comp}"
         y_true_by_step: dict[str, list[int]] = defaultdict(lambda: list())
         y_pred_by_step: dict[str, list[int]] = defaultdict(lambda: list())
-        reductions: dict[str, list[float]] = defaultdict(lambda: list())
         num_series: dict[str, list[float]] = defaultdict(lambda: list())
 
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
@@ -200,7 +200,6 @@ def main():
                 )
                 y_true_by_step[step].append(1)
                 y_pred_by_step[step].append(1 if ok else 0)
-                reductions[step].append(1 - (num_series_each_step[step] / num_series_each_step['total']))
                 num_series[step].append(num_series_each_step[step])
                 tests_df = tests_df.append(
                     pd.Series(
@@ -225,12 +224,12 @@ def main():
             ).ravel()
             accuracy: float = accuracy_score(y_true, y_pred)
             recall: float = recall_score(y_true, y_pred)
-            reduction_rate: float = statistics.mean(reductions[step])
+            mean_reduction_rate: float = 1 - np.mean(np.divide(num_series[step], num_series['total']))
             scores_df = scores_df.append(
                 pd.Series([
                     chaos_type, chaos_comp, step,
                     tn, fp, fn, tp, accuracy, recall,
-                    mean_num_series_str, reduction_rate],
+                    mean_num_series_str, mean_reduction_rate],
                     index=scores_df.columns,
                 ), ignore_index=True,
             )
