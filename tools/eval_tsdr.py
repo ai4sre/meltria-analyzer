@@ -119,7 +119,7 @@ def main():
         index=['chaos_type', 'chaos_comp', 'step']
     ).dropna()
     tests_df = pd.DataFrame(
-        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok', 'found_metrics', 'grafana_dashboard_url'],
+        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok', 'num_series', 'found_metrics', 'grafana_dashboard_url'],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url', 'step'],
     ).dropna()
 
@@ -159,6 +159,40 @@ def main():
                 tsifter_clustering_threshold=args.dist_threshold,
             )
 
+            num_series_each_step: dict[str, float] = {
+                'total': metrics_dimension['total'][0],
+                'step1': metrics_dimension['total'][1],
+                'step2': metrics_dimension['total'][2],
+            }
+            num_series['total'].append(num_series_each_step['total'])
+            num_series_str: str = '/'.join(
+                [f"{num_series_each_step[s]}" for s in ['total', 'step1', 'step2']]
+            )
+
+            step: str
+            df: pd.DataFrame
+            for step, df in reduced_df_by_step.items():
+                ok, found_metrics = check_tsdr_ground_truth_by_route(
+                    metrics=list(df.columns),
+                    chaos_type=chaos_type,
+                    chaos_comp=chaos_comp,
+                )
+                y_true_by_step[step].append(1)
+                y_pred_by_step[step].append(1 if ok else 0)
+                num_series[step].append(num_series_each_step[step])
+                tests_df = tests_df.append(
+                    pd.Series(
+                        [
+                            chaos_type, chaos_comp, metrics_file, step, ok,
+                            num_series_str, ','.join(found_metrics),
+                            grafana_dashboard_url,
+                        ],
+                        index=tests_df.columns,
+                    ),
+                    ignore_index=True,
+                )
+
+            # Log clustering data
             for representative_metric, sub_metrics in clustering_info.items():
                 # create a figure for clustered metrics
                 clustered_metrics: list[str] = [representative_metric] + sub_metrics
@@ -179,36 +213,6 @@ def main():
                             representative_metric, ','.join(sub_metrics),
                         ],
                         index=clustering_df.columns,
-                    ),
-                    ignore_index=True,
-                )
-
-            num_series_each_step: dict[str, float] = {
-                'total': metrics_dimension['total'][0],
-                'step1': metrics_dimension['total'][1],
-                'step2': metrics_dimension['total'][2],
-            }
-            num_series['total'].append(num_series_each_step['total'])
-
-            step: str
-            df: pd.DataFrame
-            for step, df in reduced_df_by_step.items():
-                ok, found_metrics = check_tsdr_ground_truth_by_route(
-                    metrics=list(df.columns),
-                    chaos_type=chaos_type,
-                    chaos_comp=chaos_comp,
-                )
-                y_true_by_step[step].append(1)
-                y_pred_by_step[step].append(1 if ok else 0)
-                num_series[step].append(num_series_each_step[step])
-                tests_df = tests_df.append(
-                    pd.Series(
-                        [
-                            chaos_type, chaos_comp, metrics_file, step, ok,
-                            ','.join(found_metrics),
-                            grafana_dashboard_url,
-                        ],
-                        index=tests_df.columns,
                     ),
                     ignore_index=True,
                 )
