@@ -202,7 +202,7 @@ def main():
                     subplots=True, figsize=(6, 6), sharex=False, ax=axes)
                 fig.suptitle(
                     f"{chaos_type}:{chaos_comp}    {metrics_file}  rep:{representative_metric}")
-                run[f"tests/clustering_ts_figures/{chaos_type}/{chaos_comp}"].log(
+                run[f"tests/clustering/ts_figures/{chaos_type}/{chaos_comp}"].log(
                     neptune.types.File.as_image(fig))
                 plt.close(fig=fig)
 
@@ -238,7 +238,7 @@ def main():
                 ), ignore_index=True,
             )
 
-    run['tests/clustering_results'].upload(neptune.types.File.as_html(clustering_df))
+    run['tests/clustering/clustered_table'].upload(neptune.types.File.as_html(clustering_df))
 
     run['tests/table'].upload(neptune.types.File.as_html(tests_df))
 
