@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import math
 import os
 import statistics
 from collections import defaultdict
@@ -40,6 +41,16 @@ def read_metrics_file(metrics_file: str) -> Optional[pd.DataFrame]:
     data_df['metrics_file'] = os.path.basename(metrics_file)
     data_df['grafana_dashboard_url'] = metrics_meta['grafana_dashboard_url']
     return data_df
+
+
+def trim_axs(axs, N):
+    """
+    Reduce *axs* to *N* Axes. All further Axes are removed from the figure.
+    """
+    axs = axs.flat
+    for ax in axs[N:]:
+        ax.remove()
+    return axs[:N]
 
 
 def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
@@ -216,7 +227,26 @@ def main():
                     ),
                     ignore_index=True,
                 )
-
+            # Log non-clustered data
+            rep_metrics: list[str] = list(clustering_info.keys())
+            non_clustered_df: pd.DataFrame = reduced_df_by_step['step2'].drop(columns=rep_metrics)
+            num_non_clustered_plots = len(non_clustered_df.columns)
+            fig, axes = plt.subplots(
+                nrows=math.ceil(num_non_clustered_plots/6),
+                ncols=6,
+                figsize=(6*6, num_non_clustered_plots),
+                squeeze=False,  # always return 2D-array axes
+            )
+            # Match the numbers axes and non-clustered columns
+            axes = trim_axs(axes, num_non_clustered_plots)
+            # reset_index removes extra index texts from the generated figure.
+            non_clustered_df.reset_index().plot(
+                subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+            fig.suptitle(
+                f"{chaos_type}:{chaos_comp}    {metrics_file} non clustered metrics")
+            run[f"tests/clustering/non_clustered_metrics_ts_figures/{chaos_type}/{chaos_comp}"].log(
+                neptune.types.File.as_image(fig))
+            plt.close(fig=fig)
 
         mean_num_series_str: str = '/'.join(
             [f"{statistics.mean(num_series[s])}" for s in ['total', 'step1', 'step2']]
