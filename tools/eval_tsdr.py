@@ -114,7 +114,7 @@ def main():
     scores_df = pd.DataFrame(
         columns=['chaos_type', 'chaos_comp', 'step',
                  'tn', 'fp', 'fn', 'tp', 'accuracy', 'recall',
-                 'reduction_rate'],
+                 'num_series', 'reduction_rate'],
         index=['chaos_type', 'chaos_comp', 'step']
     ).dropna()
     tests_df = pd.DataFrame(
@@ -127,6 +127,7 @@ def main():
         y_true_by_step: dict[str, list[int]] = defaultdict(lambda: list())
         y_pred_by_step: dict[str, list[int]] = defaultdict(lambda: list())
         reductions: dict[str, list[float]] = defaultdict(lambda: list())
+        num_series: dict[str, list[float]] = defaultdict(lambda: list())
 
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             logger.info(f">> Running tsdr {metrics_file} {case} ...")
@@ -164,11 +165,12 @@ def main():
                     ignore_index=True,
                 )
 
-            series_num: dict[str, float] = {
+            num_series_each_step: dict[str, float] = {
                 'total': metrics_dimension['total'][0],
                 'step1': metrics_dimension['total'][1],
                 'step2': metrics_dimension['total'][2],
             }
+            num_series['total'].append(num_series_each_step['total'])
 
             step: str
             df: pd.DataFrame
@@ -180,7 +182,8 @@ def main():
                 )
                 y_true_by_step[step].append(1)
                 y_pred_by_step[step].append(1 if ok else 0)
-                reductions[step].append(1 - (series_num[step] / series_num['total']))
+                reductions[step].append(1 - (num_series_each_step[step] / num_series_each_step['total']))
+                num_series[step].append(num_series_each_step[step])
                 tests_df = tests_df.append(
                     pd.Series(
                         [
@@ -209,17 +212,22 @@ def main():
             run[f"tests/figures/{chaos_type}/{chaos_comp}"].log(neptune.types.File.as_image(fig))
             plt.close(fig=fig)
 
+        mean_num_series_str: str = '/'.join(
+            [f"{statistics.mean(num_series[s])}" for s in ['total', 'step1', 'step2']]
+        )
         for step, y_true in y_true_by_step.items():
             y_pred = y_pred_by_step[step]
             tn, fp, fn, tp = confusion_matrix(
                 y_true=y_true, y_pred=y_pred, labels=[0, 1],
             ).ravel()
-            accuracy = accuracy_score(y_true, y_pred)
-            recall = recall_score(y_true, y_pred)
-            reduction_rate = statistics.mean(reductions[step])
+            accuracy: float = accuracy_score(y_true, y_pred)
+            recall: float = recall_score(y_true, y_pred)
+            reduction_rate: float = statistics.mean(reductions[step])
             scores_df = scores_df.append(
-                pd.Series(
-                    [chaos_type, chaos_comp, step, tn, fp, fn, tp, accuracy, recall, reduction_rate],
+                pd.Series([
+                    chaos_type, chaos_comp, step,
+                    tn, fp, fn, tp, accuracy, recall,
+                    mean_num_series_str, reduction_rate],
                     index=scores_df.columns,
                 ), ignore_index=True,
             )
