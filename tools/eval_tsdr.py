@@ -141,6 +141,18 @@ def main():
             )
 
             for representative_metric, sub_metrics in clustering_info.items():
+                # create a figure for clustered metrics
+                clustered_metrics: list[str] = [representative_metric] + sub_metrics
+                fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
+                # reset_index removes extra index texts from the generated figure.
+                data_df[clustered_metrics].reset_index().plot(
+                    subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+                fig.suptitle(
+                    f"{chaos_type}:{chaos_comp}    {metrics_file}  rep:{representative_metric}")
+                run[f"progress/clustering_ts_figures/{chaos_type}/{chaos_comp}"].log(
+                    neptune.types.File.as_image(fig))
+                plt.close(fig=fig)
+
                 clustering_df = clustering_df.append(
                     pd.Series(
                         [
