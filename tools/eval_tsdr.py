@@ -93,6 +93,21 @@ def log_plots_as_image(run: neptune.Run, record: DatasetRecord, data_df: pd.Data
     plt.close(fig=fig)
 
 
+def log_clustering_plots_as_image(run: neptune.Run, rep_metric: str, sub_metrics: list[str],
+                                  record: DatasetRecord, data_df: pd.DataFrame) -> None:
+    """ Upload clustered time series plots to neptune.ai """
+    clustered_metrics: list[str] = [rep_metric] + sub_metrics
+    fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
+    # reset_index removes extra index texts from the generated figure.
+    data_df[clustered_metrics].reset_index().plot(
+        subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+    fig.suptitle(
+        f"{record.chaos_case_file()}    rep:{rep_metric}")
+    run[f"tests/clustering/ts_figures/{record.chaos_case()}"].log(
+        neptune.types.File.as_image(fig))
+    plt.close(fig=fig)
+
+
 def trim_axs(axs, N):
     """
     Reduce *axs* to *N* Axes. All further Axes are removed from the figure.
@@ -195,18 +210,7 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
 
             # Log clustering data
             for representative_metric, sub_metrics in clustering_info.items():
-                # create a figure for clustered metrics
-                clustered_metrics: list[str] = [representative_metric] + sub_metrics
-                fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
-                # reset_index removes extra index texts from the generated figure.
-                data_df[clustered_metrics].reset_index().plot(
-                    subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-                fig.suptitle(
-                    f"{chaos_type}:{chaos_comp}    {metrics_file}  rep:{representative_metric}")
-                run[f"tests/clustering/ts_figures/{chaos_type}/{chaos_comp}"].log(
-                    neptune.types.File.as_image(fig))
-                plt.close(fig=fig)
-
+                log_clustering_plots_as_image(run, representative_metric, sub_metrics, record, data_df)
                 clustering_df = clustering_df.append(
                     pd.Series(
                         [
