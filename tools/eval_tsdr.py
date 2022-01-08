@@ -231,12 +231,9 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                     pd.Series(
                         [
                             chaos_type, chaos_comp, metrics_file, step, ok,
-                            num_series_str, ','.join(found_metrics),
-                            grafana_dashboard_url,
-                        ],
-                        index=tests_df.columns,
-                    ),
-                    ignore_index=True,
+                            num_series_str, ','.join(found_metrics), grafana_dashboard_url,
+                        ], index=tests_df.columns,
+                    ), ignore_index=True,
                 )
 
             # Log clustering data
@@ -247,10 +244,8 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                         [
                             chaos_type, chaos_comp, metrics_file,
                             representative_metric, ','.join(sub_metrics),
-                        ],
-                        index=clustering_df.columns,
-                    ),
-                    ignore_index=True,
+                        ], index=clustering_df.columns,
+                    ), ignore_index=True,
                 )
 
             # Log non-clustered data
@@ -262,10 +257,8 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                     [
                         chaos_type, chaos_comp, metrics_file,
                         ','.join(non_clustered_reduced_df.columns),
-                    ],
-                    index=non_clustered_df.columns,
-                ),
-                ignore_index=True,
+                    ], index=non_clustered_df.columns,
+                ), ignore_index=True,
             )
 
         mean_num_series_str: str = '/'.join(
