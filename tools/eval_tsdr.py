@@ -108,6 +108,31 @@ def log_clustering_plots_as_image(run: neptune.Run, rep_metric: str, sub_metrics
     plt.close(fig=fig)
 
 
+def log_non_clustered_plots_as_image(run: neptune.Run,
+                                     record: DatasetRecord,
+                                     non_clustered_reduced_df: pd.DataFrame) -> None:
+    """ Upload non-clustered time series plots to neptune.ai """
+
+    num_non_clustered_plots = len(non_clustered_reduced_df.columns)
+    fig, axes = plt.subplots(
+        nrows=math.ceil(num_non_clustered_plots/6),
+        ncols=6,
+        figsize=(6*6, num_non_clustered_plots),
+        squeeze=False,  # always return 2D-array axes
+    )
+    # Match the numbers axes and non-clustered columns
+    axes = trim_axs(axes, num_non_clustered_plots)
+    # reset_index removes extra index texts from the generated figure.
+    non_clustered_reduced_df.reset_index().plot(
+        subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+    fig.suptitle(
+        f"{record.chaos_case_file()} - non-clustered metrics")
+    run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case()}"].log(
+        neptune.types.File.as_image(fig)
+    )
+    plt.close(fig=fig)
+
+
 def trim_axs(axs, N):
     """
     Reduce *axs* to *N* Axes. All further Axes are removed from the figure.
@@ -225,6 +250,7 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
             # Log non-clustered data
             rep_metrics: list[str] = list(clustering_info.keys())
             non_clustered_reduced_df: pd.DataFrame = reduced_df_by_step['step2'].drop(columns=rep_metrics)
+            log_non_clustered_plots_as_image(run, record, non_clustered_reduced_df)
             non_clustered_df = non_clustered_df.append(
                 pd.Series(
                     [
@@ -235,24 +261,6 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                 ),
                 ignore_index=True,
             )
-            # Upload figures for non-clustered data
-            num_non_clustered_plots = len(non_clustered_reduced_df.columns)
-            fig, axes = plt.subplots(
-                nrows=math.ceil(num_non_clustered_plots/6),
-                ncols=6,
-                figsize=(6*6, num_non_clustered_plots),
-                squeeze=False,  # always return 2D-array axes
-            )
-            # Match the numbers axes and non-clustered columns
-            axes = trim_axs(axes, num_non_clustered_plots)
-            # reset_index removes extra index texts from the generated figure.
-            non_clustered_reduced_df.reset_index().plot(
-                subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-            fig.suptitle(
-                f"{chaos_type}:{chaos_comp}    {metrics_file} non clustered metrics")
-            run[f"tests/clustering/non_clustered_metrics_ts_figures/{chaos_type}/{chaos_comp}"].log(
-                neptune.types.File.as_image(fig))
-            plt.close(fig=fig)
 
         mean_num_series_str: str = '/'.join(
             [f"{statistics.mean(num_series[s])}" for s in ['total', 'step1', 'step2']]
