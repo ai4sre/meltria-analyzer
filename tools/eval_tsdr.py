@@ -123,6 +123,10 @@ def main():
         columns=['chaos_type', 'chaos_comp', 'metrics_file', 'representative_metric', 'sub_metrics'],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'representative_metric', 'sub_metrics'],
     ).dropna()
+    non_clustered_df = pd.DataFrame(
+        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'non_clustered_metrics'],
+        index=['chaos_type', 'chaos_comp', 'metrics_file'],
+    ).dropna()
     scores_df = pd.DataFrame(
         columns=['chaos_type', 'chaos_comp', 'step',
                  'tn', 'fp', 'fn', 'tp', 'accuracy', 'recall',
@@ -227,10 +231,22 @@ def main():
                     ),
                     ignore_index=True,
                 )
+
             # Log non-clustered data
             rep_metrics: list[str] = list(clustering_info.keys())
-            non_clustered_df: pd.DataFrame = reduced_df_by_step['step2'].drop(columns=rep_metrics)
-            num_non_clustered_plots = len(non_clustered_df.columns)
+            non_clustered_reduced_df: pd.DataFrame = reduced_df_by_step['step2'].drop(columns=rep_metrics)
+            non_clustered_df = non_clustered_df.append(
+                pd.Series(
+                    [
+                        chaos_type, chaos_comp, metrics_file,
+                        ','.join(non_clustered_reduced_df.columns),
+                    ],
+                    index=non_clustered_df.columns,
+                ),
+                ignore_index=True,
+            )
+            # Upload figures for non-clustered data
+            num_non_clustered_plots = len(non_clustered_reduced_df.columns)
             fig, axes = plt.subplots(
                 nrows=math.ceil(num_non_clustered_plots/6),
                 ncols=6,
@@ -240,7 +256,7 @@ def main():
             # Match the numbers axes and non-clustered columns
             axes = trim_axs(axes, num_non_clustered_plots)
             # reset_index removes extra index texts from the generated figure.
-            non_clustered_df.reset_index().plot(
+            non_clustered_reduced_df.reset_index().plot(
                 subplots=True, figsize=(6, 6), sharex=False, ax=axes)
             fig.suptitle(
                 f"{chaos_type}:{chaos_comp}    {metrics_file} non clustered metrics")
@@ -269,6 +285,7 @@ def main():
             )
 
     run['tests/clustering/clustered_table'].upload(neptune.types.File.as_html(clustering_df))
+    run['tests/clustering/non_clustered_table'].upload(neptune.types.File.as_html(non_clustered_df))
 
     run['tests/table'].upload(neptune.types.File.as_html(tests_df))
 
