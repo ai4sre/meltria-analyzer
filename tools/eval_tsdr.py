@@ -65,51 +65,11 @@ def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataF
     return df
 
 
-def main():
-    logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("metricsfiles",
-                        nargs='+',
-                        help="metrics output JSON file")
-    parser.add_argument("--dataset-id",
-                        type=str,
-                        help='dataset id like "b2qdj"')
-    parser.add_argument('--step1-method',
-                        default='df',
-                        choices=STEP1_METHODS,
-                        help='step1 method')
-    parser.add_argument('--step1-alpha',
-                        type=float,
-                        default=0.01,
-                        help='sigificance levels for step1 test')
-    parser.add_argument('--dist-threshold',
-                        type=float,
-                        default=0.001,
-                        help='distance thresholds')
-    parser.add_argument('--out', help='output file path')
-    parser.add_argument('--neptune-mode',
-                        choices=['async', 'offline', 'debug'],
-                        default='async',
-                        help='specify neptune mode')
-    args = parser.parse_args()
-
-    # Setup neptune.ai client
-    run = neptune.init(mode=args.neptune_mode)
-    npt_handler = NeptuneHandler(run=run)
-    logger.addHandler(npt_handler)
-    run['dataset/id'] = args.dataset_id
-    run['dataset/num_metrics_files'] = len(args.metricsfiles)
-    run['parameters'] = {
-        'step1_model': args.step1_method,
-        'step1_alpha': args.step1_alpha,
-        'step2_dist_threshold': args.dist_threshold,
-    }
-
+def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
     dataset = pd.DataFrame()
     with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
         future_list = []
-        for metrics_file in args.metricsfiles:
+        for metrics_file in metrics_files:
             future_list.append(executor.submit(read_metrics_file, metrics_file))
         for future in futures.as_completed(future_list):
             data_df = future.result()
@@ -169,9 +129,9 @@ def main():
                 data_df=data_df,
                 method=tsdr.TSIFTER_METHOD,
                 max_workers=cpu_count(),
-                tsifter_step1_method=args.step1_method,
-                tsifter_step1_alpha=args.step1_alpha,
-                tsifter_clustering_threshold=args.dist_threshold,
+                tsifter_step1_method=run['parameters']['step1_model'].fetch(),
+                tsifter_step1_alpha=run['parameters']['step1_alpha'].fetch(),
+                tsifter_clustering_threshold=run['parameters']['step2_dist_threshold'].fetch(),
             )
 
             num_series_each_step: dict[str, float] = {
@@ -315,6 +275,50 @@ def main():
     logger.info(scores_df_by_chaos_type.head())
     logger.info(scores_df_by_chaos_comp.head())
     logger.info(clustering_df.head())
+
+
+def main():
+    logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("metricsfiles",
+                        nargs='+',
+                        help="metrics output JSON file")
+    parser.add_argument("--dataset-id",
+                        type=str,
+                        help='dataset id like "b2qdj"')
+    parser.add_argument('--step1-method',
+                        default='df',
+                        choices=STEP1_METHODS,
+                        help='step1 method')
+    parser.add_argument('--step1-alpha',
+                        type=float,
+                        default=0.01,
+                        help='sigificance levels for step1 test')
+    parser.add_argument('--dist-threshold',
+                        type=float,
+                        default=0.001,
+                        help='distance thresholds')
+    parser.add_argument('--out', help='output file path')
+    parser.add_argument('--neptune-mode',
+                        choices=['async', 'offline', 'debug'],
+                        default='async',
+                        help='specify neptune mode')
+    args = parser.parse_args()
+
+    # Setup neptune.ai client
+    run: neptune.Run = neptune.init(mode=args.neptune_mode)
+    npt_handler = NeptuneHandler(run=run)
+    logger.addHandler(npt_handler)
+    run['dataset/id'] = args.dataset_id
+    run['dataset/num_metrics_files'] = len(args.metricsfiles)
+    run['parameters'] = {
+        'step1_model': args.step1_method,
+        'step1_alpha': args.step1_alpha,
+        'step2_dist_threshold': args.dist_threshold,
+    }
+
+    eval_tsdr(run, args.metricsfiles)
 
     run.stop()
 
