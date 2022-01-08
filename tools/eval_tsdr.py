@@ -27,6 +27,24 @@ logger.setLevel(logging.INFO)
 STEP1_METHODS = ['df', 'adf']
 
 
+class DatasetRecord:
+    """A record of dataset"""
+    chaos_comp: str     # chaos-injected component
+    chaos_type: str     # injected chaos type
+    metrics_file: str   # path of metrics file
+
+    def __init__(self, chaos_type: str, chaos_comp: str, metrics_file: str):
+        self.chaos_comp = chaos_comp
+        self.chaos_type = chaos_type
+        self.metrics_file = metrics_file
+
+    def chaos_case(self) -> str:
+        return f"{self.chaos_comp}:{self.chaos_type}"
+
+    def chaos_case_file(self) -> str:
+        return f"{self.metrics_file} of {self.chaos_case()}"
+
+
 def read_metrics_file(metrics_file: str) -> Optional[pd.DataFrame]:
     logger.info(f">> Loading metrics file {metrics_file} ...")
     try:
@@ -102,14 +120,14 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
     ).dropna()
 
     for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
-        case = f"{chaos_type}:{chaos_comp}"
         y_true_by_step: dict[str, list[int]] = defaultdict(lambda: list())
         y_pred_by_step: dict[str, list[int]] = defaultdict(lambda: list())
         num_series: dict[str, list[float]] = defaultdict(lambda: list())
 
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
-            logger.info(f">> Uploading plot figures of {metrics_file} {case} ...")
+            record = DatasetRecord(chaos_type, chaos_comp, metrics_file)
 
+            logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
             # upload found_metrics plot images to neptune.ai
             _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
                 metrics=list(data_df.columns),  # pre-reduced data frame
@@ -126,7 +144,7 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
             run[f"dataset/figures/{chaos_type}/{chaos_comp}"].log(neptune.types.File.as_image(fig))
             plt.close(fig=fig)
 
-            logger.info(f">> Running tsdr {metrics_file} {case} ...")
+            logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
             elapsedTime, reduced_df_by_step, metrics_dimension, clustering_info = tsdr.run_tsdr(
                 data_df=data_df,
