@@ -50,10 +50,14 @@ class DatasetRecord:
         return list(self.data_df.columns)
 
 
-def read_metrics_file(metrics_file: str) -> Optional[pd.DataFrame]:
+def read_metrics_file(metrics_file: str,
+                      exclude_middleware_metrics: bool = False) -> Optional[pd.DataFrame]:
     logger.info(f">> Loading metrics file {metrics_file} ...")
     try:
-        data_df, _, metrics_meta = tsdr.read_metrics_json(metrics_file)
+        data_df, _, metrics_meta = tsdr.read_metrics_json(
+            metrics_file,
+            exclude_middlewares=exclude_middleware_metrics,
+        )
     except ValueError as e:
         logger.warning(f">> Skip {metrics_file} because of {e}")
         return None
@@ -66,12 +70,12 @@ def read_metrics_file(metrics_file: str) -> Optional[pd.DataFrame]:
     return data_df
 
 
-def load_dataset(metrics_files: list[str]) -> pd.DataFrame:
+def load_dataset(metrics_files: list[str], exclude_middleware_metrics: bool = False) -> pd.DataFrame:
     dataset = pd.DataFrame()
     with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
         future_list = []
         for metrics_file in metrics_files:
-            future_list.append(executor.submit(read_metrics_file, metrics_file))
+            future_list.append(executor.submit(read_metrics_file, metrics_file, exclude_middleware_metrics))
         for future in futures.as_completed(future_list):
             data_df = future.result()
             if data_df is not None:
@@ -162,7 +166,10 @@ def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataF
 
 
 def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
-    dataset: pd.DataFrame = load_dataset(metrics_files)
+    dataset: pd.DataFrame = load_dataset(
+        metrics_files,
+        run['parameters']['exclude_middleware_metrics'].fetch(),  # The type mismatch should be fixed
+    )
     logger.info("Dataset loading complete")
 
     clustering_df = pd.DataFrame(
@@ -324,6 +331,9 @@ def main():
     parser.add_argument("--dataset-id",
                         type=str,
                         help='dataset id like "b2qdj"')
+    parser.add_argument("--exclude-middleware-metrics",
+                        action='store_true',
+                        help='a flag for excluding middleware metrics')
     parser.add_argument('--step1-method',
                         default='df',
                         choices=STEP1_METHODS,
@@ -350,6 +360,7 @@ def main():
     run['dataset/id'] = args.dataset_id
     run['dataset/num_metrics_files'] = len(args.metricsfiles)
     run['parameters'] = {
+        'exclude_middleware_metrics': args.exclude_middleware_metrics,
         'step1_model': args.step1_method,
         'step1_alpha': args.step1_alpha,
         'step2_dist_threshold': args.dist_threshold,

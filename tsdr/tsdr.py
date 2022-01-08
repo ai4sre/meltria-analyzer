@@ -7,7 +7,7 @@ import sys
 import time
 from concurrent import futures
 from datetime import datetime
-from typing import Any
+from typing import Any, DefaultDict
 
 import numpy as np
 import pandas as pd
@@ -300,7 +300,12 @@ def run_sieve(data_df, metrics_dimension, services_list, max_workers
         {'step1': reduced_by_st_df, 'step2': reduced_df}, metrics_dimension, clustering_info
 
 
-def read_metrics_json(data_file: os.PathLike, interporate: bool = True) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
+def read_metrics_json(data_file: str,
+                      interporate: bool = True,
+                      exclude_middlewares: bool = False,
+                      ) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
+    """ Read metrics data file """
+
     with open(data_file) as f:
         raw_json = json.load(f)
     raw_data = pd.read_json(data_file)
@@ -310,6 +315,8 @@ def read_metrics_json(data_file: os.PathLike, interporate: bool = True) -> tuple
         for t in raw_data[target].dropna():
             for metric in t:
                 if metric["metric_name"] not in TARGET_DATA[target] and TARGET_DATA[target] != "all":
+                    continue
+                if target == 'middlewares' and exclude_middlewares:
                     continue
                 metric_name = metric["metric_name"].replace(
                     "container_", "").replace("node_", "")
