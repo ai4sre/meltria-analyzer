@@ -32,17 +32,22 @@ class DatasetRecord:
     chaos_comp: str     # chaos-injected component
     chaos_type: str     # injected chaos type
     metrics_file: str   # path of metrics file
+    data_df: pd.DataFrame
 
-    def __init__(self, chaos_type: str, chaos_comp: str, metrics_file: str):
+    def __init__(self, chaos_type: str, chaos_comp: str, metrics_file: str, data_df: pd.DataFrame):
         self.chaos_comp = chaos_comp
         self.chaos_type = chaos_type
         self.metrics_file = metrics_file
+        self.data_df = data_df
 
     def chaos_case(self) -> str:
         return f"{self.chaos_comp}/{self.chaos_type}"
 
     def chaos_case_file(self) -> str:
         return f"{self.metrics_file} of {self.chaos_case()}"
+
+    def metrics_names(self) -> list[str]:
+        return list(self.data_df.columns)
 
 
 def read_metrics_file(metrics_file: str) -> Optional[pd.DataFrame]:
@@ -74,11 +79,11 @@ def load_dataset(metrics_files: list[str]) -> pd.DataFrame:
     return dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'])
 
 
-def log_plots_as_image(run: neptune.Run, record: DatasetRecord, data_df: pd.DataFrame) -> None:
+def log_plots_as_image(run: neptune.Run, record: DatasetRecord) -> None:
     """ Upload found_metrics plot images to neptune.ai. """
 
     _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
-        metrics=list(data_df.columns),  # pre-reduced data frame
+        metrics=record.metrics_names(),  # pre-reduced data frame
         chaos_type=record.chaos_type,
         chaos_comp=record.chaos_comp,
     )
@@ -87,19 +92,20 @@ def log_plots_as_image(run: neptune.Run, record: DatasetRecord, data_df: pd.Data
     ground_truth_metrics.sort()
     fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
     # reset_index removes extra index texts from the generated figure.
-    data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+    record.data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
     fig.suptitle(record.chaos_case_file())
     run[f"dataset/figures/{record.chaos_case}"].log(neptune.types.File.as_image(fig))
     plt.close(fig=fig)
 
 
-def log_clustering_plots_as_image(run: neptune.Run, rep_metric: str, sub_metrics: list[str],
-                                  record: DatasetRecord, data_df: pd.DataFrame) -> None:
+def log_clustering_plots_as_image(run: neptune.Run,
+                                  rep_metric: str, sub_metrics: list[str],
+                                  record: DatasetRecord) -> None:
     """ Upload clustered time series plots to neptune.ai """
     clustered_metrics: list[str] = [rep_metric] + sub_metrics
     fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
     # reset_index removes extra index texts from the generated figure.
-    data_df[clustered_metrics].reset_index().plot(
+    record.data_df[clustered_metrics].reset_index().plot(
         subplots=True, figsize=(6, 6), sharex=False, ax=axes)
     fig.suptitle(
         f"{record.chaos_case_file()}    rep:{rep_metric}")
@@ -184,10 +190,10 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
         num_series: dict[str, list[float]] = defaultdict(lambda: list())
 
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
-            record = DatasetRecord(chaos_type, chaos_comp, metrics_file)
+            record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
 
             logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
-            log_plots_as_image(run, record, data_df)
+            log_plots_as_image(run, record)
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
@@ -235,7 +241,7 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
 
             # Log clustering data
             for representative_metric, sub_metrics in clustering_info.items():
-                log_clustering_plots_as_image(run, representative_metric, sub_metrics, record, data_df)
+                log_clustering_plots_as_image(run, representative_metric, sub_metrics, record)
                 clustering_df = clustering_df.append(
                     pd.Series(
                         [
