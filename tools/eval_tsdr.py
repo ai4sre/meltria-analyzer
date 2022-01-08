@@ -98,7 +98,7 @@ def log_plots_as_image(run: neptune.Run, record: DatasetRecord) -> None:
     # reset_index removes extra index texts from the generated figure.
     record.data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
     fig.suptitle(record.chaos_case_file())
-    run[f"dataset/figures/{record.chaos_case}"].log(neptune.types.File.as_image(fig))
+    run[f"dataset/figures/{record.chaos_case()}"].log(neptune.types.File.as_image(fig))
     plt.close(fig=fig)
 
 
