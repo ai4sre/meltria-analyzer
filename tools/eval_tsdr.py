@@ -373,6 +373,7 @@ def main():
         'step1_regression': args.step1_regression,
         'step2_dist_threshold': args.dist_threshold,
     }
+    run.wait()  # sync parameters for 'async' neptune mode
 
     eval_tsdr(run, args.metricsfiles)
 
