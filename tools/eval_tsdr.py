@@ -43,6 +43,19 @@ def read_metrics_file(metrics_file: str) -> Optional[pd.DataFrame]:
     return data_df
 
 
+def load_dataset(metrics_files: list[str]) -> pd.DataFrame:
+    dataset = pd.DataFrame()
+    with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+        future_list = []
+        for metrics_file in metrics_files:
+            future_list.append(executor.submit(read_metrics_file, metrics_file))
+        for future in futures.as_completed(future_list):
+            data_df = future.result()
+            if data_df is not None:
+                dataset = dataset.append(data_df)
+    return dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'])
+
+
 def trim_axs(axs, N):
     """
     Reduce *axs* to *N* Axes. All further Axes are removed from the figure.
@@ -66,18 +79,8 @@ def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataF
 
 
 def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
-    dataset = pd.DataFrame()
-    with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
-        future_list = []
-        for metrics_file in metrics_files:
-            future_list.append(executor.submit(read_metrics_file, metrics_file))
-        for future in futures.as_completed(future_list):
-            data_df = future.result()
-            if data_df is not None:
-                dataset = dataset.append(data_df)
-    logger.info("Loading all metrics files is done")
-
-    dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'], inplace=True)
+    dataset: pd.DataFrame = load_dataset(metrics_files)
+    logger.info("Dataset loading complete")
 
     clustering_df = pd.DataFrame(
         columns=['chaos_type', 'chaos_comp', 'metrics_file', 'representative_metric', 'sub_metrics'],
