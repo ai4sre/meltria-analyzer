@@ -243,18 +243,16 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                 )
 
             logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
-            with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
-                for representative_metric, sub_metrics in clustering_info.items():
-                    executor.submit(log_clustering_plots_as_image,
-                                    run, representative_metric, sub_metrics, record)
-                    clustering_df = clustering_df.append(
-                        pd.Series(
-                            [
-                                chaos_type, chaos_comp, metrics_file,
-                                representative_metric, ','.join(sub_metrics),
-                            ], index=clustering_df.columns,
-                        ), ignore_index=True,
-                    )
+            for representative_metric, sub_metrics in clustering_info.items():
+                log_clustering_plots_as_image(run, representative_metric, sub_metrics, record)
+                clustering_df = clustering_df.append(
+                    pd.Series(
+                        [
+                            chaos_type, chaos_comp, metrics_file,
+                            representative_metric, ','.join(sub_metrics),
+                        ], index=clustering_df.columns,
+                    ), ignore_index=True,
+                )
 
             logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
             rep_metrics: list[str] = list(clustering_info.keys())
