@@ -39,7 +39,7 @@ class DatasetRecord:
         self.metrics_file = metrics_file
 
     def chaos_case(self) -> str:
-        return f"{self.chaos_comp}:{self.chaos_type}"
+        return f"{self.chaos_comp}/{self.chaos_type}"
 
     def chaos_case_file(self) -> str:
         return f"{self.metrics_file} of {self.chaos_case()}"
@@ -72,6 +72,25 @@ def load_dataset(metrics_files: list[str]) -> pd.DataFrame:
             if data_df is not None:
                 dataset = dataset.append(data_df)
     return dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'])
+
+
+def log_plots_as_image(run: neptune.Run, record: DatasetRecord, data_df: pd.DataFrame) -> None:
+    """ Upload found_metrics plot images to neptune.ai. """
+
+    _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
+        metrics=list(data_df.columns),  # pre-reduced data frame
+        chaos_type=record.chaos_type,
+        chaos_comp=record.chaos_comp,
+    )
+    if len(ground_truth_metrics) < 1:
+        return
+    ground_truth_metrics.sort()
+    fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
+    # reset_index removes extra index texts from the generated figure.
+    data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+    fig.suptitle(record.chaos_case_file())
+    run[f"dataset/figures/{record.chaos_case}"].log(neptune.types.File.as_image(fig))
+    plt.close(fig=fig)
 
 
 def trim_axs(axs, N):
@@ -128,21 +147,7 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file)
 
             logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
-            # upload found_metrics plot images to neptune.ai
-            _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
-                metrics=list(data_df.columns),  # pre-reduced data frame
-                chaos_type=chaos_type,
-                chaos_comp=chaos_comp,
-            )
-            if len(ground_truth_metrics) < 1:
-                continue
-            ground_truth_metrics.sort()
-            fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
-            # reset_index removes extra index texts from the generated figure.
-            data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-            fig.suptitle(f"{chaos_type}:{chaos_comp}    {metrics_file}")
-            run[f"dataset/figures/{chaos_type}/{chaos_comp}"].log(neptune.types.File.as_image(fig))
-            plt.close(fig=fig)
+            log_plots_as_image(run, record, data_df)
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
