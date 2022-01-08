@@ -210,6 +210,7 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                 max_workers=cpu_count(),
                 tsifter_step1_method=run['parameters']['step1_model'].fetch(),
                 tsifter_step1_alpha=run['parameters']['step1_alpha'].fetch(),
+                tsifter_step1_regression=run['parameters']['step1_regression'].fetch(),
                 tsifter_clustering_threshold=run['parameters']['step2_dist_threshold'].fetch(),
             )
 
@@ -342,6 +343,12 @@ def main():
                         type=float,
                         default=0.01,
                         help='sigificance levels for step1 test')
+    parser.add_argument('--step1-regression',
+                        type=str,
+                        # https://www.statsmodels.org/dev/generated/statsmodels.tsa.stattools.adfuller.html
+                        default='c',
+                        choices=['c', 'ct', 'ctt', 'n'],
+                        help='regression of ADF test paramater')
     parser.add_argument('--dist-threshold',
                         type=float,
                         default=0.001,
@@ -363,6 +370,7 @@ def main():
         'exclude_middleware_metrics': args.exclude_middleware_metrics,
         'step1_model': args.step1_method,
         'step1_alpha': args.step1_alpha,
+        'step1_regression': args.step1_regression,
         'step2_dist_threshold': args.dist_threshold,
     }
 
