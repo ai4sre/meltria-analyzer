@@ -216,8 +216,6 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                 [f"{num_series_each_step[s]}" for s in ['total', 'step1', 'step2']]
             )
 
-            step: str
-            df: pd.DataFrame
             for step, df in reduced_df_by_step.items():
                 ok, found_metrics = check_tsdr_ground_truth_by_route(
                     metrics=list(df.columns),
@@ -236,19 +234,21 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                     ), ignore_index=True,
                 )
 
-            # Log clustering data
-            for representative_metric, sub_metrics in clustering_info.items():
-                log_clustering_plots_as_image(run, representative_metric, sub_metrics, record)
-                clustering_df = clustering_df.append(
-                    pd.Series(
-                        [
-                            chaos_type, chaos_comp, metrics_file,
-                            representative_metric, ','.join(sub_metrics),
-                        ], index=clustering_df.columns,
-                    ), ignore_index=True,
-                )
+            logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
+            with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+                for representative_metric, sub_metrics in clustering_info.items():
+                    executor.submit(log_clustering_plots_as_image,
+                                    run, representative_metric, sub_metrics, record)
+                    clustering_df = clustering_df.append(
+                        pd.Series(
+                            [
+                                chaos_type, chaos_comp, metrics_file,
+                                representative_metric, ','.join(sub_metrics),
+                            ], index=clustering_df.columns,
+                        ), ignore_index=True,
+                    )
 
-            # Log non-clustered data
+            logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
             rep_metrics: list[str] = list(clustering_info.keys())
             non_clustered_reduced_df: pd.DataFrame = reduced_df_by_step['step2'].drop(columns=rep_metrics)
             log_non_clustered_plots_as_image(run, record, non_clustered_reduced_df)
