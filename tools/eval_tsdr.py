@@ -124,6 +124,8 @@ def log_non_clustered_plots_as_image(run: neptune.Run,
     """ Upload non-clustered time series plots to neptune.ai """
 
     num_non_clustered_plots = len(non_clustered_reduced_df.columns)
+    if num_non_clustered_plots == 0:
+        return None
     fig, axes = plt.subplots(
         nrows=math.ceil(num_non_clustered_plots/6),
         ncols=6,
