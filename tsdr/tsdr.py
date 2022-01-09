@@ -33,17 +33,21 @@ TARGET_DATA = {"containers": "all",
                "middlewares": "all"}
 
 
+def has_variation(x: np.ndarray, cv_threshold):
+    mean = x.mean()
+    std = x.std()
+    if mean == 0. and std == 0.:
+        cv = 0
+    else:
+        cv = std / mean
+    return cv > cv_threshold
+
+
 def reduce_series_with_cv(data_df, cv_threshold=0.002):
     reduced_by_cv_df = pd.DataFrame()
     for col in data_df.columns:
         data = data_df[col].values
-        mean = data.mean()
-        std = data.std()
-        if mean == 0. and std == 0.:
-            cv = 0
-        else:
-            cv = std / mean
-        if cv > cv_threshold:
+        if has_variation(data, cv_threshold):
             reduced_by_cv_df[col] = data_df[col]
     return reduced_by_cv_df
 
@@ -186,11 +190,16 @@ def is_unstational_series(series: np.ndarray,
                           alpha: float,
                           regression: str = 'c',
                           maxlag: int = None,
-                          autolag: str = None) -> Optional[float]:
+                          autolag: str = None) -> bool:
     pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
     if not np.isnan(pvalue) and pvalue >= alpha:
-        return True
+        # run df-test for differences of data_{n} and data{n-1} for liner trend series
+        if has_variation(np.diff(series), 0.05):
+            if not has_variation(series, 0.05):
+                return False
+            return True
     return False
+
 
 def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
                           step1_method: str, step1_alpha: float, step1_regression: str) -> pd.DataFrame:
@@ -200,7 +209,6 @@ def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
             series: np.ndarray = data_df[col].to_numpy()
             if series.sum() == 0. or len(np.unique(series)) == 1 or np.isnan(series.sum()):
                 continue
-            # run df-test for differences of data_{n} and data{n-1} for liner trend series
             if step1_method == 'adf':
                 future = executor.submit(
                     is_unstational_series, series, step1_alpha, regression=step1_regression,
