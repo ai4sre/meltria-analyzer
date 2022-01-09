@@ -33,7 +33,7 @@ TARGET_DATA = {"containers": "all",
                "middlewares": "all"}
 
 
-def has_variation(x: np.ndarray, cv_threshold):
+def has_variation(x: np.ndarray, cv_threshold) -> bool:
     mean = x.mean()
     std = x.std()
     if mean == 0.:
@@ -43,7 +43,7 @@ def has_variation(x: np.ndarray, cv_threshold):
     if mean == 0. and std == 0.:
         cv = 0
     else:
-        cv = std / mean
+        cv = abs(std / mean)
     return cv > cv_threshold
 
 
@@ -198,8 +198,8 @@ def is_unstational_series(series: np.ndarray,
     pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
     if not np.isnan(pvalue) and pvalue >= alpha:
         # run df-test for differences of data_{n} and data{n-1} for liner trend series
-        if has_variation(np.diff(series), 0.05):
-            if not has_variation(series, 0.05):
+        if has_variation(np.diff(series), 0.01):
+            if not has_variation(series, 0.01):
                 return False
             return True
     return False
