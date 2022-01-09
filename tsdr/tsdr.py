@@ -36,6 +36,10 @@ TARGET_DATA = {"containers": "all",
 def has_variation(x: np.ndarray, cv_threshold):
     mean = x.mean()
     std = x.std()
+    if mean == 0.:
+        # Differential series is possible to have zero mean.
+        # see https://math.stackexchange.com/questions/1729033/calculating-the-variation-coefficient-when-the-arithmetic-mean-is-zero
+        return False
     if mean == 0. and std == 0.:
         cv = 0
     else:
