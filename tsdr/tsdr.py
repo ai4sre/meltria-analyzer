@@ -7,7 +7,7 @@ import sys
 import time
 from concurrent import futures
 from datetime import datetime
-from typing import Any, DefaultDict
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -182,29 +182,43 @@ def kshape_clustering(target_df, service_name, executor):
     return clustering_info, remove_list
 
 
+def is_unstational_series(series: np.ndarray,
+                          alpha: float,
+                          regression: str = 'c',
+                          maxlag: int = None,
+                          autolag: str = None) -> Optional[float]:
+    pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
+    if not np.isnan(pvalue) and pvalue >= alpha:
+        return True
+    return False
+
 def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
                           step1_method: str, step1_alpha: float, step1_regression: str) -> pd.DataFrame:
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_col = {}
         for col in data_df.columns:
-            data = data_df[col].values
-            if data.sum() == 0. or len(np.unique(data)) == 1 or np.isnan(data.sum()):
+            series: np.ndarray = data_df[col].to_numpy()
+            if series.sum() == 0. or len(np.unique(series)) == 1 or np.isnan(series.sum()):
                 continue
+            # run df-test for differences of data_{n} and data{n-1} for liner trend series
             if step1_method == 'adf':
-                future_to_col[executor.submit(adfuller, data, regression=step1_regression)] = col
+                future = executor.submit(
+                    is_unstational_series, series, step1_alpha, regression=step1_regression,
+                )
+                future_to_col[future] = col
             elif step1_method == 'df':
-                future_to_col[executor.submit(
-                    adfuller, data, regression=step1_regression, maxlag=1, autolag=None)
-                ] = col
+                future = executor.submit(
+                    is_unstational_series,
+                    series, step1_alpha, regression=step1_regression, maxlag=1, autolag=None,
+                )
+                future_to_col[future] = col
             else:
                 raise ValueError('step1_method must be adf or df')
         reduced_cols: list[str] = []
-        for future in futures.as_completed(future_to_col):
-            col = future_to_col[future]
-            p_val = future.result()[1]
-            if not np.isnan(p_val):
-                if p_val >= step1_alpha:
-                    reduced_cols.append(col)
+        for is_unstationality in futures.as_completed(future_to_col):
+            col = future_to_col[is_unstationality]
+            if is_unstationality.result():
+                reduced_cols.append(col)
     return data_df[reduced_cols]
 
 
