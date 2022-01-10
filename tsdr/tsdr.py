@@ -202,9 +202,7 @@ def is_unstational_series(series: np.ndarray,
     # pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
     if pmdarima.arima.PPTest(alpha=alpha).should_diff(series)[1]:
         # run df-test for differences of data_{n} and data{n-1} for liner trend series
-        if has_variation(np.diff(series), cv_threshold):
-            if not has_variation(series, cv_threshold):
-                return False
+        if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
             return True
     return False
 
