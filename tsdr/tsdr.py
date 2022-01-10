@@ -189,6 +189,8 @@ def kshape_clustering(target_df, service_name, executor):
 
     return clustering_info, remove_list
 
+import pmdarima
+
 
 def is_unstational_series(series: np.ndarray,
                           alpha: float,
@@ -197,8 +199,8 @@ def is_unstational_series(series: np.ndarray,
                           maxlag: int = None,
                           autolag: str = None,
                           ) -> bool:
-    pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
-    if not np.isnan(pvalue) and pvalue >= alpha:
+    # pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
+    if pmdarima.arima.PPTest(alpha=alpha).should_diff(series)[1]:
         # run df-test for differences of data_{n} and data{n-1} for liner trend series
         if has_variation(np.diff(series), cv_threshold):
             if not has_variation(series, cv_threshold):
