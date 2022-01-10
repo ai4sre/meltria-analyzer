@@ -7,7 +7,7 @@ import sys
 import time
 from concurrent import futures
 from datetime import datetime
-from typing import Any, DefaultDict
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -33,17 +33,25 @@ TARGET_DATA = {"containers": "all",
                "middlewares": "all"}
 
 
+def has_variation(x: np.ndarray, cv_threshold) -> bool:
+    mean = x.mean()
+    std = x.std()
+    if mean == 0.:
+        # Differential series is possible to have zero mean.
+        # see https://math.stackexchange.com/questions/1729033/calculating-the-variation-coefficient-when-the-arithmetic-mean-is-zero
+        return False
+    if mean == 0. and std == 0.:
+        cv = 0
+    else:
+        cv = abs(std / mean)
+    return cv > cv_threshold
+
+
 def reduce_series_with_cv(data_df, cv_threshold=0.002):
     reduced_by_cv_df = pd.DataFrame()
     for col in data_df.columns:
         data = data_df[col].values
-        mean = data.mean()
-        std = data.std()
-        if mean == 0. and std == 0.:
-            cv = 0
-        else:
-            cv = std / mean
-        if cv > cv_threshold:
+        if has_variation(data, cv_threshold):
             reduced_by_cv_df[col] = data_df[col]
     return reduced_by_cv_df
 
@@ -182,29 +190,53 @@ def kshape_clustering(target_df, service_name, executor):
     return clustering_info, remove_list
 
 
+def is_unstational_series(series: np.ndarray,
+                          alpha: float,
+                          cv_threshold: float,
+                          regression: str = 'c',
+                          maxlag: int = None,
+                          autolag: str = None,
+                          ) -> bool:
+    pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
+    if not np.isnan(pvalue) and pvalue >= alpha:
+        # run df-test for differences of data_{n} and data{n-1} for liner trend series
+        if has_variation(np.diff(series), cv_threshold):
+            if not has_variation(series, cv_threshold):
+                return False
+            return True
+    return False
+
+
 def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
-                          step1_method: str, step1_alpha: float, step1_regression: str) -> pd.DataFrame:
+                          step1_method: str, step1_alpha: float,
+                          step1_regression: str, cv_threshold: float,
+                          ) -> pd.DataFrame:
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_col = {}
         for col in data_df.columns:
-            data = data_df[col].values
-            if data.sum() == 0. or len(np.unique(data)) == 1 or np.isnan(data.sum()):
+            series: np.ndarray = data_df[col].to_numpy()
+            if series.sum() == 0. or len(np.unique(series)) == 1 or np.isnan(series.sum()):
                 continue
             if step1_method == 'adf':
-                future_to_col[executor.submit(adfuller, data, regression=step1_regression)] = col
+                future = executor.submit(
+                    is_unstational_series, series, alpha=step1_alpha, regression=step1_regression,
+                    cv_threshold=cv_threshold,
+                )
+                future_to_col[future] = col
             elif step1_method == 'df':
-                future_to_col[executor.submit(
-                    adfuller, data, regression=step1_regression, maxlag=1, autolag=None)
-                ] = col
+                future = executor.submit(
+                    is_unstational_series,
+                    series, alpha=step1_alpha, regression=step1_regression, maxlag=1, autolag=None,
+                    cv_threshold=cv_threshold,
+                )
+                future_to_col[future] = col
             else:
                 raise ValueError('step1_method must be adf or df')
         reduced_cols: list[str] = []
-        for future in futures.as_completed(future_to_col):
-            col = future_to_col[future]
-            p_val = future.result()[1]
-            if not np.isnan(p_val):
-                if p_val >= step1_alpha:
-                    reduced_cols.append(col)
+        for is_unstationality in futures.as_completed(future_to_col):
+            col = future_to_col[is_unstationality]
+            if is_unstationality.result():
+                reduced_cols.append(col)
     return data_df[reduced_cols]
 
 
@@ -250,12 +282,13 @@ def sieve_clustering(reduced_df, services_list, max_workers):
 
 
 def run_tsifter(data_df, metrics_dimension, services_list, max_workers,
-                step1_method: str, step1_alpha: float, step1_regression: str, dist_threshold: float
+                step1_method: str, step1_alpha: float, step1_regression: str, step1_cv_threshold, dist_threshold: float
                 ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
-    reduced_by_st_df = tsifter_reduce_series(data_df, max_workers, step1_method, step1_alpha, step1_regression)
+    reduced_by_st_df = tsifter_reduce_series(
+        data_df, max_workers, step1_method, step1_alpha, step1_regression, step1_cv_threshold)
 
     time_adf = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(
@@ -373,6 +406,7 @@ def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs
             kwargs['tsifter_step1_method'],
             kwargs['tsifter_step1_alpha'],
             kwargs['tsifter_step1_regression'],
+            kwargs['tsifter_step1_cv_threshold'],
             kwargs['tsifter_clustering_threshold'],
         )
     elif method == SIEVE_METHOD:
@@ -407,6 +441,10 @@ def main():
                         type=float,
                         default=SIGNIFICANCE_LEVEL,
                         help='sigificance level for ADF test')
+    parser.add_argument("--tsifter-cv-threshold",
+                        type=float,
+                        default=0.05,
+                        help='CV threshold for tsifter')
     parser.add_argument("--tsifter-clustering-threshold",
                         type=float,
                         default=THRESHOLD_DIST,
@@ -420,6 +458,7 @@ def main():
         max_workers=args.max_workers,
         tsifter_step1_method='df',
         tsifter_step1_alpha=args.tsifter_adf_alpha,
+        tsifter_step1_cv_threshold=args.tsifter_cv_threshold,
         tsifter_clustering_threshold=args.tsifter_clustering_threshold,
     )
 

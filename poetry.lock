@@ -874,6 +874,18 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "pyhomogeneity"
+version = "1.1"
+description = "A python package for homogeneity test."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+numpy = "*"
+scipy = "*"
+
+[[package]]
 name = "pyjwt"
 version = "2.3.0"
 description = "JSON Web Token implementation in Python"
@@ -886,6 +898,18 @@ crypto = ["cryptography (>=3.3.1)"]
 dev = ["sphinx", "sphinx-rtd-theme", "zope.interface", "cryptography (>=3.3.1)", "pytest (>=6.0.0,<7.0.0)", "coverage[toml] (==5.0.4)", "mypy", "pre-commit"]
 docs = ["sphinx", "sphinx-rtd-theme", "zope.interface"]
 tests = ["pytest (>=6.0.0,<7.0.0)", "coverage[toml] (==5.0.4)"]
+
+[[package]]
+name = "pymannkendall"
+version = "1.4.2"
+description = "A python package for non-parametric Mann-Kendall family of trend tests."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+numpy = "*"
+scipy = "*"
 
 [[package]]
 name = "pyparsing"
@@ -1272,7 +1296,7 @@ test = ["websockets"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.10"
-content-hash = "a04d293b97ccb09e44fd781da814e56c5c2e1458714ac54e34d10685031fd147"
+content-hash = "ee0eb492570407cee4be28173fcfaacffecf3597b6fd863eabd191ff4c8249dc"
 
 [metadata.files]
 appnope = [
@@ -1945,9 +1969,17 @@ pygments = [
 pygraphviz = [
     {file = "pygraphviz-1.7.zip", hash = "sha256:a7bec6609f37cf1e64898c59f075afd659106cf9356c5f387cecaa2e0cdb2304"},
 ]
+pyhomogeneity = [
+    {file = "pyhomogeneity-1.1-py3-none-any.whl", hash = "sha256:837ebcae1f08f7094567265f9b14b27bda2c0857ffb5a65a0a3a2ee701856da2"},
+    {file = "pyhomogeneity-1.1.tar.gz", hash = "sha256:55bc59bcc591e7dd9fa04d081c8cd50be74106f349378d7bc97c2ebfd5fb65a1"},
+]
 pyjwt = [
     {file = "PyJWT-2.3.0-py3-none-any.whl", hash = "sha256:e0c4bb8d9f0af0c7f5b1ec4c5036309617d03d56932877f2f7a0beeb5318322f"},
     {file = "PyJWT-2.3.0.tar.gz", hash = "sha256:b888b4d56f06f6dcd777210c334e69c737be74755d3e5e9ee3fe67dc18a0ee41"},
+]
+pymannkendall = [
+    {file = "pymannkendall-1.4.2-py3-none-any.whl", hash = "sha256:feaed61fa55a62c59eb3e625eac520b85ce4f3da539fc73c076aa8644a8def70"},
+    {file = "pymannkendall-1.4.2.tar.gz", hash = "sha256:3daf310c11d993211fc3f971d7218da215c6dc99b6eb3e20884a534021df9919"},
 ]
 pyparsing = [
     {file = "pyparsing-3.0.4-py3-none-any.whl", hash = "sha256:c0a7dfcd26825bd4453574c4e7ad04aa095975ce54d04f738fe3a8350fbd223a"},

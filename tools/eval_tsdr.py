@@ -98,7 +98,7 @@ def log_plots_as_image(run: neptune.Run, record: DatasetRecord) -> None:
     # reset_index removes extra index texts from the generated figure.
     record.data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
     fig.suptitle(record.chaos_case_file())
-    run[f"dataset/figures/{record.chaos_case}"].log(neptune.types.File.as_image(fig))
+    run[f"dataset/figures/{record.chaos_case()}"].log(neptune.types.File.as_image(fig))
     plt.close(fig=fig)
 
 
@@ -124,6 +124,8 @@ def log_non_clustered_plots_as_image(run: neptune.Run,
     """ Upload non-clustered time series plots to neptune.ai """
 
     num_non_clustered_plots = len(non_clustered_reduced_df.columns)
+    if num_non_clustered_plots == 0:
+        return None
     fig, axes = plt.subplots(
         nrows=math.ceil(num_non_clustered_plots/6),
         ncols=6,
@@ -211,6 +213,7 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                 tsifter_step1_method=run['parameters']['step1_model'].fetch(),
                 tsifter_step1_alpha=run['parameters']['step1_alpha'].fetch(),
                 tsifter_step1_regression=run['parameters']['step1_regression'].fetch(),
+                tsifter_step1_cv_threshold=run['parameters']['step1_cv_threshold'].fetch(),
                 tsifter_clustering_threshold=run['parameters']['step2_dist_threshold'].fetch(),
             )
 
@@ -243,18 +246,16 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                 )
 
             logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
-            with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
-                for representative_metric, sub_metrics in clustering_info.items():
-                    executor.submit(log_clustering_plots_as_image,
-                                    run, representative_metric, sub_metrics, record)
-                    clustering_df = clustering_df.append(
-                        pd.Series(
-                            [
-                                chaos_type, chaos_comp, metrics_file,
-                                representative_metric, ','.join(sub_metrics),
-                            ], index=clustering_df.columns,
-                        ), ignore_index=True,
-                    )
+            for representative_metric, sub_metrics in clustering_info.items():
+                log_clustering_plots_as_image(run, representative_metric, sub_metrics, record)
+                clustering_df = clustering_df.append(
+                    pd.Series(
+                        [
+                            chaos_type, chaos_comp, metrics_file,
+                            representative_metric, ','.join(sub_metrics),
+                        ], index=clustering_df.columns,
+                    ), ignore_index=True,
+                )
 
             logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
             rep_metrics: list[str] = list(clustering_info.keys())
@@ -349,6 +350,10 @@ def main():
                         default='c',
                         choices=['c', 'ct', 'ctt', 'n'],
                         help='regression of ADF test paramater')
+    parser.add_argument('--step1-cv-threshold',
+                        type=float,
+                        default='0.05',
+                        help='CV threshold for step1')
     parser.add_argument('--dist-threshold',
                         type=float,
                         default=0.001,
@@ -371,8 +376,10 @@ def main():
         'step1_model': args.step1_method,
         'step1_alpha': args.step1_alpha,
         'step1_regression': args.step1_regression,
+        'step1_cv_threshold': args.step1_cv_threshold,
         'step2_dist_threshold': args.dist_threshold,
     }
+    run.wait()  # sync parameters for 'async' neptune mode
 
     eval_tsdr(run, args.metricsfiles)
 

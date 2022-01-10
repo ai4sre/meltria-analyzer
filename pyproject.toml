@@ -21,6 +21,8 @@ Jinja2 = "^3.0.1"
 ruptures = "^1.1.4"
 arch = "^5.0.1"
 neptune-client = "^0.13.1"
+pymannkendall = "^1.4.2"
+pyhomogeneity = "^1.1"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.9.2"
