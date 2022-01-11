@@ -5,12 +5,15 @@ import random
 import re
 import sys
 import time
+import warnings
 from concurrent import futures
 from datetime import datetime
 from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
+from arch.unitroot import PhillipsPerron
+from arch.utility.exceptions import InfeasibleTestException
 from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
@@ -189,8 +192,6 @@ def kshape_clustering(target_df, service_name, executor):
 
     return clustering_info, remove_list
 
-import pmdarima
-
 
 def is_unstational_series(series: np.ndarray,
                           alpha: float,
@@ -200,7 +201,16 @@ def is_unstational_series(series: np.ndarray,
                           autolag: str = None,
                           ) -> bool:
     # pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
-    if pmdarima.arima.PPTest(alpha=alpha).should_diff(series)[1]:
+    try:
+        pp = PhillipsPerron(series, trend='ct')
+        pvalue = pp.pvalue
+    except ValueError as e:
+        warnings.warn(str(e))
+        return False
+    except InfeasibleTestException as e:
+        warnings.warn(str(e))
+        return False
+    if pvalue >= alpha:
         # run df-test for differences of data_{n} and data{n-1} for liner trend series
         if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
             return True
