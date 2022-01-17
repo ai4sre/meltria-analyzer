@@ -8,7 +8,7 @@ import time
 import warnings
 from concurrent import futures
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -196,13 +196,13 @@ def kshape_clustering(target_df, service_name, executor):
 def is_unstational_series(series: np.ndarray,
                           alpha: float,
                           cv_threshold: float,
-                          regression: str = 'c',
+                          regression: Literal['n', 'c', 'ct'] = 'c',
                           maxlag: int = None,
                           autolag: str = None,
                           ) -> bool:
     # pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
     try:
-        pp = PhillipsPerron(series, trend='ct')
+        pp = PhillipsPerron(series, trend=regression)
         pvalue = pp.pvalue
     except ValueError as e:
         warnings.warn(str(e))
