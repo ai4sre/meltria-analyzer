@@ -22,6 +22,7 @@ from statsmodels.tsa.stattools import adfuller
 from tsdr.clustering.kshape import kshape
 from tsdr.clustering.metricsnamecluster import cluster_words
 from tsdr.clustering.sbd import sbd, silhouette_score
+from tsdr.outlierdetection.knn import KNNOutlierDetector
 from tsdr.util import util
 
 TSIFTER_METHOD = 'tsifter'
@@ -213,6 +214,10 @@ def is_unstational_series(series: np.ndarray,
     if pvalue >= alpha:
         # run df-test for differences of data_{n} and data{n-1} for liner trend series
         if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
+            return True
+    else:
+        knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
+        if knn.has_anomaly(series, 0.01):
             return True
     return False
 
