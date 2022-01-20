@@ -195,7 +195,9 @@ cases_for_stationality = [
 @pytest.mark.parametrize("case", cases_for_stationality)
 @pytest.mark.parametrize("alpha", [0.01])
 @pytest.mark.parametrize("cv_threshold", [0.1, 0.5])
+@pytest.mark.parametrize("knn_threshold", [0.01, 0.02])
 @pytest.mark.parametrize("regression", ['c', 'ct'])
-def test_is_unstational_series(case, alpha, cv_threshold, regression):
-    got = tsdr.is_unstational_series(np.array(case['datapoints']), alpha, cv_threshold, regression)
+def test_is_unstational_series(case, alpha, cv_threshold, knn_threshold, regression):
+    got = tsdr.is_unstational_series(
+        np.array(case['datapoints']), alpha, cv_threshold, knn_threshold, regression)
     assert got == case['is_unstationality'], f"{case['name']}: {case['desc']}"
