@@ -169,10 +169,10 @@ def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataF
     return df
 
 
-def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
+def eval_tsdr(run: neptune.Run, cfg: DictConfig):
     dataset: pd.DataFrame = load_dataset(
-        metrics_files,
-        run['parameters']['exclude_middleware_metrics'].fetch(),  # The type mismatch should be fixed
+        cfg.metrics_files,
+        cfg.exclude_middleware_metrics,
     )
     logger.info("Dataset loading complete")
 
@@ -212,12 +212,12 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                 data_df=data_df,
                 method=tsdr.TSIFTER_METHOD,
                 max_workers=cpu_count(),
-                tsifter_step1_method=run['parameters']['step1_model'].fetch(),
-                tsifter_step1_alpha=run['parameters']['step1_alpha'].fetch(),
-                tsifter_step1_regression=run['parameters']['step1_regression'].fetch(),
-                tsifter_step1_cv_threshold=run['parameters']['step1_cv_threshold'].fetch(),
-                tsifter_step1_knn_threshold=run['parameters']['step1_knn_threshold'].fetch(),
-                tsifter_clustering_threshold=run['parameters']['step2_dist_threshold'].fetch(),
+                tsifter_step1_method=cfg.step1.unit_root_model,
+                tsifter_step1_alpha=cfg.step1.unit_root_alpha,
+                tsifter_step1_regression=cfg.step1.unit_root_regression,
+                tsifter_step1_cv_threshold=cfg.step1.cv_threshold,
+                tsifter_step1_knn_threshold=cfg.step1.knn_threshold,
+                tsifter_clustering_threshold=cfg.step2.dist_threshold,
             )
 
             num_series_each_step: dict[str, float] = {
@@ -349,7 +349,7 @@ def main(cfg: DictConfig) -> None:
 
     logger.info(OmegaConf.to_yaml(cfg))
 
-    eval_tsdr(run, cfg.metrics_files)
+    eval_tsdr(run, cfg)
 
     run.stop()
 
