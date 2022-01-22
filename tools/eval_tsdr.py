@@ -212,12 +212,12 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 data_df=data_df,
                 method=tsdr.TSIFTER_METHOD,
                 max_workers=cpu_count(),
-                tsifter_step1_method=cfg.step1.unit_root_model,
-                tsifter_step1_alpha=cfg.step1.unit_root_alpha,
-                tsifter_step1_regression=cfg.step1.unit_root_regression,
+                tsifter_step1_unit_root_model=cfg.step1.unit_root_model,
+                tsifter_step1_unit_root_alpha=cfg.step1.unit_root_alpha,
+                tsifter_step1_unit_root_regression=cfg.step1.unit_root_regression,
                 tsifter_step1_cv_threshold=cfg.step1.cv_threshold,
                 tsifter_step1_knn_threshold=cfg.step1.knn_threshold,
-                tsifter_clustering_threshold=cfg.step2.dist_threshold,
+                tsifter_step2_clustering_threshold=cfg.step2.dist_threshold,
             )
 
             num_series_each_step: dict[str, float] = {
