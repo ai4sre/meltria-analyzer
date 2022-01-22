@@ -10,12 +10,14 @@ from concurrent import futures
 from multiprocessing import cpu_count
 from typing import Optional
 
+import hydra
 import matplotlib.pyplot as plt
 import neptune.new as neptune
 import numpy as np
 import pandas as pd
 from lib.metrics import check_tsdr_ground_truth_by_route
 from neptune.new.integrations.python_logger import NeptuneHandler
+from omegaconf import DictConfig, OmegaConf
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
 
@@ -324,70 +326,28 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
     logger.info(clustering_df.head())
 
 
-def main():
+@hydra.main(config_path='../conf/tsdr', config_name='config')
+def main(cfg: DictConfig) -> None:
     logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("metricsfiles",
-                        nargs='+',
-                        help="metrics output JSON file")
-    parser.add_argument("--dataset-id",
-                        type=str,
-                        help='dataset id like "b2qdj"')
-    parser.add_argument("--exclude-middleware-metrics",
-                        action='store_true',
-                        help='a flag for excluding middleware metrics')
-    parser.add_argument('--step1-method',
-                        default='df',
-                        choices=STEP1_METHODS,
-                        help='step1 method')
-    parser.add_argument('--step1-alpha',
-                        type=float,
-                        default=0.01,
-                        help='sigificance levels for step1 test')
-    parser.add_argument('--step1-regression',
-                        type=str,
-                        # https://www.statsmodels.org/dev/generated/statsmodels.tsa.stattools.adfuller.html
-                        default='c',
-                        choices=['c', 'ct', 'ctt', 'n'],
-                        help='regression of ADF test paramater')
-    parser.add_argument('--step1-cv-threshold',
-                        type=float,
-                        default='0.05',
-                        help='CV threshold for step1')
-    parser.add_argument('--step1-knn-threshold',
-                        type=float,
-                        default=0.01,
-                        help='distance thresholds')
-    parser.add_argument('--dist-threshold',
-                        type=float,
-                        default=0.001,
-                        help='distance thresholds')
-    parser.add_argument('--out', help='output file path')
-    parser.add_argument('--neptune-mode',
-                        choices=['async', 'offline', 'debug'],
-                        default='async',
-                        help='specify neptune mode')
-    args = parser.parse_args()
-
     # Setup neptune.ai client
-    run: neptune.Run = neptune.init(mode=args.neptune_mode)
+    run: neptune.Run = neptune.init(mode=cfg.neptune.mode)
     npt_handler = NeptuneHandler(run=run)
     logger.addHandler(npt_handler)
-    run['dataset/id'] = args.dataset_id
-    run['dataset/num_metrics_files'] = len(args.metricsfiles)
+    run['dataset/id'] = cfg.dataset_id
+    run['dataset/num_metrics_files'] = len(cfg.metrics_files)
     run['parameters'] = {
-        'exclude_middleware_metrics': args.exclude_middleware_metrics,
-        'step1_model': args.step1_method,
-        'step1_alpha': args.step1_alpha,
-        'step1_regression': args.step1_regression,
-        'step1_cv_threshold': args.step1_cv_threshold,
-        'step1_knn_threshold': args.step1_knn_threshold,
-        'step2_dist_threshold': args.dist_threshold,
+        'exclude_middleware_metrics': cfg.exclude_middleware_metrics,
+        'step1_model': cfg.step1.unit_root_model,
+        'step1_alpha': cfg.step1.unit_root_alpha,
+        'step1_regression': cfg.step1.unit_root_regression,
+        'step1_cv_threshold': cfg.step1.cv_threshold,
+        'step1_knn_threshold': cfg.step1.knn_threshold,
+        'step2_dist_threshold': cfg.step2.dist_threshold,
     }
     run.wait()  # sync parameters for 'async' neptune mode
 
-    eval_tsdr(run, args.metricsfiles)
+    eval_tsdr(run, cfg.metrics_files)
 
     run.stop()
 
