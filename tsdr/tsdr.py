@@ -223,36 +223,35 @@ def is_unstational_series(series: np.ndarray,
     return False
 
 
-def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
-                          step1_method: str, step1_alpha: float,
-                          step1_regression: str, cv_threshold: float,
-                          knn_threshold: float,
-                          ) -> pd.DataFrame:
+def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int, **kwargs) -> pd.DataFrame:
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_col = {}
         for col in data_df.columns:
             series: np.ndarray = data_df[col].to_numpy()
             if series.sum() == 0. or len(np.unique(series)) == 1 or np.isnan(series.sum()):
                 continue
-            if step1_method == 'adf':
+            if kwargs['tsifter_step1_unit_root_model'] == 'adf':
                 future = executor.submit(
                     is_unstational_series, series,
-                    alpha=step1_alpha,
-                    regression=step1_regression,
-                    cv_threshold=cv_threshold,
-                    knn_threshold=knn_threshold,
+                    alpha=kwargs['tsifter_step1_unit_root_alpha'],
+                    regression=kwargs['tsifter_step1_unit_root_regression'],
+                    cv_threshold=kwargs['tsifter_step1_cv_threshold'],
+                    knn_threshold=kwargs['tsifter_step1_knn_threshold'],
                 )
                 future_to_col[future] = col
-            elif step1_method == 'df':
+            elif kwargs['tsifter_step1_unit_root_model'] == 'df':
                 future = executor.submit(
                     is_unstational_series,
-                    series, alpha=step1_alpha, regression=step1_regression, maxlag=1, autolag=None,
-                    cv_threshold=cv_threshold,
-                    knn_threshold=knn_threshold,
+                    series,
+                    alpha=kwargs['tsifter_step1_unit_root_alpha'],
+                    regression=kwargs['tsifter_step1_unit_root_regression'],
+                    maxlag=1, autolag=None,
+                    cv_threshold=kwargs['tsifter_step1_cv_threshold'],
+                    knn_threshold=kwargs['tsifter_step1_knn_threshold'],
                 )
                 future_to_col[future] = col
             else:
-                raise ValueError('step1_method must be adf or df')
+                raise ValueError('step1_model must be adf or df')
         reduced_cols: list[str] = []
         for is_unstationality in futures.as_completed(future_to_col):
             col = future_to_col[is_unstationality]
@@ -302,14 +301,15 @@ def sieve_clustering(reduced_df, services_list, max_workers):
     return reduced_df, clustering_info
 
 
-def run_tsifter(data_df, metrics_dimension, services_list, max_workers,
-                step1_method: str, step1_alpha: float, step1_regression: str, step1_cv_threshold, step1_knn_threshold: float, dist_threshold: float
+def run_tsifter(data_df: pd.DataFrame,
+                metrics_dimension: dict[str, Any],
+                services_list: dict[str, Any],
+                max_workers: int, **kwargs,
                 ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
-    reduced_by_st_df = tsifter_reduce_series(
-        data_df, max_workers, step1_method, step1_alpha, step1_regression, step1_cv_threshold, step1_knn_threshold)
+    reduced_by_st_df = tsifter_reduce_series(data_df, max_workers, **kwargs)
 
     time_adf = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(
@@ -320,7 +320,9 @@ def run_tsifter(data_df, metrics_dimension, services_list, max_workers,
     start = time.time()
 
     reduced_df, clustering_info = tsifter_clustering(
-        reduced_by_st_df.copy(), services_list, max_workers, dist_threshold)
+        reduced_by_st_df.copy(), services_list, max_workers,
+        kwargs['tsifter_step2_clustering_threshold'],
+    )
 
     time_clustering = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(metrics_dimension, reduced_df, 2)
@@ -417,20 +419,12 @@ def aggregate_dimension(data_df):
     return metrics_dimension
 
 
-def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs
+def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs,
              ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     services = prepare_services_list(data_df)
     metrics_dimension = aggregate_dimension(data_df)
     if method == TSIFTER_METHOD:
-        return run_tsifter(
-            data_df, metrics_dimension, services, max_workers,
-            kwargs['tsifter_step1_method'],
-            kwargs['tsifter_step1_alpha'],
-            kwargs['tsifter_step1_regression'],
-            kwargs['tsifter_step1_cv_threshold'],
-            kwargs['tsifter_step1_knn_threshold'],
-            kwargs['tsifter_clustering_threshold'],
-        )
+        return run_tsifter(data_df, metrics_dimension, services, max_workers, **kwargs)
     elif method == SIEVE_METHOD:
         return run_sieve(data_df, metrics_dimension, services, max_workers)
     return {}, {}, {}, {}
@@ -478,11 +472,11 @@ def main():
         data_df=data_df,
         method=args.method,
         max_workers=args.max_workers,
-        tsifter_step1_method='df',
-        tsifter_step1_alpha=args.tsifter_adf_alpha,
+        tsifter_step1_unit_root_model='df',
+        tsifter_step1_unit_root_alpha=args.tsifter_adf_alpha,
         tsifter_step1_cv_threshold=args.tsifter_cv_threshold,
         tsifter_step1_knn_threshold=args.tsifter_knn_threshold,
-        tsifter_clustering_threshold=args.tsifter_clustering_threshold,
+        tsifter_step2_clustering_threshold=args.tsifter_clustering_threshold,
     )
 
     reduced_df = reduced_df_by_step['step2']  # final result
