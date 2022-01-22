@@ -214,6 +214,7 @@ def eval_tsdr(run: neptune.Run, metrics_files: list[str]):
                 tsifter_step1_alpha=run['parameters']['step1_alpha'].fetch(),
                 tsifter_step1_regression=run['parameters']['step1_regression'].fetch(),
                 tsifter_step1_cv_threshold=run['parameters']['step1_cv_threshold'].fetch(),
+                tsifter_step1_knn_threshold=run['parameters']['step1_knn_threshold'].fetch(),
                 tsifter_clustering_threshold=run['parameters']['step2_dist_threshold'].fetch(),
             )
 
@@ -354,6 +355,10 @@ def main():
                         type=float,
                         default='0.05',
                         help='CV threshold for step1')
+    parser.add_argument('--step1-knn-threshold',
+                        type=float,
+                        default=0.01,
+                        help='distance thresholds')
     parser.add_argument('--dist-threshold',
                         type=float,
                         default=0.001,
@@ -377,6 +382,7 @@ def main():
         'step1_alpha': args.step1_alpha,
         'step1_regression': args.step1_regression,
         'step1_cv_threshold': args.step1_cv_threshold,
+        'step1_knn_threshold': args.step1_knn_threshold,
         'step2_dist_threshold': args.dist_threshold,
     }
     run.wait()  # sync parameters for 'async' neptune mode

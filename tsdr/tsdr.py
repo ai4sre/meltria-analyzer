@@ -197,6 +197,7 @@ def kshape_clustering(target_df, service_name, executor):
 def is_unstational_series(series: np.ndarray,
                           alpha: float,
                           cv_threshold: float,
+                          knn_threshold: float,
                           regression: Literal['n', 'c', 'ct'] = 'c',
                           maxlag: int = None,
                           autolag: str = None,
@@ -217,7 +218,7 @@ def is_unstational_series(series: np.ndarray,
             return True
     else:
         knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
-        if knn.has_anomaly(series, 0.01):
+        if knn.has_anomaly(series, knn_threshold):
             return True
     return False
 
@@ -225,6 +226,7 @@ def is_unstational_series(series: np.ndarray,
 def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
                           step1_method: str, step1_alpha: float,
                           step1_regression: str, cv_threshold: float,
+                          knn_threshold: float,
                           ) -> pd.DataFrame:
     with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_col = {}
@@ -234,8 +236,11 @@ def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
                 continue
             if step1_method == 'adf':
                 future = executor.submit(
-                    is_unstational_series, series, alpha=step1_alpha, regression=step1_regression,
+                    is_unstational_series, series,
+                    alpha=step1_alpha,
+                    regression=step1_regression,
                     cv_threshold=cv_threshold,
+                    knn_threshold=knn_threshold,
                 )
                 future_to_col[future] = col
             elif step1_method == 'df':
@@ -243,6 +248,7 @@ def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int,
                     is_unstational_series,
                     series, alpha=step1_alpha, regression=step1_regression, maxlag=1, autolag=None,
                     cv_threshold=cv_threshold,
+                    knn_threshold=knn_threshold,
                 )
                 future_to_col[future] = col
             else:
@@ -297,13 +303,13 @@ def sieve_clustering(reduced_df, services_list, max_workers):
 
 
 def run_tsifter(data_df, metrics_dimension, services_list, max_workers,
-                step1_method: str, step1_alpha: float, step1_regression: str, step1_cv_threshold, dist_threshold: float
+                step1_method: str, step1_alpha: float, step1_regression: str, step1_cv_threshold, step1_knn_threshold: float, dist_threshold: float
                 ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
     reduced_by_st_df = tsifter_reduce_series(
-        data_df, max_workers, step1_method, step1_alpha, step1_regression, step1_cv_threshold)
+        data_df, max_workers, step1_method, step1_alpha, step1_regression, step1_cv_threshold, step1_knn_threshold)
 
     time_adf = round(time.time() - start, 2)
     metrics_dimension = util.count_metrics(
@@ -422,6 +428,7 @@ def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs
             kwargs['tsifter_step1_alpha'],
             kwargs['tsifter_step1_regression'],
             kwargs['tsifter_step1_cv_threshold'],
+            kwargs['tsifter_step1_knn_threshold'],
             kwargs['tsifter_clustering_threshold'],
         )
     elif method == SIEVE_METHOD:
@@ -474,6 +481,7 @@ def main():
         tsifter_step1_method='df',
         tsifter_step1_alpha=args.tsifter_adf_alpha,
         tsifter_step1_cv_threshold=args.tsifter_cv_threshold,
+        tsifter_step1_knn_threshold=args.tsifter_knn_threshold,
         tsifter_clustering_threshold=args.tsifter_clustering_threshold,
     )
 
