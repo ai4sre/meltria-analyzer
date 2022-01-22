@@ -347,6 +347,8 @@ def main(cfg: DictConfig) -> None:
     }
     run.wait()  # sync parameters for 'async' neptune mode
 
+    logger.info(OmegaConf.to_yaml(cfg))
+
     eval_tsdr(run, cfg.metrics_files)
 
     run.stop()
