@@ -209,7 +209,6 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
             reducer = tsdr.Tsdr(
-                tsifter_step1_unit_root_model=cfg.step1.unit_root_model,
                 tsifter_step1_unit_root_alpha=cfg.step1.unit_root_alpha,
                 tsifter_step1_unit_root_regression=cfg.step1.unit_root_regression,
                 tsifter_step1_cv_threshold=cfg.step1.cv_threshold,

@@ -1,4 +1,3 @@
-unit_root_model: df
 unit_root_alpha: 0.01
 unit_root_regression: ct
 cv_threshold: 0.05

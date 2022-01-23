@@ -458,7 +458,6 @@ def main():
         data_df=data_df,
         method=args.method,
         max_workers=args.max_workers,
-        tsifter_step1_unit_root_model='df',
         tsifter_step1_unit_root_alpha=args.tsifter_adf_alpha,
         tsifter_step1_cv_threshold=args.tsifter_cv_threshold,
         tsifter_step1_knn_threshold=args.tsifter_knn_threshold,
