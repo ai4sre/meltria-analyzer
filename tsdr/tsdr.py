@@ -411,8 +411,8 @@ def prepare_services_list(data_df: pd.DataFrame) -> list[str]:
     return services_list
 
 
-def aggregate_dimension(data_df):
-    metrics_dimension = {}
+def aggregate_dimension(data_df: pd.DataFrame) -> dict[str, Any]:
+    metrics_dimension: dict[str, Any] = {}
     for target in TARGET_DATA:
         metrics_dimension[target] = {}
     metrics_dimension = util.count_metrics(metrics_dimension, data_df, 0)
@@ -423,7 +423,7 @@ def aggregate_dimension(data_df):
 def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs,
              ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     services: list[str] = prepare_services_list(data_df)
-    metrics_dimension = aggregate_dimension(data_df)
+    metrics_dimension: dict[str, Any] = aggregate_dimension(data_df)
     if method == TSIFTER_METHOD:
         return run_tsifter(data_df, metrics_dimension, services, max_workers, **kwargs)
     elif method == SIEVE_METHOD:
