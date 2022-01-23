@@ -303,7 +303,7 @@ def sieve_clustering(reduced_df, services_list, max_workers):
 
 def run_tsifter(data_df: pd.DataFrame,
                 metrics_dimension: dict[str, Any],
-                services_list: dict[str, Any],
+                services_list: list[str],
                 max_workers: int, **kwargs,
                 ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
@@ -399,14 +399,15 @@ def read_metrics_json(data_file: str,
     return data_df, raw_json['mappings'], raw_json['meta']
 
 
-def prepare_services_list(data_df):
+def prepare_services_list(data_df: pd.DataFrame) -> list[str]:
     # Prepare list of services
-    services_list = []
+    services_list: list[str] = []
     for col in data_df.columns:
-        if re.match("^s-", col):
-            service_name = col.split("_")[0].replace("s-", "")
-            if service_name not in services_list:
-                services_list.append(service_name)
+        if not col.startswith('s-'):
+            continue
+        service_name = col.split("_")[0].replace("s-", "")
+        if service_name not in services_list:
+            services_list.append(service_name)
     return services_list
 
 
@@ -421,7 +422,7 @@ def aggregate_dimension(data_df):
 
 def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs,
              ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
-    services = prepare_services_list(data_df)
+    services: list[str] = prepare_services_list(data_df)
     metrics_dimension = aggregate_dimension(data_df)
     if method == TSIFTER_METHOD:
         return run_tsifter(data_df, metrics_dimension, services, max_workers, **kwargs)
