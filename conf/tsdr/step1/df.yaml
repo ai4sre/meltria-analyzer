@@ -1,4 +1,7 @@
+unit_root_model: pp
 unit_root_alpha: 0.01
 unit_root_regression: ct
+post_cv: true
 cv_threshold: 0.05
+post_knn: true
 knn_threshold: 0.01

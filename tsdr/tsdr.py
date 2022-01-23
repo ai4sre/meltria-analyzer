@@ -8,7 +8,7 @@ import time
 import warnings
 from concurrent import futures
 from datetime import datetime
-from typing import Any, Callable, Protocol
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -37,26 +37,34 @@ TARGET_DATA = {"containers": "all",
                "middlewares": "all"}
 
 
-def is_unstational_series(series: np.ndarray, **kwargs: Any) -> bool:
-    # pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
-    try:
-        pp = PhillipsPerron(series, trend=kwargs['tsifter_step1_unit_root_regression'])
-        pvalue = pp.pvalue
-    except ValueError as e:
-        warnings.warn(str(e))
-        return False
-    except InfeasibleTestException as e:
-        warnings.warn(str(e))
-        return False
-    if pvalue >= kwargs['tsifter_step1_unit_root_alpha']:
-        # run df-test for differences of data_{n} and data{n-1} for liner trend series
-        cv_threshold = kwargs['tsifter_step1_cv_threshold']
-        if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
-            return True
+def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
+    regression: str = kwargs.get('tsifter_step1_unit_root_regression', 'c')
+    maxlag: int = kwargs.get('tsifter_step1_unit_root_max_lags', None)
+    autolag = kwargs.get('tsifter_step1_unit_root_autolag', None)
+    pvalue = 0.0
+    if kwargs['tsifter_step1_unit_root_model'] == 'adf':
+        pvalue = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
+    elif kwargs['tsifter_step1_unit_root_model'] == 'pp':
+        try:
+            pp = PhillipsPerron(series, trend=regression, lags=maxlag)
+            pvalue = pp.pvalue
+        except ValueError as e:
+            warnings.warn(str(e))
+            return False
+        except InfeasibleTestException as e:
+            warnings.warn(str(e))
+            return False
+    if pvalue >= kwargs.get('tsifter_step1_unit_root_alpha', 0.01):
+        if kwargs.get('tsifter_step1_post_cv', False):
+            # run df-test for differences of data_{n} and data{n-1} for liner trend series
+            cv_threshold = kwargs['tsifter_step1_cv_threshold']
+            if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
+                return True
     else:
-        knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
-        if knn.has_anomaly(series, kwargs['tsifter_step1_knn_threshold']):
-            return True
+        if kwargs.get('tsifter_step1_post_knn', False):
+            knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
+            if knn.has_anomaly(series, kwargs.get('tsifter_step1_knn_threshold', 0.01)):
+                return True
     return False
 
 
@@ -66,7 +74,7 @@ class Tsdr:
 
     def __init__(
         self,
-        univariate_series_model: Callable[[np.ndarray, Any], bool] = is_unstational_series,
+        univariate_series_model: Callable[[np.ndarray, Any], bool] = unit_root_based_model,
         **kwargs
     ) -> None:
         self.univariate_series_model = univariate_series_model
