@@ -8,7 +8,7 @@ import time
 import warnings
 from concurrent import futures
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Callable, Protocol
 
 import numpy as np
 import pandas as pd
@@ -37,10 +37,39 @@ TARGET_DATA = {"containers": "all",
                "middlewares": "all"}
 
 
+def is_unstational_series(series: np.ndarray, **kwargs: Any) -> bool:
+    # pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
+    try:
+        pp = PhillipsPerron(series, trend=kwargs['tsifter_step1_unit_root_regression'])
+        pvalue = pp.pvalue
+    except ValueError as e:
+        warnings.warn(str(e))
+        return False
+    except InfeasibleTestException as e:
+        warnings.warn(str(e))
+        return False
+    if pvalue >= kwargs['tsifter_step1_unit_root_alpha']:
+        # run df-test for differences of data_{n} and data{n-1} for liner trend series
+        cv_threshold = kwargs['tsifter_step1_cv_threshold']
+        if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
+            return True
+    else:
+        knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
+        if knn.has_anomaly(series, kwargs['tsifter_step1_knn_threshold']):
+            return True
+    return False
+
+
 class Tsdr:
+    univariate_series_model: Callable[[np.ndarray, Any], bool]
     params: dict[str, Any]
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self,
+        univariate_series_model: Callable[[np.ndarray, Any], bool] = is_unstational_series,
+        **kwargs
+    ) -> None:
+        self.univariate_series_model = univariate_series_model
         self.params = kwargs
 
     def run(self, series: pd.DataFrame, max_workers: int
@@ -80,28 +109,8 @@ class Tsdr:
                 series: np.ndarray = useries[col].to_numpy()
                 if series.sum() == 0. or len(np.unique(series)) == 1 or np.isnan(series.sum()):
                     continue
-                if self.params['tsifter_step1_unit_root_model'] == 'adf':
-                    future = executor.submit(
-                        is_unstational_series, series,
-                        alpha=self.params['tsifter_step1_unit_root_alpha'],
-                        regression=self.params['tsifter_step1_unit_root_regression'],
-                        cv_threshold=self.params['tsifter_step1_cv_threshold'],
-                        knn_threshold=self.params['tsifter_step1_knn_threshold'],
-                    )
-                    future_to_col[future] = col
-                elif self.params['tsifter_step1_unit_root_model'] == 'df':
-                    future = executor.submit(
-                        is_unstational_series,
-                        series,
-                        alpha=self.params['tsifter_step1_unit_root_alpha'],
-                        regression=self.params['tsifter_step1_unit_root_regression'],
-                        maxlag=1, autolag=None,
-                        cv_threshold=self.params['tsifter_step1_cv_threshold'],
-                        knn_threshold=self.params['tsifter_step1_knn_threshold'],
-                    )
-                    future_to_col[future] = col
-                else:
-                    raise ValueError('step1_unit_root_model must be adf or df')
+                future = executor.submit(self.univariate_series_model, series, **self.params)
+                future_to_col[future] = col
             reduced_cols: list[str] = []
             for is_unstationality in futures.as_completed(future_to_col):
                 col = future_to_col[is_unstationality]
@@ -286,36 +295,9 @@ def kshape_clustering(target_df, service_name, executor):
     return clustering_info, remove_list
 
 
-def is_unstational_series(series: np.ndarray,
-                          alpha: float,
-                          cv_threshold: float,
-                          knn_threshold: float,
-                          regression: Literal['n', 'c', 'ct'] = 'c',
-                          maxlag: int = None,
-                          autolag: str = None,
-                          ) -> bool:
-    # pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
-    try:
-        pp = PhillipsPerron(series, trend=regression)
-        pvalue = pp.pvalue
-    except ValueError as e:
-        warnings.warn(str(e))
-        return False
-    except InfeasibleTestException as e:
-        warnings.warn(str(e))
-        return False
-    if pvalue >= alpha:
-        # run df-test for differences of data_{n} and data{n-1} for liner trend series
-        if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
-            return True
-    else:
-        knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
-        if knn.has_anomaly(series, knn_threshold):
-            return True
-    return False
-
 def sieve_reduce_series(data_df):
     return reduce_series_with_cv(data_df)
+
 
 def sieve_clustering(reduced_df, services_list, max_workers):
     clustering_info = {}
