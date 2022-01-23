@@ -57,9 +57,9 @@ def jaro_distance(ying, yang):
     return weight
 
 
-def cluster_words(words, service_name, size):
+def cluster_words(words: list[str], service_name: str, size: int) -> np.ndarray:
     stopwords = ["GET", "POST", "total", "http-requests", service_name, "-", "_"]
-    cleaned_words = []
+    cleaned_words: list[str] = []
     for word in words:
         for stopword in stopwords:
             word = word.replace(stopword, "")

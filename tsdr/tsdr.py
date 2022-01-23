@@ -213,8 +213,8 @@ def hierarchical_clustering(target_df, dist_func, dist_threshold: float):
     return clustering_info, remove_list
 
 
-def create_clusters(data, columns, service_name, n):
-    words_list = [col[2:] for col in columns]
+def create_clusters(data: pd.DataFrame, columns: list[str], service_name: str, n: int):
+    words_list: list[str] = [col[2:] for col in columns]
     init_labels = cluster_words(words_list, service_name, n)
     results = kshape(data, n, initial_clustering=init_labels)
     label = [0] * data.shape[0]
@@ -232,14 +232,17 @@ def create_clusters(data, columns, service_name, n):
     return (label, silhouette_score(data, label), cluster_center)
 
 
-def select_representative_metric(data, cluster_metrics, columns, centroid):
-    clustering_info = {}
-    remove_list = []
+def select_representative_metric(
+    data: pd.DataFrame,
+    cluster_metrics: list[str], columns: dict[str, Any], centroid: int,
+) -> tuple[dict[str, Any], list[str]]:
+    clustering_info: dict[str, Any] = {}
+    remove_list: list[str] = []
     if len(cluster_metrics) == 1:
-        return None, None
+        return clustering_info, remove_list
     if len(cluster_metrics) == 2:
         # Select the representative metric at random
-        shuffle_list = random.sample(cluster_metrics, len(cluster_metrics))
+        shuffle_list: list[str] = random.sample(cluster_metrics, len(cluster_metrics))
         clustering_info[columns[shuffle_list[0]]] = [columns[shuffle_list[1]]]
         remove_list.append(columns[shuffle_list[1]])
     elif len(cluster_metrics) > 2:
@@ -254,17 +257,20 @@ def select_representative_metric(data, cluster_metrics, columns, centroid):
                 remove_list.append(columns[r])
                 clustering_info[columns[representative_metric]].append(
                     columns[r])
-    return (clustering_info, remove_list)
+    return clustering_info, remove_list
 
 
-def kshape_clustering(target_df, service_name, executor):
+def kshape_clustering(
+    target_df: pd.DataFrame, service_name: str, executor,
+) -> tuple[dict[str, Any], list[str]]:
     future_list = []
 
-    data = util.z_normalization(target_df.values.T)
+    data: np.ndarray = util.z_normalization(target_df.values.T)
     for n in np.arange(2, data.shape[0]):
         future_list.append(
-            executor.submit(create_clusters, data,
-                            target_df.columns, service_name, n)
+            executor.submit(
+                create_clusters, data, target_df.columns, service_name, n,
+            )
         )
     labels, scores, centroids = [], [], []
     for future in futures.as_completed(future_list):
@@ -324,8 +330,12 @@ def sieve_clustering(reduced_df, services_list, max_workers):
     return reduced_df, clustering_info
 
 
-def run_sieve(data_df, metrics_dimension, services_list, max_workers
-              ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
+def run_sieve(
+    data_df: pd.DataFrame,
+    metrics_dimension: dict[str, Any],
+    services_list: list[str],
+    max_workers: int,
+) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 

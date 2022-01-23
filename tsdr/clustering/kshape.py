@@ -2,21 +2,20 @@
 # Ref: https://github.com/sieve-microservices/scalegraph-scripts/blob/master/kshape.py
 
 import math
+
 import numpy as np
-
-from numpy.random import randint, seed
-from numpy.linalg import norm, eigh
-from numpy.linalg import norm
 from numpy.fft import fft, ifft
+from numpy.linalg import eigh, norm
+from numpy.random import randint, seed
 
 
-def zscore(a, axis=0, ddof=0):
+def zscore(a: np.ndarray, axis: int = 0, ddof: int = 0) -> np.ndarray:
     a = np.asanyarray(a)
     mns = a.mean(axis=axis)
     sstd = a.std(axis=axis, ddof=ddof)
     if axis and mns.ndim < a.ndim:
         res = (((a - np.expand_dims(mns, axis=axis)) /
-                np.expand_dims(sstd,axis=axis)))
+                np.expand_dims(sstd, axis=axis)))
     else:
         res = (a - mns) / sstd
     return np.nan_to_num(res)
@@ -24,7 +23,8 @@ def zscore(a, axis=0, ddof=0):
 
 def roll_zeropad(a, shift, axis=None):
     a = np.asanyarray(a)
-    if shift == 0: return a
+    if shift == 0:
+        return a
     if axis is None:
         n = a.size
         reshape = True
@@ -45,6 +45,7 @@ def roll_zeropad(a, shift, axis=None):
     else:
         return res
 
+
 def _ncc_c(x, y):
     """
     >>> _ncc_c([1,2,3,4], [1,2,3,4])
@@ -59,13 +60,15 @@ def _ncc_c(x, y):
     den[den == 0] = np.Inf
 
     x_len = len(x)
-    fft_size = 1<<(2*x_len-1).bit_length()
+    fft_size = 1 << (2*x_len-1).bit_length()
     cc = ifft(fft(x, fft_size) * np.conj(fft(y, fft_size)))
     cc = np.concatenate((cc[-(x_len-1):], cc[:x_len]))
     return np.real(cc) / den
 
+
 def lag(x, y):
     return ((_ncc_c(x, y).argmax() + 1) - max(len(x), len(y))) * -1
+
 
 def _sbd(x, y):
     """
@@ -108,7 +111,7 @@ def _extract_shape(idx, x, j, cur_center):
     if len(a) == 0:
         return np.zeros((1, x.shape[1]))
     columns = a.shape[1]
-    y = zscore(a,axis=1,ddof=1)
+    y = zscore(a, axis=1, ddof=1)
     s = np.dot(y.transpose(), y)
 
     p = np.empty((columns, columns))
@@ -118,7 +121,7 @@ def _extract_shape(idx, x, j, cur_center):
     # these are the 2 most expensive operations
     m = np.dot(np.dot(p, s), p)
     _, vec = eigh(m)
-    centroid = vec[:,-1]
+    centroid = vec[:, -1]
     finddistance1 = math.sqrt(((a[0] - centroid) ** 2).sum())
     finddistance2 = math.sqrt(((a[0] + centroid) ** 2).sum())
 
@@ -158,6 +161,7 @@ def _kshape(x, k, initial_clustering=None):
 
     return idx, centroids
 
+
 def kshape(x, k, initial_clustering=None):
     idx, centroids = _kshape(np.array(x), k, initial_clustering)
     clusters = []
@@ -168,6 +172,7 @@ def kshape(x, k, initial_clustering=None):
                 series.append(j)
         clusters.append((centroid, series))
     return clusters
+
 
 if __name__ == "__main__":
     import doctest
