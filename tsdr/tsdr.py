@@ -160,7 +160,7 @@ def has_variation(x: np.ndarray, cv_threshold) -> bool:
     return cv > cv_threshold
 
 
-def reduce_series_with_cv(data_df, cv_threshold=0.002):
+def reduce_series_with_cv(data_df: pd.DataFrame, cv_threshold: float = 0.002):
     reduced_by_cv_df = pd.DataFrame()
     for col in data_df.columns:
         data = data_df[col].values
@@ -169,20 +169,23 @@ def reduce_series_with_cv(data_df, cv_threshold=0.002):
     return reduced_by_cv_df
 
 
-def hierarchical_clustering(target_df, dist_func, dist_threshold: float):
+def hierarchical_clustering(
+    target_df: pd.DataFrame, dist_func, dist_threshold: float,
+) -> tuple[dict[str, Any], list[str]]:
     series = target_df.values.T
-    norm_series = util.z_normalization(series)
+    norm_series: np.ndarray = util.z_normalization(series)
     dist = pdist(norm_series, metric=dist_func)
     # distance_list.extend(dist)
-    dist_matrix = squareform(dist)
-    z = linkage(dist, method="single", metric=dist_func)
-    labels = fcluster(z, t=dist_threshold, criterion="distance")
-    cluster_dict = {}
+    dist_matrix: np.ndarray = squareform(dist)
+    z: np.ndarray = linkage(dist, method="single", metric=dist_func)
+    labels: np.ndarray = fcluster(z, t=dist_threshold, criterion="distance")
+    cluster_dict: dict[str, list[int]] = {}
     for i, v in enumerate(labels):
-        if v not in cluster_dict:
-            cluster_dict[v] = [i]
-        else:
+        if v in cluster_dict:
             cluster_dict[v].append(i)
+        else:
+            cluster_dict[v] = [i]
+
     clustering_info, remove_list = {}, []
     for c in cluster_dict:
         cluster_metrics = cluster_dict[c]
@@ -200,16 +203,18 @@ def hierarchical_clustering(target_df, dist_func, dist_threshold: float):
             for met1 in cluster_metrics:
                 dist_sum = 0
                 for met2 in cluster_metrics:
-                    if met1 != met2:
-                        dist_sum += dist_matrix[met1][met2]
+                    if met1 == met2:
+                        continue
+                    dist_sum += dist_matrix[met1][met2]
                 distances.append(dist_sum)
             medoid = cluster_metrics[np.argmin(distances)]
             clustering_info[target_df.columns[medoid]] = []
             for r in cluster_metrics:
-                if r != medoid:
-                    remove_list.append(target_df.columns[r])
-                    clustering_info[target_df.columns[medoid]].append(
-                        target_df.columns[r])
+                if r == medoid:
+                    continue
+                remove_list.append(target_df.columns[r])
+                clustering_info[target_df.columns[medoid]].append(
+                    target_df.columns[r])
     return clustering_info, remove_list
 
 
@@ -253,10 +258,11 @@ def select_representative_metric(
         representative_metric = cluster_metrics[np.argmin(distances)]
         clustering_info[columns[representative_metric]] = []
         for r in cluster_metrics:
-            if r != representative_metric:
-                remove_list.append(columns[r])
-                clustering_info[columns[representative_metric]].append(
-                    columns[r])
+            if r == representative_metric:
+                continue
+            remove_list.append(columns[r])
+            clustering_info[columns[representative_metric]].append(
+                columns[r])
     return clustering_info, remove_list
 
 
