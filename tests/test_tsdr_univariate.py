@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from tsdr import tsdr
 
 cases_for_stationality = [
@@ -197,7 +198,15 @@ cases_for_stationality = [
 @pytest.mark.parametrize("cv_threshold", [0.1, 0.5])
 @pytest.mark.parametrize("knn_threshold", [0.01, 0.02])
 @pytest.mark.parametrize("regression", ['c', 'ct'])
-def test_is_unstational_series(case, alpha, cv_threshold, knn_threshold, regression):
-    got = tsdr.is_unstational_series(
-        np.array(case['datapoints']), alpha, cv_threshold, knn_threshold, regression)
+def test_unit_root_based_model(case, alpha, cv_threshold, knn_threshold, regression):
+    got: bool = tsdr.unit_root_based_model(
+        series=np.array(case['datapoints']),
+        tsifter_step1_unit_root_model='pp',
+        tsifter_step1_unit_root_alpla=alpha,
+        tsifter_step1_unit_root_regression=regression,
+        tsifter_step1_post_cv=True,
+        tsifter_step1_cv_threshold=cv_threshold,
+        tsifter_step1_post_knn=True,
+        tsifter_step1_knn_threshold=knn_threshold,
+    )
     assert got == case['is_unstationality'], f"{case['name']}: {case['desc']}"

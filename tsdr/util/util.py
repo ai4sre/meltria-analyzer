@@ -1,4 +1,7 @@
+from typing import Any
+
 import numpy as np
+import pandas as pd
 
 
 def z_normalization(data):
@@ -10,7 +13,7 @@ def z_normalization(data):
     return np.array(arr)
 
 
-def count_metrics(metrics_dimension, dataframe, n):
+def count_metrics(metrics_dimension: dict[str, Any], dataframe: pd.DataFrame, n: int) -> dict[str, Any]:
     for col in dataframe.columns:
         if col.startswith("c-"):
             container_name = col.split("_")[0].replace("c-", "")

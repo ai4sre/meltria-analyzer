@@ -8,7 +8,7 @@ import time
 import warnings
 from concurrent import futures
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -35,6 +35,115 @@ TARGET_DATA = {"containers": "all",
                "services": "all",
                "nodes": "all",
                "middlewares": "all"}
+
+
+def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
+    regression: str = kwargs.get('tsifter_step1_unit_root_regression', 'c')
+    maxlag: int = kwargs.get('tsifter_step1_unit_root_max_lags', None)
+    autolag = kwargs.get('tsifter_step1_unit_root_autolag', None)
+    pvalue = 0.0
+    if kwargs['tsifter_step1_unit_root_model'] == 'adf':
+        pvalue = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
+    elif kwargs['tsifter_step1_unit_root_model'] == 'pp':
+        try:
+            pp = PhillipsPerron(series, trend=regression, lags=maxlag)
+            pvalue = pp.pvalue
+        except ValueError as e:
+            warnings.warn(str(e))
+            return False
+        except InfeasibleTestException as e:
+            warnings.warn(str(e))
+            return False
+    if pvalue >= kwargs.get('tsifter_step1_unit_root_alpha', 0.01):
+        if kwargs.get('tsifter_step1_post_cv', False):
+            # run df-test for differences of data_{n} and data{n-1} for liner trend series
+            cv_threshold = kwargs['tsifter_step1_cv_threshold']
+            if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
+                return True
+    else:
+        if kwargs.get('tsifter_step1_post_knn', False):
+            knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
+            if knn.has_anomaly(series, kwargs.get('tsifter_step1_knn_threshold', 0.01)):
+                return True
+    return False
+
+
+class Tsdr:
+    univariate_series_model: Callable[[np.ndarray, Any], bool]
+    params: dict[str, Any]
+
+    def __init__(
+        self,
+        univariate_series_model: Callable[[np.ndarray, Any], bool] = unit_root_based_model,
+        **kwargs
+    ) -> None:
+        self.univariate_series_model = univariate_series_model
+        self.params = kwargs
+
+    def run(self, series: pd.DataFrame, max_workers: int
+            ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
+        services: list[str] = prepare_services_list(series)
+        metrics_dimension: dict[str, Any] = aggregate_dimension(series)
+
+        # step1
+        start = time.time()
+
+        reduced_series1 = self.reduce_univariate_series(series, max_workers)
+
+        time_adf = round(time.time() - start, 2)
+        metrics_dimension = util.count_metrics(
+            metrics_dimension, reduced_series1, 1)
+        metrics_dimension["total"].append(len(reduced_series1.columns))
+
+        # step2
+        start = time.time()
+
+        reduced_series2, clustering_info = self.reduce_multivariate_series(
+            reduced_series1.copy(), services, max_workers,
+            self.params['tsifter_step2_clustering_threshold'],
+        )
+
+        time_clustering = round(time.time() - start, 2)
+        metrics_dimension = util.count_metrics(metrics_dimension, reduced_series2, 2)
+        metrics_dimension["total"].append(len(reduced_series2.columns))
+
+        return {'step1': time_adf, 'step2': time_clustering}, \
+            {'step1': reduced_series1, 'step2': reduced_series2}, metrics_dimension, clustering_info
+
+    def reduce_univariate_series(self, useries: pd.DataFrame, n_workers: int) -> pd.DataFrame:
+        with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
+            future_to_col = {}
+            for col in useries.columns:
+                series: np.ndarray = useries[col].to_numpy()
+                if series.sum() == 0. or len(np.unique(series)) == 1 or np.isnan(series.sum()):
+                    continue
+                future = executor.submit(self.univariate_series_model, series, **self.params)
+                future_to_col[future] = col
+            reduced_cols: list[str] = []
+            for is_unstationality in futures.as_completed(future_to_col):
+                col = future_to_col[is_unstationality]
+                if is_unstationality.result():
+                    reduced_cols.append(col)
+        return useries[reduced_cols]
+
+    def reduce_multivariate_series(self, series: pd.DataFrame, services: list[str],
+                                   n_workers: int, dist_threshold: float) -> tuple[pd.DataFrame, dict[str, Any]]:
+        clustering_info: dict[str, Any] = {}
+        with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
+            # Clustering metrics by service including services, containers and middlewares metrics
+            future_list = []
+            for ser in services:
+                target_df = series.loc[:, series.columns.str.startswith(
+                    ("s-{}_".format(ser), "c-{}_".format(ser), "c-{}-".format(ser), "m-{}_".format(ser), "m-{}-".format(ser)))]
+                if len(target_df.columns) in [0, 1]:
+                    continue
+                future_list.append(executor.submit(
+                    hierarchical_clustering, target_df, sbd, dist_threshold))
+            for future in futures.as_completed(future_list):
+                c_info, remove_list = future.result()
+                clustering_info.update(c_info)
+                series = series.drop(remove_list, axis=1)
+        return series, clustering_info
 
 
 def has_variation(x: np.ndarray, cv_threshold) -> bool:
@@ -104,8 +213,8 @@ def hierarchical_clustering(target_df, dist_func, dist_threshold: float):
     return clustering_info, remove_list
 
 
-def create_clusters(data, columns, service_name, n):
-    words_list = [col[2:] for col in columns]
+def create_clusters(data: pd.DataFrame, columns: list[str], service_name: str, n: int):
+    words_list: list[str] = [col[2:] for col in columns]
     init_labels = cluster_words(words_list, service_name, n)
     results = kshape(data, n, initial_clustering=init_labels)
     label = [0] * data.shape[0]
@@ -123,14 +232,17 @@ def create_clusters(data, columns, service_name, n):
     return (label, silhouette_score(data, label), cluster_center)
 
 
-def select_representative_metric(data, cluster_metrics, columns, centroid):
-    clustering_info = {}
-    remove_list = []
+def select_representative_metric(
+    data: pd.DataFrame,
+    cluster_metrics: list[str], columns: dict[str, Any], centroid: int,
+) -> tuple[dict[str, Any], list[str]]:
+    clustering_info: dict[str, Any] = {}
+    remove_list: list[str] = []
     if len(cluster_metrics) == 1:
-        return None, None
+        return clustering_info, remove_list
     if len(cluster_metrics) == 2:
         # Select the representative metric at random
-        shuffle_list = random.sample(cluster_metrics, len(cluster_metrics))
+        shuffle_list: list[str] = random.sample(cluster_metrics, len(cluster_metrics))
         clustering_info[columns[shuffle_list[0]]] = [columns[shuffle_list[1]]]
         remove_list.append(columns[shuffle_list[1]])
     elif len(cluster_metrics) > 2:
@@ -145,17 +257,20 @@ def select_representative_metric(data, cluster_metrics, columns, centroid):
                 remove_list.append(columns[r])
                 clustering_info[columns[representative_metric]].append(
                     columns[r])
-    return (clustering_info, remove_list)
+    return clustering_info, remove_list
 
 
-def kshape_clustering(target_df, service_name, executor):
+def kshape_clustering(
+    target_df: pd.DataFrame, service_name: str, executor,
+) -> tuple[dict[str, Any], list[str]]:
     future_list = []
 
-    data = util.z_normalization(target_df.values.T)
+    data: np.ndarray = util.z_normalization(target_df.values.T)
     for n in np.arange(2, data.shape[0]):
         future_list.append(
-            executor.submit(create_clusters, data,
-                            target_df.columns, service_name, n)
+            executor.submit(
+                create_clusters, data, target_df.columns, service_name, n,
+            )
         )
     labels, scores, centroids = [], [], []
     for future in futures.as_completed(future_list):
@@ -194,94 +309,8 @@ def kshape_clustering(target_df, service_name, executor):
     return clustering_info, remove_list
 
 
-def is_unstational_series(series: np.ndarray,
-                          alpha: float,
-                          cv_threshold: float,
-                          knn_threshold: float,
-                          regression: Literal['n', 'c', 'ct'] = 'c',
-                          maxlag: int = None,
-                          autolag: str = None,
-                          ) -> bool:
-    # pvalue: float = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
-    try:
-        pp = PhillipsPerron(series, trend=regression)
-        pvalue = pp.pvalue
-    except ValueError as e:
-        warnings.warn(str(e))
-        return False
-    except InfeasibleTestException as e:
-        warnings.warn(str(e))
-        return False
-    if pvalue >= alpha:
-        # run df-test for differences of data_{n} and data{n-1} for liner trend series
-        if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
-            return True
-    else:
-        knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
-        if knn.has_anomaly(series, knn_threshold):
-            return True
-    return False
-
-
-def tsifter_reduce_series(data_df: pd.DataFrame, max_workers: int, **kwargs) -> pd.DataFrame:
-    with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        future_to_col = {}
-        for col in data_df.columns:
-            series: np.ndarray = data_df[col].to_numpy()
-            if series.sum() == 0. or len(np.unique(series)) == 1 or np.isnan(series.sum()):
-                continue
-            if kwargs['tsifter_step1_unit_root_model'] == 'adf':
-                future = executor.submit(
-                    is_unstational_series, series,
-                    alpha=kwargs['tsifter_step1_unit_root_alpha'],
-                    regression=kwargs['tsifter_step1_unit_root_regression'],
-                    cv_threshold=kwargs['tsifter_step1_cv_threshold'],
-                    knn_threshold=kwargs['tsifter_step1_knn_threshold'],
-                )
-                future_to_col[future] = col
-            elif kwargs['tsifter_step1_unit_root_model'] == 'df':
-                future = executor.submit(
-                    is_unstational_series,
-                    series,
-                    alpha=kwargs['tsifter_step1_unit_root_alpha'],
-                    regression=kwargs['tsifter_step1_unit_root_regression'],
-                    maxlag=1, autolag=None,
-                    cv_threshold=kwargs['tsifter_step1_cv_threshold'],
-                    knn_threshold=kwargs['tsifter_step1_knn_threshold'],
-                )
-                future_to_col[future] = col
-            else:
-                raise ValueError('step1_model must be adf or df')
-        reduced_cols: list[str] = []
-        for is_unstationality in futures.as_completed(future_to_col):
-            col = future_to_col[is_unstationality]
-            if is_unstationality.result():
-                reduced_cols.append(col)
-    return data_df[reduced_cols]
-
-
 def sieve_reduce_series(data_df):
     return reduce_series_with_cv(data_df)
-
-
-def tsifter_clustering(reduced_df, services_list, max_workers, dist_threshold: float):
-    clustering_info = {}
-    with futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        # Clustering metrics by service including services, containers and middlewares metrics
-        future_list = []
-        for ser in services_list:
-            target_df = reduced_df.loc[:, reduced_df.columns.str.startswith(
-                ("s-{}_".format(ser), "c-{}_".format(ser), "c-{}-".format(ser), "m-{}_".format(ser), "m-{}-".format(ser)))]
-            if len(target_df.columns) in [0, 1]:
-                continue
-            future_list.append(executor.submit(
-                hierarchical_clustering, target_df, sbd, dist_threshold))
-        for future in futures.as_completed(future_list):
-            c_info, remove_list = future.result()
-            clustering_info.update(c_info)
-            reduced_df = reduced_df.drop(remove_list, axis=1)
-
-    return reduced_df, clustering_info
 
 
 def sieve_clustering(reduced_df, services_list, max_workers):
@@ -301,39 +330,12 @@ def sieve_clustering(reduced_df, services_list, max_workers):
     return reduced_df, clustering_info
 
 
-def run_tsifter(data_df: pd.DataFrame,
-                metrics_dimension: dict[str, Any],
-                services_list: dict[str, Any],
-                max_workers: int, **kwargs,
-                ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
-    # step1
-    start = time.time()
-
-    reduced_by_st_df = tsifter_reduce_series(data_df, max_workers, **kwargs)
-
-    time_adf = round(time.time() - start, 2)
-    metrics_dimension = util.count_metrics(
-        metrics_dimension, reduced_by_st_df, 1)
-    metrics_dimension["total"].append(len(reduced_by_st_df.columns))
-
-    # step2
-    start = time.time()
-
-    reduced_df, clustering_info = tsifter_clustering(
-        reduced_by_st_df.copy(), services_list, max_workers,
-        kwargs['tsifter_step2_clustering_threshold'],
-    )
-
-    time_clustering = round(time.time() - start, 2)
-    metrics_dimension = util.count_metrics(metrics_dimension, reduced_df, 2)
-    metrics_dimension["total"].append(len(reduced_df.columns))
-
-    return {'step1': time_adf, 'step2': time_clustering}, \
-        {'step1': reduced_by_st_df, 'step2': reduced_df}, metrics_dimension, clustering_info
-
-
-def run_sieve(data_df, metrics_dimension, services_list, max_workers
-              ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
+def run_sieve(
+    data_df: pd.DataFrame,
+    metrics_dimension: dict[str, Any],
+    services_list: list[str],
+    max_workers: int,
+) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
     # step1
     start = time.time()
 
@@ -399,19 +401,20 @@ def read_metrics_json(data_file: str,
     return data_df, raw_json['mappings'], raw_json['meta']
 
 
-def prepare_services_list(data_df):
+def prepare_services_list(data_df: pd.DataFrame) -> list[str]:
     # Prepare list of services
-    services_list = []
+    services_list: list[str] = []
     for col in data_df.columns:
-        if re.match("^s-", col):
-            service_name = col.split("_")[0].replace("s-", "")
-            if service_name not in services_list:
-                services_list.append(service_name)
+        if not col.startswith('s-'):
+            continue
+        service_name = col.split("_")[0].replace("s-", "")
+        if service_name not in services_list:
+            services_list.append(service_name)
     return services_list
 
 
-def aggregate_dimension(data_df):
-    metrics_dimension = {}
+def aggregate_dimension(data_df: pd.DataFrame) -> dict[str, Any]:
+    metrics_dimension: dict[str, Any] = {}
     for target in TARGET_DATA:
         metrics_dimension[target] = {}
     metrics_dimension = util.count_metrics(metrics_dimension, data_df, 0)
@@ -421,11 +424,12 @@ def aggregate_dimension(data_df):
 
 def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs,
              ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
-    services = prepare_services_list(data_df)
-    metrics_dimension = aggregate_dimension(data_df)
     if method == TSIFTER_METHOD:
-        return run_tsifter(data_df, metrics_dimension, services, max_workers, **kwargs)
+        tsdr = Tsdr(**kwargs)
+        return tsdr.run(data_df, max_workers)
     elif method == SIEVE_METHOD:
+        services: list[str] = prepare_services_list(data_df)
+        metrics_dimension: dict[str, Any] = aggregate_dimension(data_df)
         return run_sieve(data_df, metrics_dimension, services, max_workers)
     return {}, {}, {}, {}
 
@@ -472,7 +476,6 @@ def main():
         data_df=data_df,
         method=args.method,
         max_workers=args.max_workers,
-        tsifter_step1_unit_root_model='df',
         tsifter_step1_unit_root_alpha=args.tsifter_adf_alpha,
         tsifter_step1_cv_threshold=args.tsifter_cv_threshold,
         tsifter_step1_knn_threshold=args.tsifter_knn_threshold,
