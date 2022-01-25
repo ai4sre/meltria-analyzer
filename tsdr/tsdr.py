@@ -41,12 +41,18 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
     regression: str = kwargs.get('tsifter_step1_unit_root_regression', 'c')
     maxlag: int = kwargs.get('tsifter_step1_unit_root_max_lags', None)
     autolag = kwargs.get('tsifter_step1_unit_root_autolag', None)
+
+    def log_or_nothing(x: np.ndarray) -> np.ndarray:
+        if kwargs.get('tsifter_step1_take_log', False):
+            return np.log(x)
+        return x
+
     pvalue = 0.0
     if kwargs['tsifter_step1_unit_root_model'] == 'adf':
-        pvalue = adfuller(x=series, regression=regression, maxlag=maxlag, autolag=autolag)[1]
+        pvalue = adfuller(x=log_or_nothing(series), regression=regression, maxlag=maxlag, autolag=autolag)[1]
     elif kwargs['tsifter_step1_unit_root_model'] == 'pp':
         try:
-            pp = PhillipsPerron(series, trend=regression, lags=maxlag)
+            pp = PhillipsPerron(log_or_nothing(series), trend=regression, lags=maxlag)
             pvalue = pp.pvalue
         except ValueError as e:
             warnings.warn(str(e))
@@ -63,7 +69,7 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
     else:
         if kwargs.get('tsifter_step1_post_knn', False):
             knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
-            if knn.has_anomaly(series, kwargs.get('tsifter_step1_knn_threshold', 0.01)):
+            if knn.has_anomaly(log_or_nothing(series), kwargs.get('tsifter_step1_knn_threshold', 0.01)):
                 return True
     return False
 

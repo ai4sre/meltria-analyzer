@@ -220,19 +220,32 @@ cases_for_stationality = [
 
 
 @pytest.mark.parametrize("case", cases_for_stationality)
-@pytest.mark.parametrize("alpha", [0.01])
+@pytest.mark.parametrize("take_log", [True, False])
+@pytest.mark.parametrize("unit_root_model", ['adf', 'pp'])
+@pytest.mark.parametrize("unit_root_alpha", [0.01])
+@pytest.mark.parametrize("unit_root_regression", ['c', 'ct'])
 @pytest.mark.parametrize("cv_threshold", [0.1, 0.5])
-@pytest.mark.parametrize("knn_threshold", [0.01, 0.02])
-@pytest.mark.parametrize("regression", ['c', 'ct'])
-def test_unit_root_based_model(case, alpha, cv_threshold, knn_threshold, regression):
+@pytest.mark.parametrize("post_knn", [True, False])
+@pytest.mark.parametrize("knn_threshold", [0.01])
+def test_unit_root_based_model(
+    case,
+    take_log,
+    unit_root_model,
+    unit_root_alpha,
+    unit_root_regression,
+    cv_threshold,
+    post_knn,
+    knn_threshold,
+):
     got: bool = tsdr.unit_root_based_model(
         series=np.array(case['datapoints']),
-        tsifter_step1_unit_root_model='pp',
-        tsifter_step1_unit_root_alpla=alpha,
-        tsifter_step1_unit_root_regression=regression,
+        tsifter_step1_take_log=take_log,
+        tsifter_step1_unit_root_model=unit_root_model,
+        tsifter_step1_unit_root_alpla=unit_root_alpha,
+        tsifter_step1_unit_root_regression=unit_root_regression,
         tsifter_step1_post_cv=True,
         tsifter_step1_cv_threshold=cv_threshold,
-        tsifter_step1_post_knn=True,
+        tsifter_step1_post_knn=post_knn,
         tsifter_step1_knn_threshold=knn_threshold,
     )
     assert got == case['is_unstationality'], f"{case['name']}: {case['desc']}"
