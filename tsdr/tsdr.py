@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
+import scipy.stats
 from arch.unitroot import PhillipsPerron
 from arch.utility.exceptions import InfeasibleTestException
 from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
@@ -47,13 +48,15 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
             return np.log1p(x)
         return x
 
-    pvalue = 0.0
+    pvalue: float = 0.0
+    ar_lag: int = 0
     if kwargs['tsifter_step1_unit_root_model'] == 'adf':
-        pvalue = adfuller(x=log_or_nothing(series), regression=regression, maxlag=maxlag, autolag=autolag)[1]
+        pvalue, ar_lag = adfuller(x=log_or_nothing(series), regression=regression, maxlag=maxlag, autolag=autolag)[1::2]
     elif kwargs['tsifter_step1_unit_root_model'] == 'pp':
         try:
             pp = PhillipsPerron(log_or_nothing(series), trend=regression, lags=maxlag)
             pvalue = pp.pvalue
+            ar_lag = pp.lags
         except ValueError as e:
             warnings.warn(str(e))
             return False
@@ -68,8 +71,9 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
                 return True
     else:
         if kwargs.get('tsifter_step1_post_knn', False):
-            knn = KNNOutlierDetector(int(series.size * 0.05), 1)   # k=1
-            if knn.has_anomaly(log_or_nothing(series), kwargs.get('tsifter_step1_knn_threshold', 0.01)):
+            knn = KNNOutlierDetector(w=ar_lag, k=1)   # k=1
+            x = scipy.stats.zscore(log_or_nothing(series))
+            if knn.has_anomaly(x, kwargs.get('tsifter_step1_knn_threshold', 0.01)):
                 return True
     return False
 
