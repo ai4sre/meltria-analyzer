@@ -203,12 +203,14 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
 
-            logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
-            log_plots_as_image(run, record)
+            if cfg.neptune.mode != 'debug':
+                logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
+                log_plots_as_image(run, record)
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
             reducer = tsdr.Tsdr(
+                tsifter_step1_take_log=cfg.step1.take_log,
                 tsifter_step1_unit_root_model=cfg.step1.unit_root_model,
                 tsifter_step1_unit_root_alpha=cfg.step1.unit_root_alpha,
                 tsifter_step1_unit_root_regression=cfg.step1.unit_root_regression,
@@ -251,9 +253,11 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     ), ignore_index=True,
                 )
 
-            logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
+            if cfg.neptune.mode != 'debug':
+                logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
             for representative_metric, sub_metrics in clustering_info.items():
-                log_clustering_plots_as_image(run, representative_metric, sub_metrics, record)
+                if cfg.neptune.mode != 'debug':
+                    log_clustering_plots_as_image(run, representative_metric, sub_metrics, record)
                 clustering_df = clustering_df.append(
                     pd.Series(
                         [
@@ -263,10 +267,11 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     ), ignore_index=True,
                 )
 
-            logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
             rep_metrics: list[str] = list(clustering_info.keys())
             non_clustered_reduced_df: pd.DataFrame = reduced_df_by_step['step2'].drop(columns=rep_metrics)
-            log_non_clustered_plots_as_image(run, record, non_clustered_reduced_df)
+            if cfg.neptune.mode != 'debug':
+                logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
+                log_non_clustered_plots_as_image(run, record, non_clustered_reduced_df)
             non_clustered_df = non_clustered_df.append(
                 pd.Series(
                     [
@@ -341,6 +346,7 @@ def main(cfg: DictConfig) -> None:
     run['dataset/num_metrics_files'] = len(cfg.metrics_files)
     run['parameters'] = {
         'exclude_middleware_metrics': cfg.exclude_middleware_metrics,
+        'step1_take_log': cfg.step1.take_log,
         'step1_unit_root_model': cfg.step1.unit_root_model,
         'step1_alpha': cfg.step1.unit_root_alpha,
         'step1_regression': cfg.step1.unit_root_regression,
