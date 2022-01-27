@@ -223,6 +223,7 @@ cases_for_stationality = [
 @pytest.mark.parametrize("unit_root_model", ['adf', 'pp'])
 @pytest.mark.parametrize("unit_root_alpha", [0.01])
 @pytest.mark.parametrize("unit_root_regression", ['c', 'ct'])
+@pytest.mark.parametrize("post_cv", [True, False])
 @pytest.mark.parametrize("cv_threshold", [0.1, 0.5])
 @pytest.mark.parametrize("post_knn", [True, False])
 @pytest.mark.parametrize("knn_threshold", [0.01])
@@ -231,6 +232,7 @@ def test_unit_root_based_model(
     unit_root_model,
     unit_root_alpha,
     unit_root_regression,
+    post_cv,
     cv_threshold,
     post_knn,
     knn_threshold,
@@ -243,7 +245,7 @@ def test_unit_root_based_model(
             tsifter_step1_unit_root_model=unit_root_model,
             tsifter_step1_unit_root_alpla=unit_root_alpha,
             tsifter_step1_unit_root_regression=unit_root_regression,
-            tsifter_step1_post_cv=True,
+            tsifter_step1_post_cv=post_cv,
             tsifter_step1_cv_threshold=cv_threshold,
             tsifter_step1_post_knn=post_knn,
             tsifter_step1_knn_threshold=knn_threshold,
