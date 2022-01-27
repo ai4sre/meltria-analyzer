@@ -3,6 +3,6 @@ unit_root_model: adf
 unit_root_alpha: 0.01
 unit_root_regression: c
 post_cv: true
-cv_threshold: 0.1
+cv_threshold: 0.05
 post_knn: true
-knn_threshold: 3.0
+knn_threshold: 5.0
