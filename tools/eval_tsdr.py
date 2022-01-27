@@ -210,6 +210,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
             reducer = tsdr.Tsdr(
+                tsifter_step1_take_log=cfg.step1.take_log,
                 tsifter_step1_unit_root_model=cfg.step1.unit_root_model,
                 tsifter_step1_unit_root_alpha=cfg.step1.unit_root_alpha,
                 tsifter_step1_unit_root_regression=cfg.step1.unit_root_regression,
@@ -345,6 +346,7 @@ def main(cfg: DictConfig) -> None:
     run['dataset/num_metrics_files'] = len(cfg.metrics_files)
     run['parameters'] = {
         'exclude_middleware_metrics': cfg.exclude_middleware_metrics,
+        'step1_take_log': cfg.step1.take_log,
         'step1_unit_root_model': cfg.step1.unit_root_model,
         'step1_alpha': cfg.step1.unit_root_alpha,
         'step1_regression': cfg.step1.unit_root_regression,

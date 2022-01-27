@@ -1,7 +1,8 @@
-unit_root_model: pp
+take_log: true
+unit_root_model: adf
 unit_root_alpha: 0.01
-unit_root_regression: ct
+unit_root_regression: c
 post_cv: true
-cv_threshold: 0.05
-post_knn: true
+cv_threshold: 0.1
+post_knn: false
 knn_threshold: 0.01

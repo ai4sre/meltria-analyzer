@@ -44,7 +44,7 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
 
     def log_or_nothing(x: np.ndarray) -> np.ndarray:
         if kwargs.get('tsifter_step1_take_log', False):
-            return np.log(x)
+            return np.log1p(x)
         return x
 
     pvalue = 0.0
