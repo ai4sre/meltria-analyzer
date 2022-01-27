@@ -39,11 +39,11 @@ class KNNOutlierDetector:
     def dist(self, v1: np.ndarray, v2: np.ndarray) -> float:
         sum: float = 0.0
         for i, v in enumerate(v1):
-            sum += (v - v2[i]) * (v - v2[i])
+            sum += (v - v2[i]) ** 2
         return np.sqrt(sum)
 
-    def has_anomaly(self, data: np.ndarray, threashold: float) -> bool:
+    def has_anomaly(self, data: np.ndarray, threshold: float) -> bool:
         for s in self.score(data):
-            if s > threashold:
+            if s > threshold:
                 return True
         return False
