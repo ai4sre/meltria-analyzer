@@ -10,6 +10,7 @@ from concurrent import futures
 from datetime import datetime
 from typing import Any, Callable
 
+import banpei
 import numpy as np
 import pandas as pd
 import scipy.stats
@@ -66,15 +67,23 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
     if pvalue >= kwargs.get('tsifter_step1_unit_root_alpha', 0.01):
         if kwargs.get('tsifter_step1_post_cv', False):
             # run df-test for differences of data_{n} and data{n-1} for liner trend series
-            cv_threshold = kwargs['tsifter_step1_cv_threshold']
+            cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
             if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
                 return True
     else:
-        if kwargs.get('tsifter_step1_post_knn', False):
+        # Post outlier detection
+        odmodel: str = kwargs.get('tsifter_step1_post_od_model', 'knn')
+        if odmodel == 'knn':
             knn = KNNOutlierDetector(w=ar_lag, k=1)   # k=1
             x = scipy.stats.zscore(log_or_nothing(series))
-            if knn.has_anomaly(x, kwargs.get('tsifter_step1_knn_threshold', 0.01)):
+            if knn.has_anomaly(x, kwargs.get('tsifter_step1_post_od_threshold', 3.0)):
                 return True
+        elif odmodel == 'hotelling':
+            outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_post_od_threshold', 0.01))
+            if len(outliers) > 1:
+                return True
+        else:
+            raise ValueError(f"{odmodel} == 'knn' or 'hotelling'")
     return False
 
 
