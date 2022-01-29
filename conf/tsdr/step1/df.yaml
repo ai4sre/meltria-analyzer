@@ -4,5 +4,5 @@ unit_root_alpha: 0.01
 unit_root_regression: c
 post_cv: true
 cv_threshold: 0.05
-post_knn: true
-knn_threshold: 5.0
+post_od_model: 'hotelling' # outlier detection (od) model
+post_od_threshold: 0.01

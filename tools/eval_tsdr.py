@@ -216,8 +216,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 tsifter_step1_unit_root_regression=cfg.step1.unit_root_regression,
                 tsifter_step1_post_cv=cfg.step1.post_cv,
                 tsifter_step1_cv_threshold=cfg.step1.cv_threshold,
-                tsifter_step1_post_knn=cfg.step1.post_knn,
-                tsifter_step1_knn_threshold=cfg.step1.knn_threshold,
+                tsifter_step1_post_od_model=cfg.step1.post_od_model,
+                tsifter_step1_post_od_threshold=cfg.step1.post_od_threshold,
                 tsifter_step2_clustering_threshold=cfg.step2.dist_threshold,
             )
             elapsedTime, reduced_df_by_step, metrics_dimension, clustering_info = reducer.run(
@@ -351,7 +351,8 @@ def main(cfg: DictConfig) -> None:
         'step1_alpha': cfg.step1.unit_root_alpha,
         'step1_regression': cfg.step1.unit_root_regression,
         'step1_cv_threshold': cfg.step1.cv_threshold,
-        'step1_knn_threshold': cfg.step1.knn_threshold,
+        'step1_post_od_model': cfg.step1.post_od_model,
+        'step1_post_od_threshold': cfg.step1.post_od_threshold,
         'step2_dist_threshold': cfg.step2.dist_threshold,
     }
     run.wait()  # sync parameters for 'async' neptune mode
