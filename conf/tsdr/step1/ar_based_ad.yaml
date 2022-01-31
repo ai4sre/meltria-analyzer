@@ -1,0 +1,4 @@
+model_name: ar_based_ad
+ar_regression: ct
+ar_anomaly_score_threshold: 50
+cv_threshold: 0.05

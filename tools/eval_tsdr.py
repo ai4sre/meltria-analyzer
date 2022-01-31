@@ -209,17 +209,34 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
-            reducer = tsdr.Tsdr(
-                tsifter_step1_take_log=cfg.step1.take_log,
-                tsifter_step1_unit_root_model=cfg.step1.unit_root_model,
-                tsifter_step1_unit_root_alpha=cfg.step1.unit_root_alpha,
-                tsifter_step1_unit_root_regression=cfg.step1.unit_root_regression,
-                tsifter_step1_post_cv=cfg.step1.post_cv,
-                tsifter_step1_cv_threshold=cfg.step1.cv_threshold,
-                tsifter_step1_post_od_model=cfg.step1.post_od_model,
-                tsifter_step1_post_od_threshold=cfg.step1.post_od_threshold,
-                tsifter_step2_clustering_threshold=cfg.step2.dist_threshold,
-            )
+            reducer: tsdr.Tsdr
+            tsdr_param = {
+                'tsifter_step2_clustering_threshold': cfg.step2.dist_threshold,
+            }
+            if cfg.step1.model_name == 'unit_root_test':
+                tsdr_param.update({
+                    'tsifter_step1_take_log': cfg.step1.take_log,
+                    'tsifter_step1_unit_root_model': cfg.step1.unit_root_model,
+                    'tsifter_step1_unit_root_alpha': cfg.step1.unit_root_alpha,
+                    'tsifter_step1_unit_root_regression': cfg.step1.unit_root_regression,
+                    'tsifter_step1_post_cv': cfg.step1.post_cv,
+                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
+                    'tsifter_step1_post_od_model': cfg.step1.post_od_model,
+                    'tsifter_step1_post_od_threshold': cfg.step1.post_od_threshold,
+                })
+                reducer = tsdr.Tsdr(
+                    tsdr.unit_root_based_model, **tsdr_param,
+                )
+            elif cfg.step1.model_name == 'ar_based_ad':
+                tsdr_param.update({
+                    'tsifter_step1_ar_regression': cfg.step1.ar_regression,
+                    'tsifter_step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
+                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
+                })
+                reducer = tsdr.Tsdr(
+                    tsdr.ar_based_ad_model, **tsdr_param,
+                )
+
             elapsedTime, reduced_df_by_step, metrics_dimension, clustering_info = reducer.run(
                 series=data_df,
                 max_workers=cpu_count(),
@@ -344,17 +361,29 @@ def main(cfg: DictConfig) -> None:
     logger.addHandler(npt_handler)
     run['dataset/id'] = cfg.dataset_id
     run['dataset/num_metrics_files'] = len(cfg.metrics_files)
+    step1_params = {}
+    if cfg.step1.model_name == 'unit_root_test':
+        step1_params.update({
+            'step1_model_name': cfg.step1.model_name,
+            'step1_take_log': cfg.step1.take_log,
+            'step1_unit_root_model': cfg.step1.unit_root_model,
+            'step1_alpha': cfg.step1.unit_root_alpha,
+            'step1_regression': cfg.step1.unit_root_regression,
+            'step1_cv_threshold': cfg.step1.cv_threshold,
+            'step1_post_od_model': cfg.step1.post_od_model,
+            'step1_post_od_threshold': cfg.step1.post_od_threshold,
+        })
+    elif cfg.step1.model_name == 'ar_based_ad':
+        step1_params.update({
+            'step1_model_name': cfg.step1.model_name,
+            'step1_ar_regression': cfg.step1.ar_regression,
+            'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
+            'step1_cv_threshold': cfg.step1.cv_threshold,
+        })
     run['parameters'] = {
         'exclude_middleware_metrics': cfg.exclude_middleware_metrics,
-        'step1_take_log': cfg.step1.take_log,
-        'step1_unit_root_model': cfg.step1.unit_root_model,
-        'step1_alpha': cfg.step1.unit_root_alpha,
-        'step1_regression': cfg.step1.unit_root_regression,
-        'step1_cv_threshold': cfg.step1.cv_threshold,
-        'step1_post_od_model': cfg.step1.post_od_model,
-        'step1_post_od_threshold': cfg.step1.post_od_threshold,
         'step2_dist_threshold': cfg.step2.dist_threshold,
-    }
+    }.update(step1_params)
     run.wait()  # sync parameters for 'async' neptune mode
 
     logger.info(OmegaConf.to_yaml(cfg))

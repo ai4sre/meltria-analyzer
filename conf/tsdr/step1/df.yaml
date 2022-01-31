@@ -1,3 +1,4 @@
+model_name: unit_root_test
 take_log: false
 unit_root_model: adf
 unit_root_alpha: 0.01
