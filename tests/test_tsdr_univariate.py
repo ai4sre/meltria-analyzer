@@ -252,3 +252,20 @@ def test_unit_root_based_model(
         )
         gots[case['name']] = (got == case['is_unstationality'])
     assert not (False in gots.values())
+
+
+@pytest.mark.parametrize("ar_anomaly_score_threshold", [10, 50, 80])
+@pytest.mark.parametrize("cv_threshold", [0.1, 0.5])
+def test_ar_based_ad_model(
+    ar_anomaly_score_threshold,
+    cv_threshold,
+):
+    gots: dict[str, bool] = {}
+    for case in cases_for_stationality:
+        got: bool = tsdr.ar_based_ad_model(
+            series=np.array(case['datapoints']),
+            tsifter_step1_ar_anomaly_score_threshold=ar_anomaly_score_threshold,
+            tsifter_step1_cv_threshold=cv_threshold,
+        )
+        gots[case['name']] = (got == case['is_unstationality'])
+    assert not (False in gots.values())
