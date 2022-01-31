@@ -21,11 +21,11 @@ class AROutlierDetector:
         preds = pred.summary_frame()[r:]['mean'].to_numpy()
 
         scores: list[float] = []
-        for i, xi in enumerate(x):
+        for i, xi in enumerate(x[r:]):
             if i >= preds.size:
                 break
             scores.append((xi - preds[i]) ** 2 / sig2)
-        return scores
+        return [np.nan * r] + scores
 
     def find_anomalies(self, x: np.ndarray, threshold: float) -> list[float]:
         return [s for s in self.score(x) if s >= threshold]
