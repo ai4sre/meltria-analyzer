@@ -41,7 +41,7 @@ def test_unit_root_based_model(
 
 
 @pytest.mark.parametrize("ar_regression", ['c', 'ct'])
-@pytest.mark.parametrize("ar_anomaly_score_threshold", [10, 50, 80])
+@pytest.mark.parametrize("ar_anomaly_score_threshold", [5, 10, 20])
 @pytest.mark.parametrize("cv_threshold", [0.1, 0.5])
 def test_ar_based_ad_model(
     ar_regression,
