@@ -40,9 +40,11 @@ def test_unit_root_based_model(
     assert not (False in gots.values())
 
 
+@pytest.mark.parametrize("ar_regression", ['c', 'ct'])
 @pytest.mark.parametrize("ar_anomaly_score_threshold", [10, 50, 80])
 @pytest.mark.parametrize("cv_threshold", [0.1, 0.5])
 def test_ar_based_ad_model(
+    ar_regression,
     ar_anomaly_score_threshold,
     cv_threshold,
 ):
@@ -50,6 +52,7 @@ def test_ar_based_ad_model(
     for case in testcases_of_sockshop:
         got: bool = tsdr.ar_based_ad_model(
             series=np.array(case['datapoints']),
+            tsifter_step1_ar_regression=ar_regression,
             tsifter_step1_ar_anomaly_score_threshold=ar_anomaly_score_threshold,
             tsifter_step1_cv_threshold=cv_threshold,
         )
