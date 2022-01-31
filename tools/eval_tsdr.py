@@ -361,9 +361,12 @@ def main(cfg: DictConfig) -> None:
     logger.addHandler(npt_handler)
     run['dataset/id'] = cfg.dataset_id
     run['dataset/num_metrics_files'] = len(cfg.metrics_files)
-    step1_params = {}
+    params = {
+        'exclude_middleware_metrics': cfg.exclude_middleware_metrics,
+        'step2_dist_threshold': cfg.step2.dist_threshold,
+    }
     if cfg.step1.model_name == 'unit_root_test':
-        step1_params.update({
+        params.update({
             'step1_model_name': cfg.step1.model_name,
             'step1_take_log': cfg.step1.take_log,
             'step1_unit_root_model': cfg.step1.unit_root_model,
@@ -374,16 +377,13 @@ def main(cfg: DictConfig) -> None:
             'step1_post_od_threshold': cfg.step1.post_od_threshold,
         })
     elif cfg.step1.model_name == 'ar_based_ad':
-        step1_params.update({
+        params.update({
             'step1_model_name': cfg.step1.model_name,
             'step1_ar_regression': cfg.step1.ar_regression,
             'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
             'step1_cv_threshold': cfg.step1.cv_threshold,
         })
-    run['parameters'] = {
-        'exclude_middleware_metrics': cfg.exclude_middleware_metrics,
-        'step2_dist_threshold': cfg.step2.dist_threshold,
-    }.update(step1_params)
+    run['parameters'] = params
     run.wait()  # sync parameters for 'async' neptune mode
 
     logger.info(OmegaConf.to_yaml(cfg))
