@@ -23,6 +23,7 @@ from statsmodels.tsa.stattools import adfuller
 from tsdr.clustering.kshape import kshape
 from tsdr.clustering.metricsnamecluster import cluster_words
 from tsdr.clustering.sbd import sbd, silhouette_score
+from tsdr.outlierdetection.ar import AROutlierDetector
 from tsdr.outlierdetection.knn import KNNOutlierDetector
 from tsdr.util import util
 
@@ -83,6 +84,19 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
                 return True
         else:
             raise ValueError(f"{odmodel} == 'knn' or 'hotelling'")
+    return False
+
+
+def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> bool:
+    cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
+    if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
+        return False
+
+    ar_threshold: float = kwargs.get('tsifter_ar_anomaly_score_threshold', 30.0)
+    ar = AROutlierDetector()
+    anomalies = ar.find_anomalies(scipy.stats.zscore(series), ar_threshold)
+    if len(anomalies) > 0:
+        return True
     return False
 
 
