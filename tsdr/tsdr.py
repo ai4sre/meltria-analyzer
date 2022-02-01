@@ -118,24 +118,24 @@ class Tsdr:
         metrics_dimension: dict[str, Any] = aggregate_dimension(series)
 
         # step1
-        start: float = time.perf_counter()
+        start: float = time.time()
 
         reduced_series1 = self.reduce_univariate_series(series, max_workers)
 
-        time_adf: float = round(time.perf_counter() - start, 2)
+        time_adf: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(
             metrics_dimension, reduced_series1, 1)
         metrics_dimension["total"].append(len(reduced_series1.columns))
 
         # step2
-        start: float = time.perf_counter()
+        start: float = time.time()
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
             reduced_series1.copy(), services, max_workers,
             self.params['tsifter_step2_clustering_threshold'],
         )
 
-        time_clustering: float = round(time.perf_counter() - start, 2)
+        time_clustering: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(metrics_dimension, reduced_series2, 2)
         metrics_dimension["total"].append(len(reduced_series2.columns))
 
