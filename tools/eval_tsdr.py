@@ -164,6 +164,7 @@ def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataF
         'fn': 'sum',
         'tp': 'sum',
         'reduction_rate': 'mean',
+        'elapsed_time': 'mean',
     })
     df['accuracy'] = (df['tp'] + df['tn']) / (df['tn'] + df['fp'] + df['fn'] + df['tp'])
     return df
@@ -187,11 +188,14 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
     scores_df = pd.DataFrame(
         columns=['chaos_type', 'chaos_comp', 'step',
                  'tn', 'fp', 'fn', 'tp', 'accuracy', 'recall',
-                 'num_series', 'reduction_rate'],
+                 'num_series', 'reduction_rate', 'elapsed_time'],
         index=['chaos_type', 'chaos_comp', 'step']
     ).dropna()
     tests_df = pd.DataFrame(
-        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok', 'num_series', 'found_metrics', 'grafana_dashboard_url'],
+        columns=[
+            'chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok',
+            'num_series', 'elapsed_time', 'found_metrics', 'grafana_dashboard_url'
+        ],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url', 'step'],
     ).dropna()
 
@@ -199,6 +203,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
         y_true_by_step: dict[str, list[int]] = defaultdict(lambda: list())
         y_pred_by_step: dict[str, list[int]] = defaultdict(lambda: list())
         num_series: dict[str, list[float]] = defaultdict(lambda: list())
+        elapsed_time: dict[str, list[float]] = defaultdict(lambda: list())
 
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
@@ -237,11 +242,12 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     tsdr.ar_based_ad_model, **tsdr_param,
                 )
 
-            elapsedTime, reduced_df_by_step, metrics_dimension, clustering_info = reducer.run(
+            elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info = reducer.run(
                 series=data_df,
                 max_workers=cpu_count(),
             )
 
+            elapsed_time_by_step['total'] = elapsed_time_by_step['step1'] + elapsed_time_by_step['step2']
             num_series_each_step: dict[str, float] = {
                 'total': metrics_dimension['total'][0],
                 'step1': metrics_dimension['total'][1],
@@ -261,11 +267,13 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 y_true_by_step[step].append(1)
                 y_pred_by_step[step].append(1 if ok else 0)
                 num_series[step].append(num_series_each_step[step])
+                elapsed_time[step].append(elapsed_time_by_step[step])
                 tests_df = tests_df.append(
                     pd.Series(
                         [
                             chaos_type, chaos_comp, metrics_file, step, ok,
-                            num_series_str, ','.join(found_metrics), grafana_dashboard_url,
+                            num_series_str, elapsed_time_by_step[step],
+                            ','.join(found_metrics), grafana_dashboard_url,
                         ], index=tests_df.columns,
                     ), ignore_index=True,
                 )
@@ -309,11 +317,12 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             accuracy: float = accuracy_score(y_true, y_pred)
             recall: float = recall_score(y_true, y_pred)
             mean_reduction_rate: float = 1 - np.mean(np.divide(num_series[step], num_series['total']))
+            mean_elapsed_time: float = np.mean(elapsed_time[step])
             scores_df = scores_df.append(
                 pd.Series([
                     chaos_type, chaos_comp, step,
                     tn, fp, fn, tp, accuracy, recall,
-                    mean_num_series_str, mean_reduction_rate],
+                    mean_num_series_str, mean_reduction_rate, mean_elapsed_time],
                     index=scores_df.columns,
                 ), ignore_index=True,
             )
@@ -336,6 +345,11 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
         'mean': scores_df['reduction_rate'].mean(),
         'max': scores_df['reduction_rate'].max(),
         'min': scores_df['reduction_rate'].min(),
+    }
+    run['scores/elapsed_time'] = {
+        'mean': scores_df['elapsed_time'].mean(),
+        'max': scores_df['elapsed_time'].max(),
+        'min': scores_df['elapsed_time'].min(),
     }
     run['scores/table'].upload(neptune.types.File.as_html(scores_df))
 

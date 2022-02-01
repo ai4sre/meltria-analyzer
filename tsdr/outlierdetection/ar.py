@@ -10,7 +10,7 @@ class AROutlierDetector:
 
     def score(self, x: np.ndarray, regression: str = 'c', ic: str = 'aic') -> list[float]:
         maxlag = int(x.size * 0.2) if self.maxlag == 0 else self.maxlag
-        sel = ar_select_order(x, maxlag=maxlag, trend=regression, ic=ic)
+        sel = ar_select_order(x, maxlag=maxlag, trend=regression, ic=ic, old_names=False)
         model_fit = sel.model.fit()
         r: int = 0
         if model_fit.ar_lags is None or len(model_fit.ar_lags) > 0:
