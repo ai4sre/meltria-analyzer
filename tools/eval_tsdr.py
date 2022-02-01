@@ -191,7 +191,10 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
         index=['chaos_type', 'chaos_comp', 'step']
     ).dropna()
     tests_df = pd.DataFrame(
-        columns=['chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok', 'num_series', 'found_metrics', 'grafana_dashboard_url'],
+        columns=[
+            'chaos_type', 'chaos_comp', 'metrics_file', 'step', 'ok',
+            'num_series', 'elapsedTime', 'found_metrics', 'grafana_dashboard_url'
+        ],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url', 'step'],
     ).dropna()
 
@@ -265,7 +268,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     pd.Series(
                         [
                             chaos_type, chaos_comp, metrics_file, step, ok,
-                            num_series_str, ','.join(found_metrics), grafana_dashboard_url,
+                            num_series_str, elapsedTime[step],
+                            ','.join(found_metrics), grafana_dashboard_url,
                         ], index=tests_df.columns,
                     ), ignore_index=True,
                 )
