@@ -86,7 +86,9 @@ def verify_ar_based_ad_model():
 
 
 def main():
+    print("--> unit_root_test")
     verify_unit_root_test_model()
+    print("--> ar_based_ad")
     verify_ar_based_ad_model()
 
 
