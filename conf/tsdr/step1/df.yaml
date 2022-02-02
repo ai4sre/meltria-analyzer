@@ -1,9 +1,9 @@
 model_name: unit_root_test
+pre_cv: true
+cv_threshold: 0.05
 take_log: false
 unit_root_model: adf
 unit_root_alpha: 0.01
 unit_root_regression: c
-post_cv: true
-cv_threshold: 0.05
 post_od_model: 'hotelling' # outlier detection (od) model
 post_od_threshold: 0.01

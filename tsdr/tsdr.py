@@ -44,6 +44,11 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
     maxlag: int = kwargs.get('tsifter_step1_unit_root_max_lags', None)
     autolag = kwargs.get('tsifter_step1_unit_root_autolag', None)
 
+    if kwargs.get('tsifter_step1_pre_cv', False):
+        cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
+        if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
+            return False
+
     def log_or_nothing(x: np.ndarray) -> np.ndarray:
         if kwargs.get('tsifter_step1_take_log', False):
             return np.log1p(x)
@@ -65,11 +70,7 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
             warnings.warn(str(e))
             return False
     if pvalue >= kwargs.get('tsifter_step1_unit_root_alpha', 0.01):
-        if kwargs.get('tsifter_step1_post_cv', False):
-            # run df-test for differences of data_{n} and data{n-1} for liner trend series
-            cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
-            if has_variation(np.diff(series), cv_threshold) and has_variation(series, cv_threshold):
-                return True
+        return True
     else:
         # Post outlier detection
         odmodel: str = kwargs.get('tsifter_step1_post_od_model', 'knn')
