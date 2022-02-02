@@ -360,8 +360,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
     logger.info(tests_df.head())
     logger.info(scores_df.head())
-    logger.info(scores_df_by_chaos_type.head())
-    logger.info(scores_df_by_chaos_comp.head())
+    logger.info(scores_df_by_chaos_type)
+    logger.info(scores_df_by_chaos_comp)
     logger.info(clustering_df.head())
 
 
