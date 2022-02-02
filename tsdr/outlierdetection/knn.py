@@ -10,7 +10,7 @@ class KNNOutlierDetector:
     >>> knn = KNNOutlierDetector(2, 1)
     >>> data = np.array([1, 2, 10, 2, 1])
     >>> knn.score(data)
-    [0.0, 1.4142135623730951, 8.06225774829855, 8.06225774829855, 1.4142135623730951]
+    [nan, 1.4142135623730951, 8.06225774829855, 8.06225774829855, 1.4142135623730951]
     """
     w: int = 0
     k: int = 1
@@ -30,7 +30,7 @@ class KNNOutlierDetector:
             s: float = functools.reduce(lambda x, y: x+y, distances[1:self.k+1], 0.0) / self.k
             scores.append(s)
         # Adjust the size of input/output list
-        return [0.0] * (self.w-1) + scores
+        return [np.nan] * (self.w-1) + scores
 
     def sliding_windows(self, data: np.ndarray) -> list[np.ndarray]:
         num: int = data.size - self.w + 1
@@ -47,3 +47,6 @@ class KNNOutlierDetector:
             if s > threshold:
                 return True
         return False
+
+    def find_anomalies(self, x: np.ndarray, threshold: float) -> list[float]:
+        return [s for s in self.score(x) if s >= threshold]
