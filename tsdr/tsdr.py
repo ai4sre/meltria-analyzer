@@ -93,9 +93,9 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> bool:
     if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
         return False
 
-    ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 10.0)
+    ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 0.01)
     ar = AROutlierDetector()
-    anomalies = ar.find_anomalies(scipy.stats.zscore(series), ar_threshold)
+    anomalies = ar.detect_by_fitting_dist(scipy.stats.zscore(series), threshold=ar_threshold)
     if len(anomalies) > 0:
         return True
     return False
