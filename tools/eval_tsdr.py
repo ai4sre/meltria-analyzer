@@ -220,12 +220,12 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             }
             if cfg.step1.model_name == 'unit_root_test':
                 tsdr_param.update({
+                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
+                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
                     'tsifter_step1_take_log': cfg.step1.take_log,
                     'tsifter_step1_unit_root_model': cfg.step1.unit_root_model,
                     'tsifter_step1_unit_root_alpha': cfg.step1.unit_root_alpha,
                     'tsifter_step1_unit_root_regression': cfg.step1.unit_root_regression,
-                    'tsifter_step1_post_cv': cfg.step1.post_cv,
-                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
                     'tsifter_step1_post_od_model': cfg.step1.post_od_model,
                     'tsifter_step1_post_od_threshold': cfg.step1.post_od_threshold,
                 })
@@ -360,8 +360,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
     logger.info(tests_df.head())
     logger.info(scores_df.head())
-    logger.info(scores_df_by_chaos_type.head())
-    logger.info(scores_df_by_chaos_comp.head())
+    logger.info(scores_df_by_chaos_type)
+    logger.info(scores_df_by_chaos_comp)
     logger.info(clustering_df.head())
 
 

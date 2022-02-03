@@ -36,12 +36,12 @@ def verify_unit_root_test_model():
         for case in testcases_of_sockshop:
             got: bool = tsdr.unit_root_based_model(
                 series=np.array(case['datapoints']),
+                tsifter_step1_pre_cv=post_cv,
+                tsifter_step1_cv_threshold=cv_threshold,
                 tsifter_step1_take_log=take_log,
                 tsifter_step1_unit_root_model=unit_root_model,
                 tsifter_step1_unit_root_alpla=unit_root_alpha,
                 tsifter_step1_unit_root_regression=unit_root_regression,
-                tsifter_step1_post_cv=post_cv,
-                tsifter_step1_cv_threshold=cv_threshold,
                 tsifter_step1_post_knn=post_knn,
                 tsifter_step1_knn_threshold=knn_threshold,
             )
@@ -86,7 +86,9 @@ def verify_ar_based_ad_model():
 
 
 def main():
+    print("--> unit_root_test")
     verify_unit_root_test_model()
+    print("--> ar_based_ad")
     verify_ar_based_ad_model()
 
 
