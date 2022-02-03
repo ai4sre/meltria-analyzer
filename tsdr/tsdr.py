@@ -511,7 +511,7 @@ def main():
     parser.add_argument("--tsifter-clustering-threshold",
                         type=float,
                         default=THRESHOLD_DIST,
-                        help='distance threshold for hierachical clustering')
+                        help='distance threshold for hierarchical clustering')
     args = parser.parse_args()
 
     data_df, mappings, metrics_meta = read_metrics_json(args.datafile)
