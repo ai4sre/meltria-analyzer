@@ -8,7 +8,7 @@ class AROutlierDetector:
     def __init__(self, maxlag: int = 0):
         self.maxlag = maxlag
 
-    def score(self, x: np.ndarray, regression: str = 'c', ic: str = 'aic') -> list[float]:
+    def score(self, x: np.ndarray, regression: str = 'c', ic: str = 'aic', include_nan: bool = False) -> list[float]:
         maxlag = int(x.size * 0.2) if self.maxlag == 0 else self.maxlag
         sel = ar_select_order(x, maxlag=maxlag, trend=regression, ic=ic, old_names=False)
         model_fit = sel.model.fit()
@@ -25,7 +25,7 @@ class AROutlierDetector:
             if i >= preds.size:
                 break
             scores.append((xi - preds[i]) ** 2 / sig2)
-        return [np.nan * r] + scores
+        return [np.nan * r] + scores if include_nan else scores
 
     def find_anomalies(self, x: np.ndarray, threshold: float) -> list[float]:
         return [s for s in self.score(x) if s >= threshold]
