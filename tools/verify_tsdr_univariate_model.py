@@ -8,9 +8,10 @@ from tsdr.testseries.sockshop import testcases_of_sockshop
 
 
 class Color:
-    RED     = '\033[31m'
-    GREEN   = '\033[32m'
-    RESET   = '\033[0m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    RESET = '\033[0m'
+
 
 def verify_unit_root_test_model():
     passed_items: list[tuple] = []
