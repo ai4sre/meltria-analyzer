@@ -170,12 +170,16 @@ class Tsdr:
             # Clustering metrics by service including services, containers and middlewares metrics
             future_list = []
             for ser in services:
-                target_df = series.loc[:, series.columns.str.startswith(
-                    ("s-{}_".format(ser), "c-{}_".format(ser), "c-{}-".format(ser), "m-{}_".format(ser), "m-{}-".format(ser)))]
-                if len(target_df.columns) in [0, 1]:
-                    continue
-                future_list.append(executor.submit(
-                    hierarchical_clustering, target_df, sbd, dist_threshold))
+                # perform clustering in each type of metric
+                service_metrics_df = series.loc[:, series.columns.str.startswith(("s-{}_".format(ser)))]
+                container_metrics_df = series.loc[:, series.columns.str.startswith(("c-{}_".format(ser)))]
+                middleware_metrics_df = series.loc[:, series.columns.str.startswith(("m-{}_".format(ser), "m-{}-".format(ser)))]
+                for target_df in [service_metrics_df, container_metrics_df, middleware_metrics_df]:
+                    if len(target_df.columns) <= 1:
+                        continue
+                    future_list.append(executor.submit(
+                        hierarchical_clustering, target_df, sbd, dist_threshold,
+                    ))
             for future in futures.as_completed(future_list):
                 c_info, remove_list = future.result()
                 clustering_info.update(c_info)
