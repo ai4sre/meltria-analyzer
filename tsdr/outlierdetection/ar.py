@@ -27,8 +27,7 @@ class AROutlierDetector:
     def detect(self, x: np.ndarray, threshold: float) -> list[float]:
         return [s for s in self.score(x) if s >= threshold]
 
-    def detect_by_fitting_dist(self, x: np.ndarray, threshold: float, **kwargs) -> list[tuple[int, float]]:
-        scores = self.score(x, **kwargs)
+    def detect_by_fitting_dist(self, scores: np.ndarray, threshold: float) -> list[tuple[int, float]]:
         abn_th = chi2.interval(1-threshold, 1)[1]
         anomalies: list[tuple[int, float]] = []
         for i, a in enumerate(scores):
