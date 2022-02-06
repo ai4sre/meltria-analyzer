@@ -18,12 +18,10 @@ class AROutlierDetector:
         if model_fit.ar_lags is None or len(model_fit.ar_lags) > 0:
             r = model_fit.ar_lags[-1]
         sig2 = model_fit.sigma2
-        preds: np.ndarray = model_fit.get_prediction().predicted_mean[r:]
+        preds: np.ndarray = model_fit.get_prediction().predicted_mean
         scores: list[float] = []
-        for i, xi in enumerate(x[r:]):
-            if i >= preds.size:
-                break
-            scores.append((xi - preds[i]) ** 2 / sig2)
+        for xi, pred in zip(x[r:], preds[r:]):
+            scores.append((xi - pred) ** 2 / sig2)
         return [np.nan * r] + scores if include_nan else scores
 
     def detect(self, x: np.ndarray, threshold: float) -> list[float]:
