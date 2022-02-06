@@ -39,7 +39,35 @@ TARGET_DATA = {"containers": "all",
                "middlewares": "all"}
 
 
-def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
+class UnivariateSeriesReductionResult:
+    _original_series: np.ndarray
+    _has_kept: bool
+    _anomaly_scores: np.ndarray
+
+    def __init__(
+        self,
+        original_series: np.ndarray,
+        has_kept: bool,
+        anomaly_scores: np.ndarray = np.array([]),
+    ) -> None:
+        self._original_series = original_series
+        self._has_kept = has_kept
+        self._anomaly_scores = anomaly_scores
+
+    @property
+    def original_series(self):
+        return self._original_series
+
+    @property
+    def has_kept(self):
+        return self._has_kept
+
+    @property
+    def anomaly_scores(self):
+        return self._anomaly_scores
+
+
+def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
     regression: str = kwargs.get('tsifter_step1_unit_root_regression', 'c')
     maxlag: int = kwargs.get('tsifter_step1_unit_root_max_lags', None)
     autolag = kwargs.get('tsifter_step1_unit_root_autolag', None)
@@ -47,7 +75,7 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
     if kwargs.get('tsifter_step1_pre_cv', False):
         cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
         if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
-            return False
+            return UnivariateSeriesReductionResult(series, has_kept=True)
 
     def log_or_nothing(x: np.ndarray) -> np.ndarray:
         if kwargs.get('tsifter_step1_take_log', False):
@@ -65,12 +93,12 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
             ar_lag = pp.lags
         except ValueError as e:
             warnings.warn(str(e))
-            return False
+            return UnivariateSeriesReductionResult(series, has_kept=False)
         except InfeasibleTestException as e:
             warnings.warn(str(e))
-            return False
+            return UnivariateSeriesReductionResult(series, has_kept=False)
     if pvalue >= kwargs.get('tsifter_step1_unit_root_alpha', 0.01):
-        return True
+        return UnivariateSeriesReductionResult(series, has_kept=True)
     else:
         # Post outlier detection
         odmodel: str = kwargs.get('tsifter_step1_post_od_model', 'knn')
@@ -78,40 +106,40 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> bool:
             knn = KNNOutlierDetector(w=ar_lag, k=1)   # k=1
             x = scipy.stats.zscore(log_or_nothing(series))
             if knn.has_anomaly(x, kwargs.get('tsifter_step1_post_od_threshold', 3.0)):
-                return True
+                return UnivariateSeriesReductionResult(series, has_kept=True)
         elif odmodel == 'hotelling':
             outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_post_od_threshold', 0.01))
             if len(outliers) > 1:
-                return True
+                return UnivariateSeriesReductionResult(series, has_kept=True)
         else:
             raise ValueError(f"{odmodel} == 'knn' or 'hotelling'")
-    return False
+    return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
-def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> bool:
+def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
     cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
     if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
-        return False
+        return UnivariateSeriesReductionResult(series, has_kept=False)
 
     ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 0.01)
     ar = AROutlierDetector()
-    anomalies = ar.detect_by_fitting_dist(
-        scipy.stats.zscore(series),
-        threshold=ar_threshold,
+    scores: np.ndarray = np.array(ar.score(
+        x=scipy.stats.zscore(series),
         regression=kwargs.get('tsifter_step1_ar_regression', 'c'),
-    )
+    ))
+    anomalies = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
     if len(anomalies) > 0:
-        return True
-    return False
+        return UnivariateSeriesReductionResult(series, has_kept=True, anomaly_scores=scores)
+    return UnivariateSeriesReductionResult(series, has_kept=False, anomaly_scores=scores)
 
 
 class Tsdr:
-    univariate_series_model: Callable[[np.ndarray, Any], bool]
+    univariate_series_model: Callable[[np.ndarray, Any], UnivariateSeriesReductionResult]
     params: dict[str, Any]
 
     def __init__(
         self,
-        univariate_series_model: Callable[[np.ndarray, Any], bool] = unit_root_based_model,
+        univariate_series_model: Callable[[np.ndarray, Any], UnivariateSeriesReductionResult] = ar_based_ad_model,
         **kwargs
     ) -> None:
         self.univariate_series_model = univariate_series_model
@@ -157,9 +185,10 @@ class Tsdr:
                 future = executor.submit(self.univariate_series_model, series, **self.params)
                 future_to_col[future] = col
             reduced_cols: list[str] = []
-            for is_unstationality in futures.as_completed(future_to_col):
-                col = future_to_col[is_unstationality]
-                if is_unstationality.result():
+            for future in futures.as_completed(future_to_col):
+                col = future_to_col[future]
+                result: UnivariateSeriesReductionResult = future.result()
+                if result.has_kept:
                     reduced_cols.append(col)
         return useries[reduced_cols]
 
