@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.stats import chi2
 from statsmodels.tsa.ar_model import ar_select_order
+from statsmodels.tsa.base.prediction import PredictionResults
 
 
 class AROutlierDetector:
@@ -17,10 +18,7 @@ class AROutlierDetector:
         if model_fit.ar_lags is None or len(model_fit.ar_lags) > 0:
             r = model_fit.ar_lags[-1]
         sig2 = model_fit.sigma2
-
-        pred = model_fit.get_prediction()
-        preds = pred.summary_frame()[r:]['mean'].to_numpy()
-
+        preds: np.ndarray = model_fit.get_prediction().predicted_mean[r:]
         scores: list[float] = []
         for i, xi in enumerate(x[r:]):
             if i >= preds.size:
