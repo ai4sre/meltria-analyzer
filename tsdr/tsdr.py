@@ -168,7 +168,7 @@ class Tsdr:
         # step2
         df_before_clustering = anomaly_score_df \
             if self.params['tsifter_step2_use_anomaly_score'] else reduced_series1
-        start: float = time.time()
+        start = time.time()
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
             df_before_clustering.copy(), services, max_workers,
