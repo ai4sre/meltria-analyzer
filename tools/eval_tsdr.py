@@ -230,18 +230,14 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     'tsifter_step1_post_od_model': cfg.step1.post_od_model,
                     'tsifter_step1_post_od_threshold': cfg.step1.post_od_threshold,
                 })
-                reducer = tsdr.Tsdr(
-                    tsdr.unit_root_based_model, **tsdr_param,
-                )
+                reducer = tsdr.Tsdr(tsdr.unit_root_based_model, **tsdr_param)
             elif cfg.step1.model_name == 'ar_based_ad':
                 tsdr_param.update({
                     'tsifter_step1_ar_regression': cfg.step1.ar_regression,
                     'tsifter_step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
                     'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
                 })
-                reducer = tsdr.Tsdr(
-                    tsdr.ar_based_ad_model, **tsdr_param,
-                )
+                reducer = tsdr.Tsdr(tsdr.ar_based_ad_model, **tsdr_param)
 
             elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info = reducer.run(
                 series=data_df,

@@ -134,16 +134,18 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
 
 
 class Tsdr:
-    univariate_series_model: Callable[[np.ndarray, Any], UnivariateSeriesReductionResult]
     params: dict[str, Any]
 
     def __init__(
         self,
-        univariate_series_model: Callable[[np.ndarray, Any], UnivariateSeriesReductionResult] = ar_based_ad_model,
+        univariate_series_func: Callable[[np.ndarray, Any], UnivariateSeriesReductionResult],
         **kwargs
     ) -> None:
-        self.univariate_series_model = univariate_series_model
+        setattr(self, 'univariate_series_func', univariate_series_func)
         self.params = kwargs
+
+    def univariate_series_func(self, series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+        return ar_based_ad_model(series, **kwargs)
 
     def run(self, series: pd.DataFrame, max_workers: int
             ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
@@ -185,7 +187,7 @@ class Tsdr:
                 series: np.ndarray = useries[col].to_numpy()
                 if series.sum() == 0. or len(np.unique(series)) == 1 or np.isnan(series.sum()):
                     continue
-                future = executor.submit(self.univariate_series_model, series, **self.params)
+                future = executor.submit(self.univariate_series_func, series, **self.params)
                 future_to_col[future] = col
             reduced_cols: list[str] = []
             for future in futures.as_completed(future_to_col):
