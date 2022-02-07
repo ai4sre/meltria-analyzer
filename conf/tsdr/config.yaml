@@ -3,7 +3,7 @@ metrics_files: ???
 exclude_middleware_metrics: true
 defaults:
   - _self_
-  - step1: df
+  - step1: ar_based_ad
   - step2: default
 neptune:
   mode: debug
