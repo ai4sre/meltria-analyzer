@@ -104,9 +104,12 @@ def log_plots_as_image(run: neptune.Run, record: DatasetRecord) -> None:
     plt.close(fig=fig)
 
 
-def log_clustering_plots_as_image(run: neptune.Run,
-                                  rep_metric: str, sub_metrics: list[str],
-                                  record: DatasetRecord) -> None:
+def log_clustering_plots_as_image(
+    run: neptune.Run,
+    rep_metric: str,
+    sub_metrics: list[str],
+    record: DatasetRecord,
+) -> None:
     """ Upload clustered time series plots to neptune.ai """
     clustered_metrics: list[str] = [rep_metric] + sub_metrics
     fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
@@ -120,9 +123,11 @@ def log_clustering_plots_as_image(run: neptune.Run,
     plt.close(fig=fig)
 
 
-def log_non_clustered_plots_as_image(run: neptune.Run,
-                                     record: DatasetRecord,
-                                     non_clustered_reduced_df: pd.DataFrame) -> None:
+def log_non_clustered_plots_as_image(
+    run: neptune.Run,
+    record: DatasetRecord,
+    non_clustered_reduced_df: pd.DataFrame,
+) -> None:
     """ Upload non-clustered time series plots to neptune.ai """
 
     num_non_clustered_plots = len(non_clustered_reduced_df.columns)
@@ -138,9 +143,8 @@ def log_non_clustered_plots_as_image(run: neptune.Run,
     axes = trim_axs(axes, num_non_clustered_plots)
     # reset_index removes extra index texts from the generated figure.
     non_clustered_reduced_df.reset_index().plot(
-        subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-    fig.suptitle(
-        f"{record.chaos_case_file()} - non-clustered metrics")
+        subplots=True, figsize=(6, 6), sharex=False, sharey=False, ax=axes)
+    fig.suptitle(f"{record.chaos_case_file()} - non-clustered metrics")
     run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case()}"].log(
         neptune.types.File.as_image(fig)
     )
