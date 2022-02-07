@@ -171,6 +171,8 @@ def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataF
 
 
 def eval_tsdr(run: neptune.Run, cfg: DictConfig):
+    enable_upload_plots: bool = (cfg.neptune.mode != 'debug') or cfg.upload_plots
+
     dataset: pd.DataFrame = load_dataset(
         cfg.metrics_files,
         cfg.exclude_middleware_metrics,
@@ -208,7 +210,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
 
-            if cfg.neptune.mode != 'debug':
+            if enable_upload_plots:
                 logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
                 log_plots_as_image(run, record)
 
@@ -275,10 +277,10 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     ), ignore_index=True,
                 )
 
-            if cfg.neptune.mode != 'debug':
+            if enable_upload_plots:
                 logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
             for representative_metric, sub_metrics in clustering_info.items():
-                if cfg.neptune.mode != 'debug':
+                if enable_upload_plots:
                     log_clustering_plots_as_image(run, representative_metric, sub_metrics, record)
                 clustering_df = clustering_df.append(
                     pd.Series(
@@ -291,7 +293,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
             rep_metrics: list[str] = list(clustering_info.keys())
             non_clustered_reduced_df: pd.DataFrame = reduced_df_by_step['step2'].drop(columns=rep_metrics)
-            if cfg.neptune.mode != 'debug':
+            if enable_upload_plots:
                 logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
                 log_non_clustered_plots_as_image(run, record, non_clustered_reduced_df)
             non_clustered_df = non_clustered_df.append(
