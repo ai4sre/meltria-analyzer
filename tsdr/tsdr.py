@@ -147,8 +147,11 @@ class Tsdr:
     def univariate_series_func(self, series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
         return ar_based_ad_model(series, **kwargs)
 
-    def run(self, series: pd.DataFrame, max_workers: int
-            ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
+    def run(
+        self,
+        series: pd.DataFrame,
+        max_workers: int,
+    ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
         services: list[str] = prepare_services_list(series)
         metrics_dimension: dict[str, Any] = aggregate_dimension(series)
 
@@ -179,7 +182,11 @@ class Tsdr:
         return {'step1': time_adf, 'step2': time_clustering}, \
             {'step1': df_before_clustering, 'step2': reduced_series2}, metrics_dimension, clustering_info
 
-    def reduce_univariate_series(self, useries: pd.DataFrame, n_workers: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def reduce_univariate_series(
+        self,
+        useries: pd.DataFrame,
+        n_workers: int,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         anomaly_score_df = pd.DataFrame()
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             future_to_col = {}
@@ -199,8 +206,13 @@ class Tsdr:
                         anomaly_score_df[col] = result.anomaly_scores
         return useries[reduced_cols], anomaly_score_df
 
-    def reduce_multivariate_series(self, series: pd.DataFrame, services: list[str],
-                                   n_workers: int, dist_threshold: float) -> tuple[pd.DataFrame, dict[str, Any]]:
+    def reduce_multivariate_series(
+        self,
+        series: pd.DataFrame,
+        services: list[str],
+        n_workers: int,
+        dist_threshold: float,
+    ) -> tuple[pd.DataFrame, dict[str, Any]]:
         clustering_info: dict[str, Any] = {}
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             # Clustering metrics by service including services, containers and middlewares metrics
