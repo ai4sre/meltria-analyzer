@@ -1,1 +1,2 @@
 dist_threshold: 0.01
+use_anomaly_score: false

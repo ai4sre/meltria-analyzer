@@ -123,12 +123,12 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
 
     ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 0.01)
     ar = AROutlierDetector()
-    scores: np.ndarray = np.array(ar.score(
+    scores: np.ndarray = ar.score(
         x=scipy.stats.zscore(series),
         regression=kwargs.get('tsifter_step1_ar_regression', 'c'),
-    ))
-    anomalies = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
-    if len(anomalies) > 0:
+    )
+    outliers = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
+    if len(outliers) > 0:
         return UnivariateSeriesReductionResult(series, has_kept=True, anomaly_scores=scores)
     return UnivariateSeriesReductionResult(series, has_kept=False, anomaly_scores=scores)
 
@@ -153,7 +153,7 @@ class Tsdr:
         # step1
         start: float = time.time()
 
-        reduced_series1 = self.reduce_univariate_series(series, max_workers)
+        reduced_series1, anomaly_score_df = self.reduce_univariate_series(series, max_workers)
 
         time_adf: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(
@@ -161,10 +161,12 @@ class Tsdr:
         metrics_dimension["total"].append(len(reduced_series1.columns))
 
         # step2
+        df_before_clustering = anomaly_score_df \
+            if self.params['tsifter_step2_use_anomaly_score'] else reduced_series1.copy()
         start: float = time.time()
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
-            reduced_series1.copy(), services, max_workers,
+            df_before_clustering, services, max_workers,
             self.params['tsifter_step2_clustering_threshold'],
         )
 
@@ -175,7 +177,8 @@ class Tsdr:
         return {'step1': time_adf, 'step2': time_clustering}, \
             {'step1': reduced_series1, 'step2': reduced_series2}, metrics_dimension, clustering_info
 
-    def reduce_univariate_series(self, useries: pd.DataFrame, n_workers: int) -> pd.DataFrame:
+    def reduce_univariate_series(self, useries: pd.DataFrame, n_workers: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+        anomaly_score_df = pd.DataFrame()
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             future_to_col = {}
             for col in useries.columns:
@@ -190,7 +193,9 @@ class Tsdr:
                 result: UnivariateSeriesReductionResult = future.result()
                 if result.has_kept:
                     reduced_cols.append(col)
-        return useries[reduced_cols]
+                    if len(result.anomaly_scores) > 0:
+                        anomaly_score_df[col] = result.anomaly_scores
+        return useries[reduced_cols], anomaly_score_df
 
     def reduce_multivariate_series(self, series: pd.DataFrame, services: list[str],
                                    n_workers: int, dist_threshold: float) -> tuple[pd.DataFrame, dict[str, Any]]:

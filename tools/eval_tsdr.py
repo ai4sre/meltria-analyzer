@@ -217,6 +217,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             reducer: tsdr.Tsdr
             tsdr_param = {
                 'tsifter_step2_clustering_threshold': cfg.step2.dist_threshold,
+                'tsifter_step2_use_anomaly_score': cfg.step2.use_anomaly_score,
             }
             if cfg.step1.model_name == 'unit_root_test':
                 tsdr_param.update({
@@ -378,6 +379,7 @@ def main(cfg: DictConfig) -> None:
     params = {
         'exclude_middleware_metrics': cfg.exclude_middleware_metrics,
         'step2_dist_threshold': cfg.step2.dist_threshold,
+        'step2_use_anomaly_score': cfg.step2.use_anomaly_score,
     }
     if cfg.step1.model_name == 'unit_root_test':
         params.update({
