@@ -51,8 +51,10 @@ class DatasetRecord:
         return list(self.data_df.columns)
 
 
-def read_metrics_file(metrics_file: str,
-                      exclude_middleware_metrics: bool = False) -> Optional[pd.DataFrame]:
+def read_metrics_file(
+    metrics_file: str,
+    exclude_middleware_metrics: bool = False,
+) -> Optional[pd.DataFrame]:
     logger.info(f">> Loading metrics file {metrics_file} ...")
     try:
         data_df, _, metrics_meta = tsdr.read_metrics_json(
