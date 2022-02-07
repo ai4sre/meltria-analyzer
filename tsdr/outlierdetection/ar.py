@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 from scipy.stats import chi2
 from statsmodels.tsa.ar_model import ar_select_order
@@ -10,7 +12,7 @@ class AROutlierDetector:
     def __init__(self, maxlag: int = 0):
         self.maxlag = maxlag
 
-    def score(self, x: np.ndarray, regression: str = 'c', ic: str = 'aic', include_nan: bool = False) -> list[float]:
+    def score(self, x: np.ndarray, regression: str = 'c', ic: str = 'aic') -> np.ndarray:
         maxlag = int(x.size * 0.2) if self.maxlag == 0 else self.maxlag
         sel = ar_select_order(x, maxlag=maxlag, trend=regression, ic=ic, old_names=False)
         model_fit = sel.model.fit()
@@ -19,10 +21,10 @@ class AROutlierDetector:
             r = model_fit.ar_lags[-1]
         sig2 = model_fit.sigma2
         preds: np.ndarray = model_fit.get_prediction().predicted_mean
-        scores: list[float] = []
-        for xi, pred in zip(x[r:], preds[r:]):
-            scores.append((xi - pred) ** 2 / sig2)
-        return [np.nan * r] + scores if include_nan else scores
+        scores: np.ndarray = np.empty(x.size, dtype=np.float32)
+        for i, (xi, pred) in enumerate(zip(x[r:], preds[r:])):
+            scores[r + i] = (xi - pred) ** 2 / sig2
+        return scores
 
     def detect(self, x: np.ndarray, threshold: float) -> list[float]:
         return [s for s in self.score(x) if s >= threshold]
