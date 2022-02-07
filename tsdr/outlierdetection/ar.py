@@ -21,7 +21,7 @@ class AROutlierDetector:
             r = model_fit.ar_lags[-1]
         sig2 = model_fit.sigma2
         preds: np.ndarray = model_fit.get_prediction().predicted_mean
-        scores: np.ndarray = np.empty(x.size, dtype=np.float32)
+        scores: np.ndarray = np.zeros(x.size, dtype=np.float32)
         for i, (xi, pred) in enumerate(zip(x[r:], preds[r:])):
             scores[r + i] = (xi - pred) ** 2 / sig2
         return scores
