@@ -164,11 +164,11 @@ class Tsdr:
 
         # step2
         df_before_clustering = anomaly_score_df \
-            if self.params['tsifter_step2_use_anomaly_score'] else reduced_series1.copy()
+            if self.params['tsifter_step2_use_anomaly_score'] else reduced_series1
         start: float = time.time()
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
-            df_before_clustering, services, max_workers,
+            df_before_clustering.copy(), services, max_workers,
             self.params['tsifter_step2_clustering_threshold'],
         )
 
@@ -177,7 +177,7 @@ class Tsdr:
         metrics_dimension["total"].append(len(reduced_series2.columns))
 
         return {'step1': time_adf, 'step2': time_clustering}, \
-            {'step1': reduced_series1, 'step2': reduced_series2}, metrics_dimension, clustering_info
+            {'step1': df_before_clustering, 'step2': reduced_series2}, metrics_dimension, clustering_info
 
     def reduce_univariate_series(self, useries: pd.DataFrame, n_workers: int) -> tuple[pd.DataFrame, pd.DataFrame]:
         anomaly_score_df = pd.DataFrame()
