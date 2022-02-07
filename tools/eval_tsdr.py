@@ -142,8 +142,9 @@ def log_non_clustered_plots_as_image(
     # Match the numbers axes and non-clustered columns
     axes = trim_axs(axes, num_non_clustered_plots)
     # reset_index removes extra index texts from the generated figure.
-    non_clustered_reduced_df.reset_index().plot(
-        subplots=True, figsize=(6, 6), sharex=False, sharey=False, ax=axes)
+    non_clustered_reduced_df.reset_index(drop=True).plot(
+        subplots=True, figsize=(6, 6), sharex=False, sharey=False, ax=axes,
+    )
     fig.suptitle(f"{record.chaos_case_file()} - non-clustered metrics")
     run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case()}"].log(
         neptune.types.File.as_image(fig)
