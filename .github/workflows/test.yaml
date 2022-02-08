@@ -35,10 +35,10 @@ jobs:
         uses: actions/cache@v2
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.python-version }}-v2-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-v3-${{ hashFiles('**/poetry.lock') }}
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root --no-dev
+        run: poetry install --no-interaction --no-root
       - name: Test with pytest
         run: |
           source .venv/bin/activate
