@@ -51,6 +51,109 @@ class DatasetRecord:
         return list(self.data_df.columns)
 
 
+class TimeSeriesPlotter:
+    run: neptune.Run
+    enable_upload_plots: bool
+    logger: logging.Logger
+
+    def __init__(
+        self,
+        run: neptune.Run,
+        enable_upload_plots: bool,
+        logger: logging.Logger,
+    ) -> None:
+        self.run = run
+        self.enable_upload_plots = enable_upload_plots
+        self.logger = logger
+
+    def log_plots_as_image(self, record: DatasetRecord) -> None:
+        """ Upload found_metrics plot images to neptune.ai. """
+        if self.enable_upload_plots:
+            return None
+
+        self.logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
+
+        _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
+            metrics=record.metrics_names(),  # pre-reduced data frame
+            chaos_type=record.chaos_type,
+            chaos_comp=record.chaos_comp,
+        )
+        if len(ground_truth_metrics) < 1:
+            return
+        ground_truth_metrics.sort()
+        fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
+        # reset_index removes extra index texts from the generated figure.
+        record.data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+        fig.suptitle(record.chaos_case_file())
+        self.run[f"dataset/figures/{record.chaos_case()}"].log(neptune.types.File.as_image(fig))
+        plt.close(fig=fig)
+
+    def log_clustering_plots_as_image(
+        self,
+        rep_metric: str,
+        sub_metrics: list[str],
+        metrics_df: pd.DataFrame,
+        record: DatasetRecord,
+    ) -> None:
+        """ Upload clustered time series plots to neptune.ai """
+
+        if self.enable_upload_plots:
+            return None
+
+        clustered_metrics: list[str] = [rep_metric] + sub_metrics
+        fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
+        # reset_index removes extra index texts from the generated figure.
+        metrics_df[clustered_metrics].reset_index(drop=True).plot(
+            subplots=True, figsize=(6, 6), sharex=False, ax=axes)
+        fig.suptitle(f"{record.chaos_case_file()}    rep:{rep_metric}")
+        self.run[f"tests/clustering/ts_figures/{record.chaos_case()}"].log(
+            neptune.types.File.as_image(fig))
+        plt.close(fig=fig)
+
+    def log_non_clustered_plots_as_image(
+        self,
+        record: DatasetRecord,
+        non_clustered_reduced_df: pd.DataFrame,
+    ) -> None:
+        """ Upload non-clustered time series plots to neptune.ai """
+
+        if self.enable_upload_plots:
+            return None
+
+        logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
+
+        num_non_clustered_plots = len(non_clustered_reduced_df.columns)
+        if num_non_clustered_plots == 0:
+            return None
+        fig, axes = plt.subplots(
+            nrows=math.ceil(num_non_clustered_plots/6),
+            ncols=6,
+            figsize=(6*6, num_non_clustered_plots),
+            squeeze=False,  # always return 2D-array axes
+        )
+        # Match the numbers axes and non-clustered columns
+        axes = self.trim_axs(axes, num_non_clustered_plots)
+        # reset_index removes extra index texts from the generated figure.
+        non_clustered_reduced_df.reset_index(drop=True).plot(
+            subplots=True, figsize=(6, 6), sharex=False, sharey=False, ax=axes,
+        )
+        fig.suptitle(f"{record.chaos_case_file()} - non-clustered metrics")
+        self.run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case()}"].log(
+            neptune.types.File.as_image(fig)
+        )
+        plt.close(fig=fig)
+
+    @classmethod
+    def trim_axs(cls, axs, N):
+        """
+        Reduce *axs* to *N* Axes. All further Axes are removed from the figure.
+        """
+        axs = axs.flat
+        for ax in axs[N:]:
+            ax.remove()
+        return axs[:N]
+
+
 def read_metrics_file(
     metrics_file: str,
     exclude_middleware_metrics: bool = False,
@@ -86,83 +189,6 @@ def load_dataset(metrics_files: list[str], exclude_middleware_metrics: bool = Fa
     return dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'])
 
 
-def log_plots_as_image(run: neptune.Run, record: DatasetRecord) -> None:
-    """ Upload found_metrics plot images to neptune.ai. """
-
-    _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
-        metrics=record.metrics_names(),  # pre-reduced data frame
-        chaos_type=record.chaos_type,
-        chaos_comp=record.chaos_comp,
-    )
-    if len(ground_truth_metrics) < 1:
-        return
-    ground_truth_metrics.sort()
-    fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
-    # reset_index removes extra index texts from the generated figure.
-    record.data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-    fig.suptitle(record.chaos_case_file())
-    run[f"dataset/figures/{record.chaos_case()}"].log(neptune.types.File.as_image(fig))
-    plt.close(fig=fig)
-
-
-def log_clustering_plots_as_image(
-    run: neptune.Run,
-    rep_metric: str,
-    sub_metrics: list[str],
-    metrics_df: pd.DataFrame,
-    record: DatasetRecord,
-) -> None:
-    """ Upload clustered time series plots to neptune.ai """
-    clustered_metrics: list[str] = [rep_metric] + sub_metrics
-    fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
-    # reset_index removes extra index texts from the generated figure.
-    metrics_df[clustered_metrics].reset_index(drop=True).plot(
-        subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-    fig.suptitle(f"{record.chaos_case_file()}    rep:{rep_metric}")
-    run[f"tests/clustering/ts_figures/{record.chaos_case()}"].log(
-        neptune.types.File.as_image(fig))
-    plt.close(fig=fig)
-
-
-def log_non_clustered_plots_as_image(
-    run: neptune.Run,
-    record: DatasetRecord,
-    non_clustered_reduced_df: pd.DataFrame,
-) -> None:
-    """ Upload non-clustered time series plots to neptune.ai """
-
-    num_non_clustered_plots = len(non_clustered_reduced_df.columns)
-    if num_non_clustered_plots == 0:
-        return None
-    fig, axes = plt.subplots(
-        nrows=math.ceil(num_non_clustered_plots/6),
-        ncols=6,
-        figsize=(6*6, num_non_clustered_plots),
-        squeeze=False,  # always return 2D-array axes
-    )
-    # Match the numbers axes and non-clustered columns
-    axes = trim_axs(axes, num_non_clustered_plots)
-    # reset_index removes extra index texts from the generated figure.
-    non_clustered_reduced_df.reset_index(drop=True).plot(
-        subplots=True, figsize=(6, 6), sharex=False, sharey=False, ax=axes,
-    )
-    fig.suptitle(f"{record.chaos_case_file()} - non-clustered metrics")
-    run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case()}"].log(
-        neptune.types.File.as_image(fig)
-    )
-    plt.close(fig=fig)
-
-
-def trim_axs(axs, N):
-    """
-    Reduce *axs* to *N* Axes. All further Axes are removed from the figure.
-    """
-    axs = axs.flat
-    for ax in axs[N:]:
-        ax.remove()
-    return axs[:N]
-
-
 def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
     df = scores_df.groupby(indexes).agg({
         'tn': 'sum',
@@ -177,7 +203,11 @@ def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataF
 
 
 def eval_tsdr(run: neptune.Run, cfg: DictConfig):
-    enable_upload_plots: bool = (cfg.neptune.mode != 'debug') or cfg.upload_plots
+    ts_plotter: TimeSeriesPlotter = TimeSeriesPlotter(
+        run=run,
+        enable_upload_plots=(cfg.neptune.mode != 'debug') or cfg.upload_plots,
+        logger=logger,
+    )
 
     dataset: pd.DataFrame = load_dataset(
         cfg.metrics_files,
@@ -216,9 +246,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
 
-            if enable_upload_plots:
-                logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
-                log_plots_as_image(run, record)
+            ts_plotter.log_plots_as_image(record)
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
@@ -283,14 +311,13 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     ), ignore_index=True,
                 )
 
-            if enable_upload_plots:
+            if ts_plotter.enable_upload_plots:
                 logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
             pre_clustered_reduced_df = reduced_df_by_step['step1']
             for representative_metric, sub_metrics in clustering_info.items():
-                if enable_upload_plots:
-                    log_clustering_plots_as_image(
-                        run, representative_metric, sub_metrics, pre_clustered_reduced_df, record,
-                    )
+                ts_plotter.log_clustering_plots_as_image(
+                    representative_metric, sub_metrics, pre_clustered_reduced_df, record,
+                )
                 clustering_df = clustering_df.append(
                     pd.Series(
                         [
@@ -303,9 +330,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             rep_metrics: list[str] = list(clustering_info.keys())
             post_clustered_reduced_df = reduced_df_by_step['step2']
             non_clustered_reduced_df: pd.DataFrame = post_clustered_reduced_df.drop(columns=rep_metrics)
-            if enable_upload_plots:
-                logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
-                log_non_clustered_plots_as_image(run, record, non_clustered_reduced_df)
+            ts_plotter.log_non_clustered_plots_as_image(record, non_clustered_reduced_df)
             non_clustered_df = non_clustered_df.append(
                 pd.Series(
                     [
