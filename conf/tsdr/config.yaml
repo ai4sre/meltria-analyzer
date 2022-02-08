@@ -3,7 +3,8 @@ metrics_files: ???
 exclude_middleware_metrics: true
 defaults:
   - _self_
-  - step1: df
+  - step1: ar_based_ad
   - step2: default
+upload_plots: false  # upload graph image to Neptune
 neptune:
   mode: debug
