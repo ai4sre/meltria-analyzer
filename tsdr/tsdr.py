@@ -124,7 +124,7 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
     ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 0.01)
     ar = AROutlierDetector()
     scores: np.ndarray = ar.score(
-        x=scipy.stats.zscore(series),
+        x=series,
         regression=kwargs.get('tsifter_step1_ar_regression', 'c'),
     )
     outliers = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
