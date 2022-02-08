@@ -23,3 +23,10 @@ def test_ar_outlier_detector_detect():
     input = np.array([1, 2, 10, 2, 1, 0.5, 0.8, 1.5, 5.0, 4.8, 7.2, 9.0, 12.1])
     anomalies = ar.detect(input, 0.3)
     assert len(anomalies) == 3
+
+
+def test_ar_outlier_detector_detect_by_fitting_dist():
+    ar = AROutlierDetector()
+    input = np.array([1, 2, 10, 2, 1, 0.5, 0.8, 1.5, 5.0, 4.8, 7.2, 9.0, 12.1])
+    anomalies = ar.detect_by_fitting_dist(input, 0.01)
+    assert len(anomalies) == 3
