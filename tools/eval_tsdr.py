@@ -109,16 +109,16 @@ def log_clustering_plots_as_image(
     run: neptune.Run,
     rep_metric: str,
     sub_metrics: list[str],
+    metrics_df: pd.DataFrame,
     record: DatasetRecord,
 ) -> None:
     """ Upload clustered time series plots to neptune.ai """
     clustered_metrics: list[str] = [rep_metric] + sub_metrics
     fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
     # reset_index removes extra index texts from the generated figure.
-    record.data_df[clustered_metrics].reset_index().plot(
+    metrics_df[clustered_metrics].reset_index(drop=True).plot(
         subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-    fig.suptitle(
-        f"{record.chaos_case_file()}    rep:{rep_metric}")
+    fig.suptitle(f"{record.chaos_case_file()}    rep:{rep_metric}")
     run[f"tests/clustering/ts_figures/{record.chaos_case()}"].log(
         neptune.types.File.as_image(fig))
     plt.close(fig=fig)
@@ -285,9 +285,12 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
             if enable_upload_plots:
                 logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
+            pre_clustered_reduced_df = reduced_df_by_step['step1']
             for representative_metric, sub_metrics in clustering_info.items():
                 if enable_upload_plots:
-                    log_clustering_plots_as_image(run, representative_metric, sub_metrics, record)
+                    log_clustering_plots_as_image(
+                        run, representative_metric, sub_metrics, pre_clustered_reduced_df, record,
+                    )
                 clustering_df = clustering_df.append(
                     pd.Series(
                         [
@@ -298,7 +301,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 )
 
             rep_metrics: list[str] = list(clustering_info.keys())
-            non_clustered_reduced_df: pd.DataFrame = reduced_df_by_step['step2'].drop(columns=rep_metrics)
+            post_clustered_reduced_df = reduced_df_by_step['step2']
+            non_clustered_reduced_df: pd.DataFrame = post_clustered_reduced_df.drop(columns=rep_metrics)
             if enable_upload_plots:
                 logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
                 log_non_clustered_plots_as_image(run, record, non_clustered_reduced_df)
