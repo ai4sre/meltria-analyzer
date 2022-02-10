@@ -2,8 +2,8 @@ from typing import Any
 
 import numpy as np
 from scipy.stats import chi2
-from statsmodels.tsa.ar_model import AutoReg, ar_select_order
-from statsmodels.tsa.base.prediction import PredictionResults
+from statsmodels.tsa.ar_model import (AutoReg, AutoRegResultsWrapper,
+                                      ar_select_order)
 
 
 class AROutlierDetector:
@@ -19,7 +19,24 @@ class AROutlierDetector:
         autolag: bool = True,
         ic: str = 'aic',
         lag: int = -1,
-    ) -> tuple[np.ndarray, np.ndarray]:
+        dynamic_prediction: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray, AutoRegResultsWrapper]:
+        """
+        Estimate the anomaly scores for the datapoints in x.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+            numpy.ndarray
+                Anomaly scores
+            numpy.ndarray
+                Predicted values
+            AutoRegResults
+                Learned Model
+        """
+
         r: int = lag
         if autolag:
             maxlag = int(x.size * 0.2) if self.maxlag == 0 else self.maxlag
@@ -34,11 +51,11 @@ class AROutlierDetector:
             model_fit = model.fit()
 
         sig2 = model_fit.sigma2
-        preds: np.ndarray = model_fit.get_prediction().predicted_mean
+        preds: np.ndarray = model_fit.get_prediction(dynamic=dynamic_prediction).predicted_mean
         scores: np.ndarray = np.zeros(x.size, dtype=np.float32)
         for i, (xi, pred) in enumerate(zip(x[r:], preds[r:])):
             scores[r + i] = (xi - pred) ** 2 / sig2
-        return scores, preds
+        return scores, preds, model_fit
 
     def detect(self, x: np.ndarray, threshold: float) -> list[float]:
         return [s for s in self.score(x) if s >= threshold]
