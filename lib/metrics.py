@@ -3,7 +3,9 @@ from collections import defaultdict
 from typing import Any
 
 CHAOS_TO_CAUSE_METRIC_PATTERNS = {
-    'pod-cpu-hog': ['cpu_.+'],
+    'pod-cpu-hog': [
+        'cpu_.+', 'threads', 'sockets', 'file_descriptors', 'processes', 'memory_cache', 'memory_mapped_file',
+    ],
     'pod-memory-hog': [
         'memory_.+', 'threads', 'sockets', 'file_descriptors',
         'processes', 'fs_inodes_total', 'fs_limit_bytes', 'ulimits_soft',
