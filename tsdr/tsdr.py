@@ -128,6 +128,8 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
         regression=kwargs.get('tsifter_step1_ar_regression', 'c'),
         dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False)
     )[0]
+    if not np.all(np.isfinite(scores)):
+        raise ValueError(f"scores must contain only finite values. {scores}")
     outliers = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
     if len(outliers) > 0:
         return UnivariateSeriesReductionResult(series, has_kept=True, anomaly_scores=scores)
