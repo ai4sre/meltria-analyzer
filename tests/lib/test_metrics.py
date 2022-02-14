@@ -5,7 +5,7 @@ def test_check_tsdr_ground_truth_by_route():
     metrics = [
         'c-user-db_cpu_usage_seconds_total',
         'c-user-db_cpu_user_seconds_total',
-        'c-user-db_file_descriptors',
+        'c-user-db_network_receive_bytes',
         's-user_latency',
         'c-orders_cpu_usage_seconds_total',
         's-orders_latency',
@@ -26,7 +26,7 @@ def test_check_tsdr_ground_truth_by_route():
     metrics = [
         'c-user-db_cpu_usage_seconds_total',
         'c-user-db_cpu_user_seconds_total',
-        'c-user-db_file_descriptors',
+        'c-user-db_network_receive_bytes',
         's-user_latency',
         's-front-end_latency',
     ]
@@ -44,7 +44,7 @@ def test_check_tsdr_ground_truth_by_route():
     metrics = [
         'c-user-db_cpu_usage_seconds_total',
         'c-user-db_cpu_user_seconds_total',
-        'c-user-db_file_descriptors',
+        'c-user-db_network_receive_bytes',
         's-user_latency',
     ]
     ok, found_metrics = check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'user-db')
@@ -60,7 +60,7 @@ def test_check_tsdr_ground_truth_by_route():
     metrics = [
         'c-front-end_cpu_usage_seconds_total',
         'c-front-end_cpu_user_seconds_total',
-        'c-front-end_db_file_descriptors',
+        'c-user-db_network_receive_bytes',
         's-front-end_latency',
     ]
     ok, found_metrics = check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'front-end')

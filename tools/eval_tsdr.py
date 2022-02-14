@@ -68,8 +68,8 @@ class TimeSeriesPlotter:
 
     def log_plots_as_image(self, record: DatasetRecord) -> None:
         """ Upload found_metrics plot images to neptune.ai. """
-        if self.enable_upload_plots:
-            return None
+        if not self.enable_upload_plots:
+            return
 
         self.logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
 
@@ -97,8 +97,8 @@ class TimeSeriesPlotter:
     ) -> None:
         """ Upload clustered time series plots to neptune.ai """
 
-        if self.enable_upload_plots:
-            return None
+        if not self.enable_upload_plots:
+            return
 
         clustered_metrics: list[str] = [rep_metric] + sub_metrics
         fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
@@ -117,8 +117,8 @@ class TimeSeriesPlotter:
     ) -> None:
         """ Upload non-clustered time series plots to neptune.ai """
 
-        if self.enable_upload_plots:
-            return None
+        if not self.enable_upload_plots:
+            return
 
         logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
 

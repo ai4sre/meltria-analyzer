@@ -2,11 +2,16 @@ import re
 from collections import defaultdict
 from typing import Any
 
-CHAOS_TO_CAUSE_METRIC_PREFIX = {
-    'pod-cpu-hog': 'cpu_',
-    'pod-memory-hog': 'memory_',
-    'pod-network-loss': 'network_',
-    'pod-network-latency': 'network_',
+CHAOS_TO_CAUSE_METRIC_PATTERNS = {
+    'pod-cpu-hog': [
+        'cpu_.+', 'threads', 'sockets', 'file_descriptors', 'processes', 'memory_cache', 'memory_mapped_file',
+    ],
+    'pod-memory-hog': [
+        'memory_.+', 'threads', 'sockets', 'file_descriptors',
+        'processes', 'fs_inodes_total', 'fs_limit_bytes', 'ulimits_soft',
+    ],
+    'pod-network-loss': ['network_.+'],
+    'pod-network-latency': ['network_.+'],
 }
 
 ROOT_METRIC_LABEL = "s-front-end_latency"
@@ -73,7 +78,7 @@ def generate_containers_to_service() -> dict[str, str]:
 def generate_tsdr_ground_truth() -> dict[str, Any]:
     all_gt_routes: dict[str, dict[str, list[list[str]]]] = defaultdict(lambda: defaultdict(list))
     ctos: dict[str, str] = generate_containers_to_service()
-    for chaos, metric_prefix in CHAOS_TO_CAUSE_METRIC_PREFIX.items():
+    for chaos, metric_patterns in CHAOS_TO_CAUSE_METRIC_PATTERNS.items():
         for ctnr in CONTAINER_CALL_GRAPH.keys():
             if ctnr in SKIP_CONTAINERS:
                 continue
@@ -85,8 +90,8 @@ def generate_tsdr_ground_truth() -> dict[str, Any]:
             for stos_route in stos_routes:
                 metrics_patterns: list[str] = []
                 # add cause metrics pattern
-                metrics_patterns.append(f"^c-{ctnr}_{metric_prefix}.+")
-                metrics_patterns.append(f"^s-{cause_service}_.+")
+                metrics_patterns.append(f"^c-{ctnr}_({'|'.join(metric_patterns)})$")
+                metrics_patterns.append(f"^s-{cause_service}_.+$")
                 if stos_route != ():
                     metrics_patterns.append(f"^s-({'|'.join(stos_route)})_.+")
                 routes.append(metrics_patterns)
@@ -134,11 +139,12 @@ def check_route(metrics: list[str], gt_route: list[str]) -> tuple[bool, list[str
 
 def check_cause_metrics(metrics: list[str], chaos_type: str, chaos_comp: str
                         ) -> tuple[bool, list[Any]]:
-    prefix = CHAOS_TO_CAUSE_METRIC_PREFIX[chaos_type]
+    metric_patterns = CHAOS_TO_CAUSE_METRIC_PATTERNS[chaos_type]
     cause_metrics = []
     for metric in metrics:
-        if re.match(f"^c-{chaos_comp}_{prefix}.+", metric):
-            cause_metrics.append(metric)
+        for pattern in metric_patterns:
+            if re.match(f"^c-{chaos_comp}_{pattern}$", metric):
+                cause_metrics.append(metric)
     if len(cause_metrics) > 0:
         return True, cause_metrics
     return False, cause_metrics
