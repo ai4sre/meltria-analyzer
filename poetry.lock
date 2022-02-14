@@ -615,7 +615,7 @@ python-versions = "*"
 
 [[package]]
 name = "neptune-client"
-version = "0.13.1"
+version = "0.14.3"
 description = "Neptune Client"
 category = "main"
 optional = false
@@ -627,7 +627,6 @@ bravado = "*"
 click = ">=7.0"
 future = ">=0.17.1"
 GitPython = ">=2.0.8"
-jsonschema = "<4"
 oauthlib = ">=2.1.0"
 packaging = "*"
 pandas = "*"
@@ -637,6 +636,7 @@ PyJWT = "*"
 requests = ">=2.20.0"
 requests-oauthlib = ">=1.0.0"
 six = ">=1.12.0"
+swagger-spec-validator = ">=2.7.4"
 urllib3 = "*"
 websocket-client = ">=0.35.0,<1.0.0 || >1.0.0"
 
@@ -1367,7 +1367,7 @@ test = ["websockets"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.10"
-content-hash = "6759eec0eb389f21b53c38c209898949bcbc5938140432f2047a78e59f397990"
+content-hash = "f615aca1029d8d10fa954200b5681bc4e703e01c11f79b884314effef61857a9"
 
 [metadata.files]
 antlr4-python3-runtime = [
@@ -1891,7 +1891,7 @@ mypy-extensions = [
     {file = "mypy_extensions-0.4.3.tar.gz", hash = "sha256:2d82818f5bb3e369420cb3c4060a7970edba416647068eb4c5343488a6c604a8"},
 ]
 neptune-client = [
-    {file = "neptune-client-0.13.1.tar.gz", hash = "sha256:91d5beefb252692bdd9486cc5ae6d76106094419bccfd3913731fd4e5adb046f"},
+    {file = "neptune-client-0.14.3.tar.gz", hash = "sha256:60e124a340d8ccb88416e3ea0c840b599aa0fd613347ea903c6d0d807d51fbdb"},
 ]
 nest-asyncio = [
     {file = "nest_asyncio-1.5.1-py3-none-any.whl", hash = "sha256:76d6e972265063fe92a90b9cc4fb82616e07d586b346ed9d2c89a4187acea39c"},
