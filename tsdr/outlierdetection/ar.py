@@ -1,5 +1,3 @@
-from typing import Any
-
 import numpy as np
 from scipy.stats import chi2
 from statsmodels.tsa.ar_model import (AutoReg, AutoRegResultsWrapper,
