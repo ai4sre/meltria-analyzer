@@ -43,16 +43,19 @@ class UnivariateSeriesReductionResult:
     _original_series: np.ndarray
     _has_kept: bool
     _anomaly_scores: np.ndarray
+    _abn_th: float
 
     def __init__(
         self,
         original_series: np.ndarray,
         has_kept: bool,
         anomaly_scores: np.ndarray = np.array([]),
+        abn_th: float = 0.0,
     ) -> None:
         self._original_series = original_series
         self._has_kept = has_kept
         self._anomaly_scores = anomaly_scores
+        self._abn_th = abn_th
 
     @property
     def original_series(self):
@@ -65,6 +68,12 @@ class UnivariateSeriesReductionResult:
     @property
     def anomaly_scores(self):
         return self._anomaly_scores
+
+    def binary_scores(self) -> np.ndarray:
+        bin_scores = np.empty(self.anomaly_scores.size, dtype=np.uint8)
+        bin_scores[np.argwhere(self.anomaly_scores <= self._abn_th)] = 0
+        bin_scores[np.argwhere(self.anomaly_scores > self._abn_th)] = 1
+        return bin_scores
 
 
 def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
@@ -130,7 +139,7 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
     )[0]
     if not np.all(np.isfinite(scores)):
         raise ValueError(f"scores must contain only finite values. {scores}")
-    outliers = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
+    outliers, abn_th = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
     if len(outliers) > 0:
         return UnivariateSeriesReductionResult(series, has_kept=True, anomaly_scores=scores)
     return UnivariateSeriesReductionResult(series, has_kept=False, anomaly_scores=scores)
@@ -161,7 +170,7 @@ class Tsdr:
         # step1
         start: float = time.time()
 
-        reduced_series1, anomaly_score_df = self.reduce_univariate_series(series, max_workers)
+        reduced_series1, step1_results = self.reduce_univariate_series(series, max_workers)
 
         time_adf: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(
@@ -169,8 +178,21 @@ class Tsdr:
         metrics_dimension["total"].append(len(reduced_series1.columns))
 
         # step2
-        df_before_clustering = anomaly_score_df \
-            if self.params['tsifter_step2_use_anomaly_score'] else reduced_series1
+        df_before_clustering: pd.DataFrame = pd.DataFrame()
+        series_type = self.params['tsifter_step2_clustered_series_type']
+        if series_type == 'raw':
+            df_before_clustering = reduced_series1
+        elif series_type == 'anomaly_score':
+            for name, res in step1_results.items():
+                if res.has_kept:
+                    df_before_clustering[name] = res.anomaly_scores
+        elif series_type == 'binary_anomaly_score':
+            for name, res in step1_results.items():
+                if res.has_kept:
+                    df_before_clustering[name] = res.binary_scores()
+        else:
+            raise ValueError(f'tsifter_step2_clustered_series_type is invalid {series_type}')
+
         start = time.time()
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
@@ -189,8 +211,8 @@ class Tsdr:
         self,
         useries: pd.DataFrame,
         n_workers: int,
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        anomaly_score_df = pd.DataFrame()
+    ) -> tuple[pd.DataFrame, dict[str, UnivariateSeriesReductionResult]]:
+        results: dict[str, UnivariateSeriesReductionResult] = {}
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             future_to_col = {}
             for col in useries.columns:
@@ -203,11 +225,10 @@ class Tsdr:
             for future in futures.as_completed(future_to_col):
                 col = future_to_col[future]
                 result: UnivariateSeriesReductionResult = future.result()
+                results[col] = result
                 if result.has_kept:
                     reduced_cols.append(col)
-                    if len(result.anomaly_scores) > 0:
-                        anomaly_score_df[col] = result.anomaly_scores
-        return useries[reduced_cols], anomaly_score_df
+        return useries[reduced_cols], results
 
     def reduce_multivariate_series(
         self,
