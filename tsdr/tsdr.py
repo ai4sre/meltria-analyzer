@@ -264,10 +264,8 @@ def reduce_series_with_cv(data_df: pd.DataFrame, cv_threshold: float = 0.002):
 def hierarchical_clustering(
     target_df: pd.DataFrame, dist_func, dist_threshold: float,
 ) -> tuple[dict[str, Any], list[str]]:
-    series = target_df.values.T
-    norm_series: np.ndarray = util.z_normalization(series)
-    dist = pdist(norm_series, metric=dist_func)
-    # distance_list.extend(dist)
+    series: np.ndarray = target_df.apply(scipy.stats.zscore).values.T
+    dist = pdist(series, metric=dist_func)
     dist_matrix: np.ndarray = squareform(dist)
     z: np.ndarray = linkage(dist, method="single", metric=dist_func)
     labels: np.ndarray = fcluster(z, t=dist_threshold, criterion="distance")
@@ -363,7 +361,7 @@ def kshape_clustering(
 ) -> tuple[dict[str, Any], list[str]]:
     future_list = []
 
-    data: np.ndarray = util.z_normalization(target_df.values.T)
+    data: np.ndarray = target_df.apply(scipy.stats.zscore).values.T
     for n in np.arange(2, data.shape[0]):
         future_list.append(
             executor.submit(
