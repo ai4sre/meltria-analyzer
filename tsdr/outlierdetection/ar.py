@@ -59,7 +59,7 @@ class AROutlierDetector:
         self,
         scores: np.ndarray,
         threshold: float,
-    ) -> tuple[list[tuple[int, float]], np.ndarray]:
+    ) -> tuple[list[tuple[int, float]], float]:
         abn_th = chi2.interval(1-threshold, 1)[1]
         anomalies: list[tuple[int, float]] = []
         for i, a in enumerate(scores):
