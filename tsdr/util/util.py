@@ -1,16 +1,6 @@
 from typing import Any
 
-import numpy as np
 import pandas as pd
-
-
-def z_normalization(data):
-    arr = []
-    for d in data:
-        mean = d.mean()
-        std = d.std()
-        arr.append((d - mean) / std)
-    return np.array(arr)
 
 
 def count_metrics(metrics_dimension: dict[str, Any], dataframe: pd.DataFrame, n: int) -> dict[str, Any]:
