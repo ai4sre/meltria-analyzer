@@ -1,2 +1,3 @@
 dist_threshold: 0.01
-clustered_series_type: 'raw' # 'anomaly_score' or 'binary_anomaly_score'
+clustered_series_type: 'raw' # 'raw', 'anomaly_score' or 'binary_anomaly_score'
+clustering_dist_type: 'sbd' # 'sbd' or 'hamming'
