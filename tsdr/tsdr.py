@@ -316,6 +316,14 @@ def hierarchical_clustering(
         else:
             cluster_dict[v] = [i]
 
+    return choose_metric_with_medoid(target_df.columns, cluster_dict, dist_matrix)
+
+
+def choose_metric_with_medoid(
+    columns: pd.Index[str],
+    cluster_dict: dict[str, list[int]],
+    dist_matrix: np.ndarray,
+) -> tuple[dict[str, Any], list[str]]:
     clustering_info, remove_list = {}, []
     for c in cluster_dict:
         cluster_metrics = cluster_dict[c]
@@ -324,9 +332,9 @@ def hierarchical_clustering(
         if len(cluster_metrics) == 2:
             # Select the representative metric at random
             shuffle_list = random.sample(cluster_metrics, len(cluster_metrics))
-            clustering_info[target_df.columns[shuffle_list[0]]] = [
-                target_df.columns[shuffle_list[1]]]
-            remove_list.append(target_df.columns[shuffle_list[1]])
+            clustering_info[columns[shuffle_list[0]]] = [
+                columns[shuffle_list[1]]]
+            remove_list.append(columns[shuffle_list[1]])
         elif len(cluster_metrics) > 2:
             # Select medoid as the representative metric
             distances = []
@@ -338,13 +346,12 @@ def hierarchical_clustering(
                     dist_sum += dist_matrix[met1][met2]
                 distances.append(dist_sum)
             medoid = cluster_metrics[np.argmin(distances)]
-            clustering_info[target_df.columns[medoid]] = []
+            clustering_info[columns[medoid]] = []
             for r in cluster_metrics:
                 if r == medoid:
                     continue
-                remove_list.append(target_df.columns[r])
-                clustering_info[target_df.columns[medoid]].append(
-                    target_df.columns[r])
+                remove_list.append(columns[r])
+                clustering_info[columns[medoid]].append(columns[r])
     return clustering_info, remove_list
 
 
