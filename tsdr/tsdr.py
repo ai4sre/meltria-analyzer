@@ -17,7 +17,7 @@ from arch.unitroot import PhillipsPerron
 from arch.utility.exceptions import InfeasibleTestException
 from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
 from scipy.cluster.hierarchy import fcluster, linkage
-from scipy.spatial.distance import pdist, squareform
+from scipy.spatial.distance import hamming, pdist, squareform
 from statsmodels.tsa.stattools import adfuller
 
 from tsdr.clustering.kshape import kshape
@@ -197,6 +197,7 @@ class Tsdr:
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
             df_before_clustering.copy(), services, max_workers,
+            self.params['tsifter_step2_clustering_dist_type'],
             self.params['tsifter_step2_clustering_threshold'],
         )
 
@@ -235,6 +236,7 @@ class Tsdr:
         series: pd.DataFrame,
         services: list[str],
         n_workers: int,
+        dist_type: str,
         dist_threshold: float,
     ) -> tuple[pd.DataFrame, dict[str, Any]]:
         clustering_info: dict[str, Any] = {}
@@ -249,9 +251,27 @@ class Tsdr:
                 for target_df in [service_metrics_df, container_metrics_df, middleware_metrics_df]:
                     if len(target_df.columns) <= 1:
                         continue
-                    future_list.append(executor.submit(
-                        hierarchical_clustering, target_df, sbd, dist_threshold,
-                    ))
+                    future: futures.Future
+                    if dist_type == 'sbd':
+                        future = executor.submit(
+                            hierarchical_clustering,
+                            target_df.apply(scipy.stats.zscore),
+                            sbd,
+                            dist_threshold,
+                        )
+                    elif dist_type == 'hamming':
+                        if dist_threshold >= 1.0:
+                            # make the distance threshold intuitive
+                            dist_threshold /= series.shape[0]
+                        future = executor.submit(
+                            hierarchical_clustering,
+                            target_df,
+                            hamming,
+                            dist_threshold,
+                        )
+                    else:
+                        raise ValueError('dist_func must be "sbd" or "hamming"')
+                    future_list.append(future)
             for future in futures.as_completed(future_list):
                 c_info, remove_list = future.result()
                 clustering_info.update(c_info)
@@ -283,10 +303,9 @@ def reduce_series_with_cv(data_df: pd.DataFrame, cv_threshold: float = 0.002):
 
 
 def hierarchical_clustering(
-    target_df: pd.DataFrame, dist_func, dist_threshold: float,
+    target_df: pd.DataFrame, dist_func: Callable, dist_threshold: float,
 ) -> tuple[dict[str, Any], list[str]]:
-    series: np.ndarray = target_df.apply(scipy.stats.zscore).values.T
-    dist = pdist(series, metric=dist_func)
+    dist = pdist(target_df.values.T, metric=dist_func)
     dist_matrix: np.ndarray = squareform(dist)
     z: np.ndarray = linkage(dist, method="single", metric=dist_func)
     labels: np.ndarray = fcluster(z, t=dist_threshold, criterion="distance")
