@@ -260,6 +260,9 @@ class Tsdr:
                             dist_threshold,
                         )
                     elif dist_type == 'hamming':
+                        if dist_threshold >= 1.0:
+                            # make the distance threshold intuitive
+                            dist_threshold /= series.shape[0]
                         future = executor.submit(
                             hierarchical_clustering,
                             target_df,
