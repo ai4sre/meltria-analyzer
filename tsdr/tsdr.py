@@ -181,13 +181,13 @@ class Tsdr:
         df_before_clustering: pd.DataFrame
         series_type = self.params['tsifter_step2_clustered_series_type']
         if series_type == 'raw':
-            df_before_clustering = reduced_series1
-        elif series_type in ['anomaly_score' or 'binary_anomaly_score']:
+            df_before_clustering = reduced_series1.apply(scipy.stats.zscore)
+        elif series_type in ['anomaly_score', 'binary_anomaly_score']:
             tmp_dict_to_df: dict[str, np.ndarray] = {}
             for name, res in step1_results.items():
                 if res.has_kept:
                     if series_type == 'anomaly_score':
-                        tmp_dict_to_df[name] = res.anomaly_scores()
+                        tmp_dict_to_df[name] = scipy.stats.zscore(res.anomaly_scores)
                     elif series_type == 'binary_anomaly_score':
                         tmp_dict_to_df[name] = res.binary_scores()
             df_before_clustering = pd.DataFrame(tmp_dict_to_df)
@@ -258,7 +258,7 @@ class Tsdr:
                     if dist_type == 'sbd':
                         future = executor.submit(
                             hierarchical_clustering,
-                            target_df.apply(scipy.stats.zscore),
+                            target_df,
                             sbd,
                             dist_threshold,
                             choice_method,
