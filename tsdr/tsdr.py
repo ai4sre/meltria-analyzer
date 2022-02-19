@@ -178,18 +178,19 @@ class Tsdr:
         metrics_dimension["total"].append(len(reduced_series1.columns))
 
         # step2
-        df_before_clustering: pd.DataFrame = pd.DataFrame()
+        df_before_clustering: pd.DataFrame
         series_type = self.params['tsifter_step2_clustered_series_type']
         if series_type == 'raw':
             df_before_clustering = reduced_series1
-        elif series_type == 'anomaly_score':
+        elif series_type in ['anomaly_score' or 'binary_anomaly_score']:
+            tmp_dict_to_df: dict[str, np.ndarray] = {}
             for name, res in step1_results.items():
                 if res.has_kept:
-                    df_before_clustering[name] = res.anomaly_scores
-        elif series_type == 'binary_anomaly_score':
-            for name, res in step1_results.items():
-                if res.has_kept:
-                    df_before_clustering[name] = res.binary_scores()
+                    if series_type == 'anomaly_score':
+                        tmp_dict_to_df[name] = res.anomaly_scores()
+                    elif series_type == 'binary_anomaly_score':
+                        tmp_dict_to_df[name] = res.binary_scores()
+            df_before_clustering = pd.DataFrame(tmp_dict_to_df)
         else:
             raise ValueError(f'tsifter_step2_clustered_series_type is invalid {series_type}')
 
@@ -199,6 +200,7 @@ class Tsdr:
             df_before_clustering.copy(), services, max_workers,
             self.params['tsifter_step2_clustering_dist_type'],
             self.params['tsifter_step2_clustering_threshold'],
+            self.params['tsifter_step2_clustering_choice_method'],
         )
 
         time_clustering: float = round(time.time() - start, 2)
@@ -238,6 +240,7 @@ class Tsdr:
         n_workers: int,
         dist_type: str,
         dist_threshold: float,
+        choice_method: str,
     ) -> tuple[pd.DataFrame, dict[str, Any]]:
         clustering_info: dict[str, Any] = {}
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
@@ -258,6 +261,7 @@ class Tsdr:
                             target_df.apply(scipy.stats.zscore),
                             sbd,
                             dist_threshold,
+                            choice_method,
                         )
                     elif dist_type == 'hamming':
                         if dist_threshold >= 1.0:
@@ -268,6 +272,7 @@ class Tsdr:
                             target_df,
                             hamming,
                             dist_threshold,
+                            choice_method,
                         )
                     else:
                         raise ValueError('dist_func must be "sbd" or "hamming"')
@@ -303,7 +308,10 @@ def reduce_series_with_cv(data_df: pd.DataFrame, cv_threshold: float = 0.002):
 
 
 def hierarchical_clustering(
-    target_df: pd.DataFrame, dist_func: Callable, dist_threshold: float,
+    target_df: pd.DataFrame,
+    dist_func: Callable,
+    dist_threshold: float,
+    choice_method: str = 'medoid',
 ) -> tuple[dict[str, Any], list[str]]:
     dist = pdist(target_df.values.T, metric=dist_func)
     dist_matrix: np.ndarray = squareform(dist)
@@ -316,6 +324,19 @@ def hierarchical_clustering(
         else:
             cluster_dict[v] = [i]
 
+    if choice_method == 'medoid':
+        return choose_metric_with_medoid(target_df.columns, cluster_dict, dist_matrix)
+    elif choice_method == 'maxsum':
+        return choose_metric_with_maxsum(target_df, cluster_dict)
+    else:
+        raise ValueError('choice_method is required.')
+
+
+def choose_metric_with_medoid(
+    columns: pd.Index,
+    cluster_dict: dict[str, list[int]],
+    dist_matrix: np.ndarray,
+) -> tuple[dict[str, Any], list[str]]:
     clustering_info, remove_list = {}, []
     for c in cluster_dict:
         cluster_metrics = cluster_dict[c]
@@ -324,9 +345,9 @@ def hierarchical_clustering(
         if len(cluster_metrics) == 2:
             # Select the representative metric at random
             shuffle_list = random.sample(cluster_metrics, len(cluster_metrics))
-            clustering_info[target_df.columns[shuffle_list[0]]] = [
-                target_df.columns[shuffle_list[1]]]
-            remove_list.append(target_df.columns[shuffle_list[1]])
+            clustering_info[columns[shuffle_list[0]]] = [
+                columns[shuffle_list[1]]]
+            remove_list.append(columns[shuffle_list[1]])
         elif len(cluster_metrics) > 2:
             # Select medoid as the representative metric
             distances = []
@@ -338,13 +359,32 @@ def hierarchical_clustering(
                     dist_sum += dist_matrix[met1][met2]
                 distances.append(dist_sum)
             medoid = cluster_metrics[np.argmin(distances)]
-            clustering_info[target_df.columns[medoid]] = []
+            clustering_info[columns[medoid]] = []
             for r in cluster_metrics:
                 if r == medoid:
                     continue
-                remove_list.append(target_df.columns[r])
-                clustering_info[target_df.columns[medoid]].append(
-                    target_df.columns[r])
+                remove_list.append(columns[r])
+                clustering_info[columns[medoid]].append(columns[r])
+    return clustering_info, remove_list
+
+
+def choose_metric_with_maxsum(
+    data_df: pd.DataFrame,
+    cluster_dict: dict[str, list[int]],
+) -> tuple[dict[str, Any], list[str]]:
+    """ Choose metrics which has max of sum of datapoints in each metrics in each cluster. """
+    clustering_info, remove_list = {}, []
+    for c in cluster_dict:
+        cluster_metrics: list[int] = cluster_dict[c]
+        if len(cluster_metrics) == 1:
+            continue
+        if len(cluster_metrics) > 1:
+            cluster_columns = data_df.columns[cluster_metrics]
+            series_with_sum: pd.Series = data_df[cluster_columns].sum(numeric_only=True)
+            label_with_max: str = series_with_sum.idxmax()
+            sub_metrics: list[str] = list(series_with_sum.loc[series_with_sum.index != label_with_max].index)
+            clustering_info[label_with_max] = sub_metrics
+            remove_list += sub_metrics
     return clustering_info, remove_list
 
 
