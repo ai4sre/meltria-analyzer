@@ -178,7 +178,7 @@ class Tsdr:
         metrics_dimension["total"].append(len(reduced_series1.columns))
 
         # step2
-        df_before_clustering: pd.DataFrame = pd.DataFrame()
+        df_before_clustering: pd.DataFrame
         series_type = self.params['tsifter_step2_clustered_series_type']
         if series_type == 'raw':
             df_before_clustering = reduced_series1
@@ -187,9 +187,11 @@ class Tsdr:
                 if res.has_kept:
                     df_before_clustering[name] = res.anomaly_scores
         elif series_type == 'binary_anomaly_score':
+            tmp_dict_to_df: dict[str, np.ndarray] = {}
             for name, res in step1_results.items():
                 if res.has_kept:
-                    df_before_clustering[name] = res.binary_scores()
+                    tmp_dict_to_df[name] = res.binary_scores()
+            df_before_clustering = pd.DataFrame(tmp_dict_to_df)
         else:
             raise ValueError(f'tsifter_step2_clustered_series_type is invalid {series_type}')
 
