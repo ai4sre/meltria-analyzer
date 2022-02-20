@@ -131,9 +131,9 @@ class TimeSeriesPlotter:
         if num_non_clustered_plots == 0:
             return None
         fig, axes = plt.subplots(
-            nrows=math.ceil(num_non_clustered_plots/6),
-            ncols=6,
-            figsize=(6*6, num_non_clustered_plots),
+            nrows=math.ceil(num_non_clustered_plots/3),
+            ncols=3,
+            figsize=(6*3, num_non_clustered_plots * 0.8),
             squeeze=False,  # always return 2D-array axes
         )
         # Match the numbers axes and non-clustered columns
