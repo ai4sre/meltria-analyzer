@@ -101,11 +101,16 @@ class TimeSeriesPlotter:
             return
 
         clustered_metrics: list[str] = [rep_metric] + sub_metrics
-        fig, axes = plt.subplots(nrows=len(clustered_metrics), ncols=1)
+        fig, axes = plt.subplots(
+            nrows=len(clustered_metrics),
+            ncols=1,
+            figsize=(6, len(clustered_metrics) * 1.5),
+        )
         # reset_index removes extra index texts from the generated figure.
         metrics_df[clustered_metrics].reset_index(drop=True).plot(
-            subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-        fig.suptitle(f"{record.chaos_case_file()}    rep:{rep_metric}")
+            subplots=True, sharex=False, ax=axes,
+        )
+        fig.suptitle(f"{record.chaos_case_file()}  rep:{rep_metric}")
         self.run[f"tests/clustering/ts_figures/{record.chaos_case()}"].log(
             neptune.types.File.as_image(fig))
         plt.close(fig=fig)
