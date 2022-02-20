@@ -134,7 +134,7 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
     ar = AROutlierDetector()
     scores: np.ndarray = ar.score(
         x=series,
-        regression=kwargs.get('tsifter_step1_ar_regression', 'c'),
+        regression=kwargs.get('tsifter_step1_ar_regression', 'n'),
         dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False)
     )[0]
     if not np.all(np.isfinite(scores)):
