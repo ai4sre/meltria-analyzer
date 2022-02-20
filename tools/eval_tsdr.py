@@ -261,6 +261,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 'tsifter_step2_clustered_series_type': cfg.step2.clustered_series_type,
                 'tsifter_step2_clustering_dist_type': cfg.step2.clustering_dist_type,
                 'tsifter_step2_clustering_choice_method': cfg.step2.clustering_choice_method,
+                'tsifter_step2_clustering_linkage_method': cfg.step2.clustering_linkage_method,
             }
             if cfg.step1.model_name == 'unit_root_test':
                 tsdr_param.update({
@@ -423,6 +424,7 @@ def main(cfg: DictConfig) -> None:
         'step2_clustered_series_type': cfg.step2.clustered_series_type,
         'step2_clustering_dist_type': cfg.step2.clustering_dist_type,
         'step2_clustering_choice_method': cfg.step2.clustering_choice_method,
+        'step2_clustering_linkage_method': cfg.step2.clustering_linkage_method,
     }
     if cfg.step1.model_name == 'unit_root_test':
         params.update({

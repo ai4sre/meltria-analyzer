@@ -201,6 +201,7 @@ class Tsdr:
             self.params['tsifter_step2_clustering_dist_type'],
             self.params['tsifter_step2_clustering_threshold'],
             self.params['tsifter_step2_clustering_choice_method'],
+            self.params['tsifter_step2_clustering_linkage_method'],
         )
 
         time_clustering: float = round(time.time() - start, 2)
@@ -241,6 +242,7 @@ class Tsdr:
         dist_type: str,
         dist_threshold: float,
         choice_method: str,
+        linkage_method: str,
     ) -> tuple[pd.DataFrame, dict[str, Any]]:
         clustering_info: dict[str, Any] = {}
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
@@ -262,6 +264,7 @@ class Tsdr:
                             sbd,
                             dist_threshold,
                             choice_method,
+                            linkage_method,
                         )
                     elif dist_type == 'hamming':
                         if dist_threshold >= 1.0:
@@ -273,6 +276,7 @@ class Tsdr:
                             hamming,
                             dist_threshold,
                             choice_method,
+                            linkage_method,
                         )
                     else:
                         raise ValueError('dist_func must be "sbd" or "hamming"')
@@ -312,10 +316,11 @@ def hierarchical_clustering(
     dist_func: Callable,
     dist_threshold: float,
     choice_method: str = 'medoid',
+    linkage_method: str = 'single',
 ) -> tuple[dict[str, Any], list[str]]:
     dist = pdist(target_df.values.T, metric=dist_func)
     dist_matrix: np.ndarray = squareform(dist)
-    z: np.ndarray = linkage(dist, method="single", metric=dist_func)
+    z: np.ndarray = linkage(dist, method=linkage_method, metric=dist_func)
     labels: np.ndarray = fcluster(z, t=dist_threshold, criterion="distance")
     cluster_dict: dict[str, list[int]] = {}
     for i, v in enumerate(labels):
