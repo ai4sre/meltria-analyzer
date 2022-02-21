@@ -134,7 +134,7 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
     ar = AROutlierDetector()
     scores: np.ndarray = ar.score(
         x=series,
-        regression=kwargs.get('tsifter_step1_ar_regression', 'c'),
+        regression=kwargs.get('tsifter_step1_ar_regression', 'n'),
         dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False)
     )[0]
     if not np.all(np.isfinite(scores)):
@@ -164,7 +164,6 @@ class Tsdr:
         series: pd.DataFrame,
         max_workers: int,
     ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
-        services: list[str] = prepare_services_list(series)
         metrics_dimension: dict[str, Any] = aggregate_dimension(series)
 
         # step1
@@ -194,13 +193,16 @@ class Tsdr:
         else:
             raise ValueError(f'tsifter_step2_clustered_series_type is invalid {series_type}')
 
+        containers_of_service: dict[str, set[str]] = get_container_names_of_service(series)
+
         start = time.time()
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
-            df_before_clustering.copy(), services, max_workers,
+            df_before_clustering.copy(), containers_of_service, max_workers,
             self.params['tsifter_step2_clustering_dist_type'],
             self.params['tsifter_step2_clustering_threshold'],
             self.params['tsifter_step2_clustering_choice_method'],
+            self.params['tsifter_step2_clustering_linkage_method'],
         )
 
         time_clustering: float = round(time.time() - start, 2)
@@ -236,47 +238,57 @@ class Tsdr:
     def reduce_multivariate_series(
         self,
         series: pd.DataFrame,
-        services: list[str],
+        containers_of_service: dict[str, set[str]],
         n_workers: int,
         dist_type: str,
         dist_threshold: float,
         choice_method: str,
+        linkage_method: str,
     ) -> tuple[pd.DataFrame, dict[str, Any]]:
+        def make_clusters(
+            df: pd.DataFrame,
+            dist_threshold: float,
+            choice_method: str,
+            linkage_method: str,
+        ) -> futures.Future:
+            future: futures.Future
+            if dist_type == 'sbd':
+                future = executor.submit(
+                    hierarchical_clustering,
+                    df, sbd, dist_threshold, choice_method, linkage_method,
+                )
+            elif dist_type == 'hamming':
+                if dist_threshold >= 1.0:
+                    # make the distance threshold intuitive
+                    dist_threshold /= series.shape[0]
+                future = executor.submit(
+                    hierarchical_clustering,
+                    df, hamming, dist_threshold, choice_method, linkage_method,
+                )
+            else:
+                raise ValueError('dist_func must be "sbd" or "hamming"')
+            return future
+
         clustering_info: dict[str, Any] = {}
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             # Clustering metrics by service including services, containers and middlewares metrics
-            future_list = []
-            for ser in services:
-                # perform clustering in each type of metric
-                service_metrics_df = series.loc[:, series.columns.str.startswith(("s-{}_".format(ser)))]
-                container_metrics_df = series.loc[:, series.columns.str.startswith(("c-{}_".format(ser)))]
-                middleware_metrics_df = series.loc[:, series.columns.str.startswith(("m-{}_".format(ser), "m-{}-".format(ser)))]
-                for target_df in [service_metrics_df, container_metrics_df, middleware_metrics_df]:
-                    if len(target_df.columns) <= 1:
+            future_list: list[futures.Future] = []
+            for service, containers in containers_of_service.items():
+                service_metrics_df = series.loc[:, series.columns.str.startswith(f"s-{service}_")]
+                if len(service_metrics_df.columns) > 1:
+                    future_list.append(
+                        make_clusters(service_metrics_df, dist_threshold, choice_method, linkage_method),
+                    )
+                for container in containers:
+                    # perform clustering in each type of metric
+                    container_metrics_df = series.loc[:, series.columns.str.startswith(f"c-{container}_")]
+                    # TODO: middleware
+                    # middleware_metrics_df = series.loc[:, series.columns.str.startswith(("m-{}_".format(ser), "m-{}-".format(ser)))]
+                    if len(container_metrics_df.columns) <= 1:
                         continue
-                    future: futures.Future
-                    if dist_type == 'sbd':
-                        future = executor.submit(
-                            hierarchical_clustering,
-                            target_df,
-                            sbd,
-                            dist_threshold,
-                            choice_method,
-                        )
-                    elif dist_type == 'hamming':
-                        if dist_threshold >= 1.0:
-                            # make the distance threshold intuitive
-                            dist_threshold /= series.shape[0]
-                        future = executor.submit(
-                            hierarchical_clustering,
-                            target_df,
-                            hamming,
-                            dist_threshold,
-                            choice_method,
-                        )
-                    else:
-                        raise ValueError('dist_func must be "sbd" or "hamming"')
-                    future_list.append(future)
+                    future_list.append(
+                        make_clusters(container_metrics_df, dist_threshold, choice_method, linkage_method),
+                    )
             for future in futures.as_completed(future_list):
                 c_info, remove_list = future.result()
                 clustering_info.update(c_info)
@@ -312,10 +324,11 @@ def hierarchical_clustering(
     dist_func: Callable,
     dist_threshold: float,
     choice_method: str = 'medoid',
+    linkage_method: str = 'single',
 ) -> tuple[dict[str, Any], list[str]]:
     dist = pdist(target_df.values.T, metric=dist_func)
     dist_matrix: np.ndarray = squareform(dist)
-    z: np.ndarray = linkage(dist, method="single", metric=dist_func)
+    z: np.ndarray = linkage(dist, method=linkage_method, metric=dist_func)
     labels: np.ndarray = fcluster(z, t=dist_threshold, criterion="distance")
     cluster_dict: dict[str, list[int]] = {}
     for i, v in enumerate(labels):
@@ -587,6 +600,34 @@ def prepare_services_list(data_df: pd.DataFrame) -> list[str]:
         if service_name not in services_list:
             services_list.append(service_name)
     return services_list
+
+
+def get_container_names_of_service(data_df: pd.DataFrame) -> dict[str, set[str]]:
+    """ get component (services and containers) names
+
+    Returns:
+        dict[str]: expected to be like libs.SERVICE_CONTAINERS
+    """
+    service_cols, container_cols = [], []
+    for col in data_df.columns:
+        if col.startswith('s-'):
+            service_cols.append(col)
+        if col.startswith('c-'):
+            container_cols.append(col)
+    # TODO: middleware
+
+    components: dict[str, set[str]] = {}
+    services: set[str] = set([])
+    for service_col in service_cols:
+        service_name = service_col.split('_')[0].replace('s-', '')
+        components[service_name] = set([])
+        services.add(service_name)
+    for container_col in container_cols:
+        container_name = container_col.split('_')[0].replace('c-', '')
+        service_name = [s for s in services if container_name.startswith(s)][0]
+        # container should be unique
+        components[service_name].add(container_name)
+    return components
 
 
 def aggregate_dimension(data_df: pd.DataFrame) -> dict[str, Any]:
