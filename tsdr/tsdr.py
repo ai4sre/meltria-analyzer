@@ -594,6 +594,34 @@ def prepare_services_list(data_df: pd.DataFrame) -> list[str]:
     return services_list
 
 
+def get_container_names_of_service(data_df: pd.DataFrame) -> dict[str, set[str]]:
+    """ get component (services and containers) names
+
+    Returns:
+        dict[str]: expected to be like libs.SERVICE_CONTAINERS
+    """
+    service_cols, container_cols = [], []
+    for col in data_df.columns:
+        if col.startswith('s-'):
+            service_cols.append(col)
+        if col.startswith('c-'):
+            container_cols.append(col)
+    # TODO: middleware
+
+    components: dict[str, set[str]] = {}
+    services: set[str] = set([])
+    for service_col in service_cols:
+        service_name = service_col.split('_')[0].replace('s-', '')
+        components[service_name] = set([])
+        services.add(service_name)
+    for container_col in container_cols:
+        container_name = container_col.split('_')[0].replace('c-', '')
+        service_name = [s for s in services if container_name.startswith(s)][0]
+        # container should be unique
+        components[service_name].add(container_name)
+    return components
+
+
 def aggregate_dimension(data_df: pd.DataFrame) -> dict[str, Any]:
     metrics_dimension: dict[str, Any] = {}
     for target in TARGET_DATA:
