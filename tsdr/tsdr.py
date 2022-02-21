@@ -164,7 +164,6 @@ class Tsdr:
         series: pd.DataFrame,
         max_workers: int,
     ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
-        services: list[str] = prepare_services_list(series)
         metrics_dimension: dict[str, Any] = aggregate_dimension(series)
 
         # step1
@@ -194,10 +193,12 @@ class Tsdr:
         else:
             raise ValueError(f'tsifter_step2_clustered_series_type is invalid {series_type}')
 
+        containers_of_service: dict[str, set[str]] = get_container_names_of_service(series)
+
         start = time.time()
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
-            df_before_clustering.copy(), services, max_workers,
+            df_before_clustering.copy(), containers_of_service, max_workers,
             self.params['tsifter_step2_clustering_dist_type'],
             self.params['tsifter_step2_clustering_threshold'],
             self.params['tsifter_step2_clustering_choice_method'],
@@ -237,50 +238,57 @@ class Tsdr:
     def reduce_multivariate_series(
         self,
         series: pd.DataFrame,
-        services: list[str],
+        containers_of_service: dict[str, set[str]],
         n_workers: int,
         dist_type: str,
         dist_threshold: float,
         choice_method: str,
         linkage_method: str,
     ) -> tuple[pd.DataFrame, dict[str, Any]]:
+        def make_clusters(
+            df: pd.DataFrame,
+            dist_threshold: float,
+            choice_method: str,
+            linkage_method: str,
+        ) -> futures.Future:
+            future: futures.Future
+            if dist_type == 'sbd':
+                future = executor.submit(
+                    hierarchical_clustering,
+                    df, sbd, dist_threshold, choice_method, linkage_method,
+                )
+            elif dist_type == 'hamming':
+                if dist_threshold >= 1.0:
+                    # make the distance threshold intuitive
+                    dist_threshold /= series.shape[0]
+                future = executor.submit(
+                    hierarchical_clustering,
+                    df, hamming, dist_threshold, choice_method, linkage_method,
+                )
+            else:
+                raise ValueError('dist_func must be "sbd" or "hamming"')
+            return future
+
         clustering_info: dict[str, Any] = {}
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             # Clustering metrics by service including services, containers and middlewares metrics
-            future_list = []
-            for ser in services:
-                # perform clustering in each type of metric
-                service_metrics_df = series.loc[:, series.columns.str.startswith(("s-{}_".format(ser)))]
-                container_metrics_df = series.loc[:, series.columns.str.startswith(("c-{}_".format(ser)))]
-                middleware_metrics_df = series.loc[:, series.columns.str.startswith(("m-{}_".format(ser), "m-{}-".format(ser)))]
-                for target_df in [service_metrics_df, container_metrics_df, middleware_metrics_df]:
-                    if len(target_df.columns) <= 1:
+            future_list: list[futures.Future] = []
+            for service, containers in containers_of_service.items():
+                service_metrics_df = series.loc[:, series.columns.str.startswith(f"s-{service}_")]
+                if len(service_metrics_df.columns) > 1:
+                    future_list.append(
+                        make_clusters(service_metrics_df, dist_threshold, choice_method, linkage_method),
+                    )
+                for container in containers:
+                    # perform clustering in each type of metric
+                    container_metrics_df = series.loc[:, series.columns.str.startswith(f"c-{container}_")]
+                    # TODO: middleware
+                    # middleware_metrics_df = series.loc[:, series.columns.str.startswith(("m-{}_".format(ser), "m-{}-".format(ser)))]
+                    if len(container_metrics_df.columns) <= 1:
                         continue
-                    future: futures.Future
-                    if dist_type == 'sbd':
-                        future = executor.submit(
-                            hierarchical_clustering,
-                            target_df,
-                            sbd,
-                            dist_threshold,
-                            choice_method,
-                            linkage_method,
-                        )
-                    elif dist_type == 'hamming':
-                        if dist_threshold >= 1.0:
-                            # make the distance threshold intuitive
-                            dist_threshold /= series.shape[0]
-                        future = executor.submit(
-                            hierarchical_clustering,
-                            target_df,
-                            hamming,
-                            dist_threshold,
-                            choice_method,
-                            linkage_method,
-                        )
-                    else:
-                        raise ValueError('dist_func must be "sbd" or "hamming"')
-                    future_list.append(future)
+                    future_list.append(
+                        make_clusters(container_metrics_df, dist_threshold, choice_method, linkage_method),
+                    )
             for future in futures.as_completed(future_list):
                 c_info, remove_list = future.result()
                 clustering_info.update(c_info)
