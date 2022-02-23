@@ -272,7 +272,7 @@ class Tsdr:
         clustering_info: dict[str, Any] = {}
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             # Clustering metrics by service including services, containers and middlewares metrics
-            future_list: list[futures.Future] = []
+            futures: list[futures.Future] = []
             for service, containers in containers_of_service.items():
                 service_metrics_df = series.loc[:, series.columns.str.startswith(f"s-{service}_")]
                 if len(service_metrics_df.columns) > 1:
@@ -286,10 +286,10 @@ class Tsdr:
                     # middleware_metrics_df = series.loc[:, series.columns.str.startswith(("m-{}_".format(ser), "m-{}-".format(ser)))]
                     if len(container_metrics_df.columns) <= 1:
                         continue
-                    future_list.append(
+                    futures.append(
                         make_clusters(container_metrics_df, dist_threshold, choice_method, linkage_method),
                     )
-            for future in futures.as_completed(future_list):
+            for future in futures.as_completed(futures):
                 c_info, remove_list = future.result()
                 clustering_info.update(c_info)
                 series = series.drop(remove_list, axis=1)
