@@ -13,6 +13,7 @@ import neptune.new as neptune
 import numpy as np
 import pandas as pd
 from lib.metrics import check_tsdr_ground_truth_by_route
+from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
@@ -25,28 +26,6 @@ logger.setLevel(logging.INFO)
 # algorithms
 STEP1_METHODS = ['df', 'adf']
 
-
-class DatasetRecord:
-    """A record of dataset"""
-    chaos_comp: str     # chaos-injected component
-    chaos_type: str     # injected chaos type
-    metrics_file: str   # path of metrics file
-    data_df: pd.DataFrame
-
-    def __init__(self, chaos_type: str, chaos_comp: str, metrics_file: str, data_df: pd.DataFrame):
-        self.chaos_comp = chaos_comp
-        self.chaos_type = chaos_type
-        self.metrics_file = metrics_file
-        self.data_df = data_df
-
-    def chaos_case(self) -> str:
-        return f"{self.chaos_comp}/{self.chaos_type}"
-
-    def chaos_case_file(self) -> str:
-        return f"{self.metrics_file} of {self.chaos_case()}"
-
-    def metrics_names(self) -> list[str]:
-        return list(self.data_df.columns)
 
 
 class TimeSeriesPlotter:
