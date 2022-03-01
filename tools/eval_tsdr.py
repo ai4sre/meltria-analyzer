@@ -2,15 +2,13 @@
 
 import logging
 import math
-import os
 import statistics
 from collections import defaultdict
-from concurrent import futures
 from multiprocessing import cpu_count
-from typing import Optional
 
 import hydra
 import matplotlib.pyplot as plt
+import meltria.loader as meltria_loader
 import neptune.new as neptune
 import numpy as np
 import pandas as pd
@@ -159,41 +157,6 @@ class TimeSeriesPlotter:
         return axs[:N]
 
 
-def read_metrics_file(
-    metrics_file: str,
-    exclude_middleware_metrics: bool = False,
-) -> Optional[pd.DataFrame]:
-    logger.info(f">> Loading metrics file {metrics_file} ...")
-    try:
-        data_df, _, metrics_meta = tsdr.read_metrics_json(
-            metrics_file,
-            exclude_middlewares=exclude_middleware_metrics,
-        )
-    except ValueError as e:
-        logger.warning(f">> Skip {metrics_file} because of {e}")
-        return None
-    chaos_type: str = metrics_meta['injected_chaos_type']
-    chaos_comp: str = metrics_meta['chaos_injected_component']
-    data_df['chaos_type'] = chaos_type
-    data_df['chaos_comp'] = chaos_comp
-    data_df['metrics_file'] = os.path.basename(metrics_file)
-    data_df['grafana_dashboard_url'] = metrics_meta['grafana_dashboard_url']
-    return data_df
-
-
-def load_dataset(metrics_files: list[str], exclude_middleware_metrics: bool = False) -> pd.DataFrame:
-    dataset = pd.DataFrame()
-    with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
-        future_list = []
-        for metrics_file in metrics_files:
-            future_list.append(executor.submit(read_metrics_file, metrics_file, exclude_middleware_metrics))
-        for future in futures.as_completed(future_list):
-            data_df = future.result()
-            if data_df is not None:
-                dataset = dataset.append(data_df)
-    return dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'])
-
-
 def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
     df = scores_df.groupby(indexes).agg({
         'tn': 'sum',
@@ -214,7 +177,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
         logger=logger,
     )
 
-    dataset: pd.DataFrame = load_dataset(
+    dataset: pd.DataFrame = meltria_loader.load_dataset(
         cfg.metrics_files,
         cfg.exclude_middleware_metrics,
     )
