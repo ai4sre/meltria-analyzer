@@ -91,7 +91,7 @@ def main(cfg: DictConfig) -> None:
         'pc_citest_alpha': cfg.params.pc_citest_alpha,
         'pc_variant': cfg.params.pc_variant,
     }
-    # TODO: run['tsdr/parameters'] = {}
+    run['tsdr/parameters'] = OmegaConf.to_container(cfg.tsdr)
     run.wait()  # sync parameters for 'async' neptune mode
 
     logger.info(OmegaConf.to_yaml(cfg))
