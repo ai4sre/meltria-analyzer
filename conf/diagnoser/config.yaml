@@ -1,0 +1,15 @@
+dataset_id: hg68n
+metrics_files: ???
+exclude_middleware_metrics: true
+defaults:
+  - _self_
+  - tsdr/step1: ar_based_ad
+  - tsdr/step2: default
+params:
+  pc_library: 'pcalg'   # 'pcalg' or 'pgmpy'
+  pc_variant: none      # none or 'stable'
+  pc_citest: 'fisher-z'
+  pc_citest_alpha: 0.01
+upload_figures: false  # upload graph image to Neptune
+neptune:
+  mode: debug
