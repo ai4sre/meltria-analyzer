@@ -200,7 +200,7 @@ def prepare_init_graph(data_df: pd.DataFrame, no_paths) -> nx.Graph:
 
 
 def build_causal_graph_with_pcalg(
-    dm: pd.DataFrame,
+    dm: np.ndarray,
     labels: dict[int, str],
     init_g: nx.Graph,
     alpha: float,
@@ -272,7 +272,7 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> nx.Graph:
     init_g = prepare_init_graph(dataset, no_paths)
     if kwargs['pc_library'] == 'pcalg':
         g = build_causal_graph_with_pcalg(
-            dataset.values, labels, init_g,
+            dataset.to_numpy(), labels, init_g,
             kwargs['pc_citest_alpha'],
             kwargs['pc_variant'],
         )
