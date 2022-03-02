@@ -2,11 +2,10 @@ import argparse
 import base64
 import json
 import os
-import re
 import sys
 from datetime import datetime
 from itertools import combinations
-from typing import Any, List, Tuple, Union
+from typing import Any
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -71,15 +70,15 @@ def read_data_file(tsdr_result_file: os.PathLike
 def build_no_paths(labels, mappings):
     containers_list, services_list, nodes_list = [], [], []
     for v in labels.values():
-        if re.match("^c-", v):
+        if v.startswith('c-'):
             container_name = v.split("_")[0].replace("c-", "")
             if container_name not in containers_list:
                 containers_list.append(container_name)
-        elif re.match("^s-", v):
+        elif v.startswith('s-'):
             service_name = v.split("_")[0].replace("s-", "")
             if service_name not in services_list:
                 services_list.append(service_name)
-        elif re.match("^n-", v):
+        elif v.startswith('n-'):
             node_name = v.split("_")[0].replace("n-", "")
             if node_name not in nodes_list:
                 nodes_list.append(node_name)
@@ -88,7 +87,7 @@ def build_no_paths(labels, mappings):
     for c in containers_list:
         nodes = []
         for k, v in labels.items():
-            if re.match("^c-{}_".format(c), v):
+            if v.startswith(f"c-{v}_"):
                 nodes.append(k)
         containers_metrics[c] = nodes
 
@@ -96,7 +95,7 @@ def build_no_paths(labels, mappings):
     for s in services_list:
         nodes = []
         for k, v in labels.items():
-            if re.match("^s-{}_".format(s), v):
+            if v.startswith(f"s-{s}_"):
                 nodes.append(k)
         services_metrics[s] = nodes
 
@@ -104,7 +103,7 @@ def build_no_paths(labels, mappings):
     for n in nodes_list:
         nodes = []
         for k, v in labels.items():
-            if re.match("^n-{}_".format(n), v):
+            if v.startswith(f"n-{n}_"):
                 nodes.append(k)
         nodes_metrics[n] = nodes
 
@@ -213,12 +212,14 @@ def build_causal_graph_with_pcalg(dm, labels, init_g, alpha, pc_stable):
     """
     cm = np.corrcoef(dm.T)
     pc_method = 'stable' if pc_stable else None
-    (G, sep_set) = pcalg.estimate_skeleton(indep_test_func=ci_test_fisher_z,
-                                           data_matrix=dm,
-                                           alpha=alpha,
-                                           corr_matrix=cm,
-                                           init_graph=init_g,
-                                           method=pc_method)
+    (G, sep_set) = pcalg.estimate_skeleton(
+        indep_test_func=ci_test_fisher_z,
+        data_matrix=dm,
+        alpha=alpha,
+        corr_matrix=cm,
+        init_graph=init_g,
+        method=pc_method,
+    )
     G = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
 
     G = nx.relabel_nodes(G, labels)
@@ -226,9 +227,11 @@ def build_causal_graph_with_pcalg(dm, labels, init_g, alpha, pc_stable):
     return find_dags(G)
 
 
-def build_causal_graphs_with_pgmpy(df: pd.DataFrame,
-                                   alpha: float,
-                                   pc_stable: bool) -> nx.Graph:
+def build_causal_graphs_with_pgmpy(
+    df: pd.DataFrame,
+    alpha: float,
+    pc_stable: bool,
+) -> nx.Graph:
     c = estimators.PC(data=df)
     pc_method = 'stable' if pc_stable else None
     g = c.estimate(
@@ -244,15 +247,16 @@ def find_dags(G: nx.Graph) -> nx.Graph:
     # Exclude nodes that have no path to "s-front-end_latency" for visualization
     remove_nodes = []
     undirected_G = G.to_undirected()
-    for node in G.nodes():
+    nodes: nx.classes.reportviews.NodeView = G.nodes
+    for node in nodes:
         if not nx.has_path(undirected_G, node, ROOT_METRIC_LABEL):
             remove_nodes.append(node)
             continue
-        if re.match("^s-", node):
+        if node.startswith('s-'):
             color = "red"
-        elif re.match("^c-", node):
+        elif node.startswith('c-'):
             color = "blue"
-        elif re.match("^m-", node):
+        elif node.startswith('m-'):
             color = "purple"
         else:
             color = "green"
@@ -264,8 +268,7 @@ def find_dags(G: nx.Graph) -> nx.Graph:
 def run(dataset: pd.DataFrame, mappings, **kwargs) -> nx.Graph:
     dataset = filter_by_target_metrics(dataset)
     if ROOT_METRIC_LABEL not in dataset.columns:
-        raise ValueError(
-            f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
+        raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
 
     labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
     no_paths = build_no_paths(labels, mappings)
