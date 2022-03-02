@@ -2,11 +2,11 @@ import argparse
 import base64
 import json
 import os
-import re
 import sys
+import time
 from datetime import datetime
 from itertools import combinations
-from typing import Any, List, Tuple, Union
+from typing import Any
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -38,45 +38,48 @@ TARGET_DATA: dict[str, list[str]] = {
 }
 
 
+def filter_by_target_metrics(data_df: pd.DataFrame) -> pd.DataFrame:
+    """Filter by specified target metrics
+    """
+    containers_df, services_df, nodes_df, middlewares_df = None, None, None, None
+    if 'containers' in TARGET_DATA:
+        containers_df = data_df.filter(
+            regex=f"^c-.+({'|'.join(TARGET_DATA['containers'])})$")
+    if 'services' in TARGET_DATA:
+        services_df = data_df.filter(
+            regex=f"^s-.+({'|'.join(TARGET_DATA['services'])})$")
+    if 'nodes' in TARGET_DATA:
+        nodes_df = data_df.filter(
+            regex=f"^n-.+({'|'.join(TARGET_DATA['nodes'])})$")
+    if 'middlewares' in TARGET_DATA:
+        # TODO: middleware
+        middlewares_df = data_df.filter(
+            regex=f"^m-.+({'|'.join(TARGET_DATA['middlewares'])})$")
+    return pd.concat([containers_df, services_df, nodes_df], axis=1)
+
+
 def read_data_file(tsdr_result_file: os.PathLike
                    ) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     tsdr_result = json.load(open(tsdr_result_file))
-    reduced_df = pd.DataFrame.from_dict(
-        tsdr_result['reduced_metrics_raw_data'])
-
-    # Filter by specified target metrics
-    containers_df, services_df, nodes_df, middlewares_df = None, None, None, None
-    if 'containers' in TARGET_DATA:
-        containers_df = reduced_df.filter(
-            regex=f"^c-.+({'|'.join(TARGET_DATA['containers'])})$")
-    if 'services' in TARGET_DATA:
-        services_df = reduced_df.filter(
-            regex=f"^s-.+({'|'.join(TARGET_DATA['services'])})$")
-    if 'nodes' in TARGET_DATA:
-        nodes_df = reduced_df.filter(
-            regex=f"^n-.+({'|'.join(TARGET_DATA['nodes'])})$")
-    if 'middlewares' in TARGET_DATA:
-        middlewares_df = reduced_df.filter(
-            regex=f"^m-.+({'|'.join(TARGET_DATA['middlewares'])})$")
-
-    df = pd.concat([containers_df, services_df, nodes_df], axis=1)
+    reduced_df = pd.DataFrame.from_dict(tsdr_result['reduced_metrics_raw_data'])
+    df = filter_by_target_metrics(reduced_df)
     return df, tsdr_result['metrics_dimension'], \
         tsdr_result['clustering_info'], tsdr_result['components_mappings'], \
         tsdr_result['metrics_meta']
 
 
-def build_no_paths(labels, mappings):
+def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
     containers_list, services_list, nodes_list = [], [], []
     for v in labels.values():
-        if re.match("^c-", v):
+        if v.startswith('c-'):
             container_name = v.split("_")[0].replace("c-", "")
             if container_name not in containers_list:
                 containers_list.append(container_name)
-        elif re.match("^s-", v):
+        elif v.startswith('s-'):
             service_name = v.split("_")[0].replace("s-", "")
             if service_name not in services_list:
                 services_list.append(service_name)
-        elif re.match("^n-", v):
+        elif v.startswith('n-'):
             node_name = v.split("_")[0].replace("n-", "")
             if node_name not in nodes_list:
                 nodes_list.append(node_name)
@@ -85,7 +88,7 @@ def build_no_paths(labels, mappings):
     for c in containers_list:
         nodes = []
         for k, v in labels.items():
-            if re.match("^c-{}_".format(c), v):
+            if v.startswith(f"c-{v}_"):
                 nodes.append(k)
         containers_metrics[c] = nodes
 
@@ -93,7 +96,7 @@ def build_no_paths(labels, mappings):
     for s in services_list:
         nodes = []
         for k, v in labels.items():
-            if re.match("^s-{}_".format(s), v):
+            if v.startswith(f"s-{s}_"):
                 nodes.append(k)
         services_metrics[s] = nodes
 
@@ -101,7 +104,7 @@ def build_no_paths(labels, mappings):
     for n in nodes_list:
         nodes = []
         for k, v in labels.items():
-            if re.match("^n-{}_".format(n), v):
+            if v.startswith(f"n-{n}_"):
                 nodes.append(k)
         nodes_metrics[n] = nodes
 
@@ -123,7 +126,6 @@ def build_no_paths(labels, mappings):
         for i in containers_metrics[pair[0]]:
             for j in containers_metrics[pair[1]]:
                 no_paths.append([i, j])
-    print("No dependence C-C pairs: {}, No paths: {}".format(len(no_deps_C_C_pair), len(no_paths)))
 
     # S-S
     no_deps_S_S_pair = []
@@ -139,7 +141,6 @@ def build_no_paths(labels, mappings):
         for i in services_metrics[pair[0]]:
             for j in services_metrics[pair[1]]:
                 no_paths.append([i, j])
-    print("No dependence S-S pairs: {}, No paths: {}".format(len(no_deps_S_S_pair), len(no_paths)))
 
     # N-N
     no_deps_N_N_pair = []
@@ -148,7 +149,6 @@ def build_no_paths(labels, mappings):
         for n1 in nodes_metrics[i]:
             for n2 in nodes_metrics[j]:
                 no_paths.append([n1, n2])
-    print("No dependence N-N pairs: {}, No paths: {}".format(len(no_deps_N_N_pair), len(no_paths)))
 
     # C-N
     for node in nodes_list:
@@ -159,7 +159,6 @@ def build_no_paths(labels, mappings):
                         continue
                     for c2 in containers_metrics[con]:
                         no_paths.append([n1, c2])
-    print("[C-N] No paths: {}".format(len(no_paths)))
 
     # S-N
     for service in SERVICE_CONTAINERS:
@@ -174,7 +173,6 @@ def build_no_paths(labels, mappings):
                 for s1 in services_metrics[service]:
                     for n2 in nodes_metrics[node]:
                         no_paths.append([s1, n2])
-    print("[S-N] No paths: {}".format(len(no_paths)))
 
     # C-S
     for service in SERVICE_CONTAINERS:
@@ -185,47 +183,51 @@ def build_no_paths(labels, mappings):
                 for s1 in services_metrics[service]:
                     for c2 in containers_metrics[con]:
                         no_paths.append([s1, c2])
-    print("[C-S] No paths: {}".format(len(no_paths)))
+
     return no_paths
 
 
-def prepare_init_graph(reduced_df, no_paths):
-    dm = reduced_df.values
-    print("Shape of data matrix: {}".format(dm.shape))
+def prepare_init_graph(data_df: pd.DataFrame, no_paths) -> nx.Graph:
     init_g = nx.Graph()
-    node_ids = range(len(reduced_df.columns))
+    node_ids = range(len(data_df.columns))
     init_g.add_nodes_from(node_ids)
     for (i, j) in combinations(node_ids, 2):
         init_g.add_edge(i, j)
-    print("Number of edges in complete graph : {}".format(init_g.number_of_edges()))
     for no_path in no_paths:
         init_g.remove_edge(no_path[0], no_path[1])
-    print("Number of edges in init graph : {}".format(init_g.number_of_edges()))
     return init_g
 
 
-def build_causal_graph_with_pcalg(dm, labels, init_g, alpha, pc_stable):
+def build_causal_graph_with_pcalg(
+    dm: np.ndarray,
+    labels: dict[int, str],
+    init_g: nx.Graph,
+    alpha: float,
+    pc_stable: bool,
+):
     """
     Build causal graph with PC algorithm.
     """
     cm = np.corrcoef(dm.T)
     pc_method = 'stable' if pc_stable else None
-    (G, sep_set) = pcalg.estimate_skeleton(indep_test_func=ci_test_fisher_z,
-                                           data_matrix=dm,
-                                           alpha=alpha,
-                                           corr_matrix=cm,
-                                           init_graph=init_g,
-                                           method=pc_method)
+    (G, sep_set) = pcalg.estimate_skeleton(
+        indep_test_func=ci_test_fisher_z,
+        data_matrix=dm,
+        alpha=alpha,
+        corr_matrix=cm,
+        init_graph=init_g,
+        method=pc_method,
+    )
     G = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
-
     G = nx.relabel_nodes(G, labels)
-
     return find_dags(G)
 
 
-def build_causal_graphs_with_pgmpy(df: pd.DataFrame,
-                                   alpha: float,
-                                   pc_stable: bool) -> nx.Graph:
+def build_causal_graphs_with_pgmpy(
+    df: pd.DataFrame,
+    alpha: float,
+    pc_stable: bool,
+) -> nx.Graph:
     c = estimators.PC(data=df)
     pc_method = 'stable' if pc_stable else None
     g = c.estimate(
@@ -241,15 +243,16 @@ def find_dags(G: nx.Graph) -> nx.Graph:
     # Exclude nodes that have no path to "s-front-end_latency" for visualization
     remove_nodes = []
     undirected_G = G.to_undirected()
-    for node in G.nodes():
+    nodes: nx.classes.reportviews.NodeView = G.nodes
+    for node in nodes:
         if not nx.has_path(undirected_G, node, ROOT_METRIC_LABEL):
             remove_nodes.append(node)
             continue
-        if re.match("^s-", node):
+        if node.startswith('s-'):
             color = "red"
-        elif re.match("^c-", node):
+        elif node.startswith('c-'):
             color = "blue"
-        elif re.match("^m-", node):
+        elif node.startswith('m-'):
             color = "purple"
         else:
             color = "green"
@@ -258,7 +261,44 @@ def find_dags(G: nx.Graph) -> nx.Graph:
     return G
 
 
+def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.Graph, dict[str, Any]]:
+    dataset = filter_by_target_metrics(dataset)
+    if ROOT_METRIC_LABEL not in dataset.columns:
+        raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
+
+    building_graph_start: time.Time = time.time()
+
+    labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
+    no_paths = build_no_paths(labels, mappings)
+    init_g = prepare_init_graph(dataset, no_paths)
+    if kwargs['pc_library'] == 'pcalg':
+        g = build_causal_graph_with_pcalg(
+            dataset.to_numpy(), labels, init_g,
+            kwargs['pc_citest_alpha'],
+            kwargs['pc_variant'],
+        )
+    elif kwargs['pc_library'] == 'pgmpy':
+        g = build_causal_graphs_with_pgmpy(
+            dataset, kwargs['pc_citest_alpha'], kwargs['pc_variant'],
+        )
+    else:
+        raise ValueError('library should be pcalg or pgmpy')
+
+    building_graph_elapsed: float = time.time() - building_graph_start
+
+    stats = {
+        'init_graph_nodes_num': init_g.number_of_nodes(),
+        'init_graph_edges_num': init_g.number_of_edges(),
+        'graph_nodes_num': g.number_of_nodes(),
+        'graph_edges_num': g.number_of_edges(),
+        'building_graph_elapsed_sec': building_graph_elapsed,
+    }
+    return g, stats
+
+
 def diag(tsdr_file, citest_alpha, pc_stable, library, out_dir):
+    """[deprecated]
+    """
     reduced_df, metrics_dimension, clustering_info, mappings, metrics_meta = \
         read_data_file(tsdr_file)
     if ROOT_METRIC_LABEL not in reduced_df.columns:
