@@ -67,7 +67,7 @@ def read_data_file(tsdr_result_file: os.PathLike
         tsdr_result['metrics_meta']
 
 
-def build_no_paths(labels, mappings):
+def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
     containers_list, services_list, nodes_list = [], [], []
     for v in labels.values():
         if v.startswith('c-'):
@@ -125,7 +125,6 @@ def build_no_paths(labels, mappings):
         for i in containers_metrics[pair[0]]:
             for j in containers_metrics[pair[1]]:
                 no_paths.append([i, j])
-    print("No dependence C-C pairs: {}, No paths: {}".format(len(no_deps_C_C_pair), len(no_paths)))
 
     # S-S
     no_deps_S_S_pair = []
@@ -141,7 +140,6 @@ def build_no_paths(labels, mappings):
         for i in services_metrics[pair[0]]:
             for j in services_metrics[pair[1]]:
                 no_paths.append([i, j])
-    print("No dependence S-S pairs: {}, No paths: {}".format(len(no_deps_S_S_pair), len(no_paths)))
 
     # N-N
     no_deps_N_N_pair = []
@@ -150,7 +148,6 @@ def build_no_paths(labels, mappings):
         for n1 in nodes_metrics[i]:
             for n2 in nodes_metrics[j]:
                 no_paths.append([n1, n2])
-    print("No dependence N-N pairs: {}, No paths: {}".format(len(no_deps_N_N_pair), len(no_paths)))
 
     # C-N
     for node in nodes_list:
@@ -161,7 +158,6 @@ def build_no_paths(labels, mappings):
                         continue
                     for c2 in containers_metrics[con]:
                         no_paths.append([n1, c2])
-    print("[C-N] No paths: {}".format(len(no_paths)))
 
     # S-N
     for service in SERVICE_CONTAINERS:
@@ -176,7 +172,6 @@ def build_no_paths(labels, mappings):
                 for s1 in services_metrics[service]:
                     for n2 in nodes_metrics[node]:
                         no_paths.append([s1, n2])
-    print("[S-N] No paths: {}".format(len(no_paths)))
 
     # C-S
     for service in SERVICE_CONTAINERS:
@@ -187,15 +182,13 @@ def build_no_paths(labels, mappings):
                 for s1 in services_metrics[service]:
                     for c2 in containers_metrics[con]:
                         no_paths.append([s1, c2])
-    print("[C-S] No paths: {}".format(len(no_paths)))
+
     return no_paths
 
 
-def prepare_init_graph(reduced_df, no_paths):
-    dm = reduced_df.values
-    print("Shape of data matrix: {}".format(dm.shape))
+def prepare_init_graph(data_df: pd.DataFrame, no_paths) -> nx.Graph:
     init_g = nx.Graph()
-    node_ids = range(len(reduced_df.columns))
+    node_ids = range(len(data_df.columns))
     init_g.add_nodes_from(node_ids)
     for (i, j) in combinations(node_ids, 2):
         init_g.add_edge(i, j)
@@ -206,7 +199,13 @@ def prepare_init_graph(reduced_df, no_paths):
     return init_g
 
 
-def build_causal_graph_with_pcalg(dm, labels, init_g, alpha, pc_stable):
+def build_causal_graph_with_pcalg(
+    dm: pd.DataFrame,
+    labels: dict[int, str],
+    init_g: nx.Graph,
+    alpha: float,
+    pc_stable: bool,
+):
     """
     Build causal graph with PC algorithm.
     """
@@ -221,9 +220,7 @@ def build_causal_graph_with_pcalg(dm, labels, init_g, alpha, pc_stable):
         method=pc_method,
     )
     G = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
-
     G = nx.relabel_nodes(G, labels)
-
     return find_dags(G)
 
 
@@ -265,7 +262,7 @@ def find_dags(G: nx.Graph) -> nx.Graph:
     return G
 
 
-def run(dataset: pd.DataFrame, mappings, **kwargs) -> nx.Graph:
+def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> nx.Graph:
     dataset = filter_by_target_metrics(dataset)
     if ROOT_METRIC_LABEL not in dataset.columns:
         raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
