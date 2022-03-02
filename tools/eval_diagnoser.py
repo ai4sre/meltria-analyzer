@@ -33,7 +33,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
 
-            logger.info(f">> Running diagnose {record.chaos_case_file()} ...")
+            logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
             reducer = tsdr.Tsdr(tsdr.ar_based_ad_model, **{
                 'tsifter_step1_ar_regression': cfg.tsdr.step1.ar_regression,
@@ -51,6 +51,8 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                 max_workers=cpu_count(),
             )
             reduced_df: pd.DataFrame = reduced_df_by_step['step2']
+
+            logger.info(f">> Running diagnosis of {record.chaos_case_file()} ...")
 
             causal_graph, stats = diag.run(
                 reduced_df, mappings_by_metrics_file[record.metrics_file], **{
