@@ -29,6 +29,15 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
     )
     logger.info("Dataset loading complete")
 
+    tests_df = pd.DataFrame(
+        columns=[
+            'chaos_type', 'chaos_comp', 'metrics_file', 'num_series',
+            'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges',
+            'building_graph_elapsed_sec', 'found_cause_metrics', 'grafana_dashboard_url',
+        ],
+        index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'],
+    ).dropna()
+
     for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
@@ -64,17 +73,30 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             )
 
             logger.info("--> Checking causal graph including chaos-injected metrics")
-            is_cause_metrics, cause_metric_nodes = metrics.check_cause_metrics(
+            found_cause_metrics, cause_metric_nodes = metrics.check_cause_metrics(
                 list(causal_graph.nodes()), record.chaos_type, record.chaos_comp,
             )
-            if is_cause_metrics:
+            if found_cause_metrics:
                 logger.info(f"Found cause metric {cause_metric_nodes} in '{chaos_comp}' '{chaos_type}'")
             else:
                 logger.info(f"Not found cause metric in '{chaos_comp}' '{chaos_type}'")
 
+            tests_df = tests_df.append(
+                pd.Series(
+                    [
+                        chaos_type, chaos_comp, metrics_file, metrics_dimension['total'][2],
+                        stats['init_graph_nodes_num'], stats['init_graph_edges_num'],
+                        stats['graph_nodes_num'], stats['graph_edges_num'],
+                        stats['building_graph_elapsed_sec'],
+                        found_cause_metrics, grafana_dashboard_url,
+                    ], index=tests_df.columns,
+                ), ignore_index=True,
+            )
+
             img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
-            run[f"results/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
-            run[f"results/causal_graphs/stats_{record.chaos_case()}"].log(stats)
+            run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
+
+    run['tests/table'].upload(neptune.types.File.as_html(tests_df))
 
 
 @hydra.main(config_path='../conf/diagnoser', config_name='config')

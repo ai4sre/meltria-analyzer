@@ -3,6 +3,7 @@ import base64
 import json
 import os
 import sys
+import time
 from datetime import datetime
 from itertools import combinations
 from typing import Any
@@ -265,6 +266,8 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.G
     if ROOT_METRIC_LABEL not in dataset.columns:
         raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
 
+    building_graph_start: time.Time = time.time()
+
     labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
     no_paths = build_no_paths(labels, mappings)
     init_g = prepare_init_graph(dataset, no_paths)
@@ -280,11 +283,15 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.G
         )
     else:
         raise ValueError('library should be pcalg or pgmpy')
+
+    building_graph_elapsed: float = time.time() - building_graph_start
+
     stats = {
         'init_graph_nodes_num': init_g.number_of_nodes(),
         'init_graph_edges_num': init_g.number_of_edges(),
         'graph_nodes_num': g.number_of_nodes(),
         'graph_edges_num': g.number_of_edges(),
+        'building_graph_elapsed_sec': building_graph_elapsed,
     }
     return g, stats
 
