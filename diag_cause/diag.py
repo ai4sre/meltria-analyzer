@@ -266,7 +266,7 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.G
     if ROOT_METRIC_LABEL not in dataset.columns:
         raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
 
-    building_graph_start: time.Time = time.time()
+    building_graph_start: float = time.time()
 
     labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
     no_paths = build_no_paths(labels, mappings)
