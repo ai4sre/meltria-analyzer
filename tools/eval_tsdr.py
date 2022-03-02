@@ -159,7 +159,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
     dataset: pd.DataFrame = meltria_loader.load_dataset(
         cfg.metrics_files,
         cfg.exclude_middleware_metrics,
-    )
+    )[0]
     logger.info("Dataset loading complete")
 
     clustering_df = pd.DataFrame(
