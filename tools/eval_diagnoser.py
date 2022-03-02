@@ -52,12 +52,14 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             )
             reduced_df: pd.DataFrame = reduced_df_by_step['step2']
 
-            causal_graph: nx.Graph = diag.run(reduced_df, mappings_by_metrics_file[record.metrics_file], **{
-                'pc_library': cfg.params.pc_library,
-                'pc_citest': cfg.params.pc_citest,
-                'pc_citest_alpha': cfg.params.pc_citest_alpha,
-                'pc_variant': cfg.params.pc_variant,
-            })
+            causal_graph, stats = diag.run(
+                reduced_df, mappings_by_metrics_file[record.metrics_file], **{
+                    'pc_library': cfg.params.pc_library,
+                    'pc_citest': cfg.params.pc_citest,
+                    'pc_citest_alpha': cfg.params.pc_citest_alpha,
+                    'pc_variant': cfg.params.pc_variant,
+                }
+            )
 
             logger.info("--> Checking causal graph including chaos-injected metrics")
             is_cause_metrics, cause_metric_nodes = metrics.check_cause_metrics(
@@ -70,6 +72,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
 
             img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
             run[f"results/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
+            run[f"results/causal_graphs/stats_{record.chaos_case()}"].log(stats)
 
 
 @hydra.main(config_path='../conf/diagnoser', config_name='config')

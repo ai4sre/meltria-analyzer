@@ -192,10 +192,8 @@ def prepare_init_graph(data_df: pd.DataFrame, no_paths) -> nx.Graph:
     init_g.add_nodes_from(node_ids)
     for (i, j) in combinations(node_ids, 2):
         init_g.add_edge(i, j)
-    print("Number of edges in complete graph : {}".format(init_g.number_of_edges()))
     for no_path in no_paths:
         init_g.remove_edge(no_path[0], no_path[1])
-    print("Number of edges in init graph : {}".format(init_g.number_of_edges()))
     return init_g
 
 
@@ -262,7 +260,7 @@ def find_dags(G: nx.Graph) -> nx.Graph:
     return G
 
 
-def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> nx.Graph:
+def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.Graph, dict[str, Any]]:
     dataset = filter_by_target_metrics(dataset)
     if ROOT_METRIC_LABEL not in dataset.columns:
         raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
@@ -282,7 +280,13 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> nx.Graph:
         )
     else:
         raise ValueError('library should be pcalg or pgmpy')
-    return g
+    stats = {
+        'init_graph_nodes_num': init_g.number_of_nodes(),
+        'init_graph_edges_num': init_g.number_of_edges(),
+        'graph_nodes_num': g.number_of_nodes(),
+        'graph_edges_num': g.number_of_edges(),
+    }
+    return g, stats
 
 
 def diag(tsdr_file, citest_alpha, pc_stable, library, out_dir):
