@@ -38,28 +38,31 @@ TARGET_DATA: dict[str, list[str]] = {
 }
 
 
+def filter_by_target_metrics(data_df: pd.DataFrame) -> pd.DataFrame:
+    """Filter by specified target metrics
+    """
+    containers_df, services_df, nodes_df, middlewares_df = None, None, None, None
+    if 'containers' in TARGET_DATA:
+        containers_df = data_df.filter(
+            regex=f"^c-.+({'|'.join(TARGET_DATA['containers'])})$")
+    if 'services' in TARGET_DATA:
+        services_df = data_df.filter(
+            regex=f"^s-.+({'|'.join(TARGET_DATA['services'])})$")
+    if 'nodes' in TARGET_DATA:
+        nodes_df = data_df.filter(
+            regex=f"^n-.+({'|'.join(TARGET_DATA['nodes'])})$")
+    if 'middlewares' in TARGET_DATA:
+        # TODO: middleware
+        middlewares_df = data_df.filter(
+            regex=f"^m-.+({'|'.join(TARGET_DATA['middlewares'])})$")
+    return pd.concat([containers_df, services_df, nodes_df], axis=1)
+
+
 def read_data_file(tsdr_result_file: os.PathLike
                    ) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     tsdr_result = json.load(open(tsdr_result_file))
-    reduced_df = pd.DataFrame.from_dict(
-        tsdr_result['reduced_metrics_raw_data'])
-
-    # Filter by specified target metrics
-    containers_df, services_df, nodes_df, middlewares_df = None, None, None, None
-    if 'containers' in TARGET_DATA:
-        containers_df = reduced_df.filter(
-            regex=f"^c-.+({'|'.join(TARGET_DATA['containers'])})$")
-    if 'services' in TARGET_DATA:
-        services_df = reduced_df.filter(
-            regex=f"^s-.+({'|'.join(TARGET_DATA['services'])})$")
-    if 'nodes' in TARGET_DATA:
-        nodes_df = reduced_df.filter(
-            regex=f"^n-.+({'|'.join(TARGET_DATA['nodes'])})$")
-    if 'middlewares' in TARGET_DATA:
-        middlewares_df = reduced_df.filter(
-            regex=f"^m-.+({'|'.join(TARGET_DATA['middlewares'])})$")
-
-    df = pd.concat([containers_df, services_df, nodes_df], axis=1)
+    reduced_df = pd.DataFrame.from_dict(tsdr_result['reduced_metrics_raw_data'])
+    df = filter_by_target_metrics(reduced_df)
     return df, tsdr_result['metrics_dimension'], \
         tsdr_result['clustering_info'], tsdr_result['components_mappings'], \
         tsdr_result['metrics_meta']
@@ -258,7 +261,33 @@ def find_dags(G: nx.Graph) -> nx.Graph:
     return G
 
 
+def run(dataset: pd.DataFrame, mappings, **kwargs) -> nx.Graph:
+    dataset = filter_by_target_metrics(dataset)
+    if ROOT_METRIC_LABEL not in dataset.columns:
+        raise ValueError(
+            f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
+
+    labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
+    no_paths = build_no_paths(labels, mappings)
+    init_g = prepare_init_graph(dataset, no_paths)
+    if kwargs['pc_library'] == 'pcalg':
+        g = build_causal_graph_with_pcalg(
+            dataset.values, labels, init_g,
+            kwargs['pc_citest_alpha'],
+            kwargs['pc_variant'],
+        )
+    elif kwargs['pc_library'] == 'pgmpy':
+        g = build_causal_graphs_with_pgmpy(
+            dataset, kwargs['pc_citest_alpha'], kwargs['pc_variant'],
+        )
+    else:
+        raise ValueError('library should be pcalg or pgmpy')
+    return g
+
+
 def diag(tsdr_file, citest_alpha, pc_stable, library, out_dir):
+    """[deprecated]
+    """
     reduced_df, metrics_dimension, clustering_info, mappings, metrics_meta = \
         read_data_file(tsdr_file)
     if ROOT_METRIC_LABEL not in reduced_df.columns:
