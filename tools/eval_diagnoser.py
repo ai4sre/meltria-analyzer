@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import logging
-import sys
+import os
 from multiprocessing import cpu_count
 
 import hydra
@@ -80,7 +80,11 @@ def main(cfg: DictConfig) -> None:
     logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
 
     # Setup neptune.ai client
-    run: neptune.Run = neptune.init(mode=cfg.neptune.mode)
+    run: neptune.Run = neptune.init(
+        project=os.environ['DIAGNOSER_NEPTUNE_PROJECT'],
+        api_token=os.environ['DIAGNOSER_NEPTUNE_API_TOKEN'],
+        mode=cfg.neptune.mode,
+    )
     npt_handler = NeptuneHandler(run=run)
     logger.addHandler(npt_handler)
     run['dataset/id'] = cfg.dataset_id
