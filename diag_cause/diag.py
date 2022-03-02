@@ -202,21 +202,22 @@ def build_causal_graph_with_pcalg(
     dm: np.ndarray,
     labels: dict[int, str],
     init_g: nx.Graph,
-    alpha: float,
-    pc_stable: bool,
+    pc_citest_alpha: float,
+    pc_variant: str = '',
+    pc_citest: str = 'fisher_z',
 ):
     """
     Build causal graph with PC algorithm.
     """
     cm = np.corrcoef(dm.T)
-    pc_method = 'stable' if pc_stable else None
+    ci_test = ci_test_fisher_z if pc_citest == 'fisher_z' else pc_citest
     (G, sep_set) = pcalg.estimate_skeleton(
-        indep_test_func=ci_test_fisher_z,
+        indep_test_func=ci_test,
         data_matrix=dm,
-        alpha=alpha,
+        alpha=pc_citest_alpha,
         corr_matrix=cm,
         init_graph=init_g,
-        method=pc_method,
+        method=pc_variant,
     )
     G = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
     G = nx.relabel_nodes(G, labels)
@@ -225,15 +226,16 @@ def build_causal_graph_with_pcalg(
 
 def build_causal_graphs_with_pgmpy(
     df: pd.DataFrame,
-    alpha: float,
-    pc_stable: bool,
+    pc_citest_alpha: float,
+    pc_variant: str = 'orig',
+    pc_citest: str = 'fisher_z',
 ) -> nx.Graph:
     c = estimators.PC(data=df)
-    pc_method = 'stable' if pc_stable else None
+    ci_test = fisher_z if pc_citest == 'fisher_z' else pc_citest
     g = c.estimate(
-        variant=pc_method,
-        ci_test=fisher_z,
-        significance_level=alpha,
+        variant=pc_variant,
+        ci_test=ci_test,
+        significance_level=pc_citest_alpha,
         return_type='pdag',
     )
     return find_dags(g)
@@ -274,12 +276,16 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.G
     if kwargs['pc_library'] == 'pcalg':
         g = build_causal_graph_with_pcalg(
             dataset.to_numpy(), labels, init_g,
-            kwargs['pc_citest_alpha'],
-            kwargs['pc_variant'],
+            pc_variant=kwargs['pc_variant'],
+            pc_citest=kwargs['pc_citest'],
+            pc_citest_alpha=kwargs['pc_citest_alpha'],
         )
     elif kwargs['pc_library'] == 'pgmpy':
         g = build_causal_graphs_with_pgmpy(
-            dataset, kwargs['pc_citest_alpha'], kwargs['pc_variant'],
+            dataset,
+            pc_variant=kwargs['pc_variant'],
+            pc_citest=kwargs['pc_citest'],
+            pc_citest_alpha=kwargs['pc_citest_alpha'],
         )
     else:
         raise ValueError('library should be pcalg or pgmpy')
