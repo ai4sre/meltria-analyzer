@@ -14,9 +14,9 @@ import numpy as np
 import pandas as pd
 import pcalg
 from IPython.display import Image
-from lib.metrics import (CONTAINER_CALL_GRAPH, ROOT_METRIC_LABEL,
-                         SERVICE_CALL_DIGRAPH, SERVICE_CONTAINERS,
-                         check_cause_metrics)
+from lib.metrics import (CONTAINER_CALL_DIGRAPH, CONTAINER_CALL_GRAPH,
+                         ROOT_METRIC_LABEL, SERVICE_CALL_DIGRAPH,
+                         SERVICE_CONTAINERS, check_cause_metrics)
 from pgmpy import estimators
 
 from .citest.fisher_z import ci_test_fisher_z
@@ -217,6 +217,7 @@ def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
 def fix_edge_direction_based_network_call(
     G: nx.DiGraph, u: str, v: str,
     service_dep_graph: nx.DiGraph,
+    container_dep_graph: nx.DiGraph,
 ) -> None:
     # From service to service
     if (u.startswith('s-') and v.startswith('s-')):
@@ -230,7 +231,15 @@ def fix_edge_direction_based_network_call(
             G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
 
     # From container to container
-
+    if (u.startswith('c-') and v.startswith('c-')):
+        u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
+        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
+        if (v_ctnr not in container_dep_graph[u_ctnr]) and \
+           (u_ctnr in container_dep_graph[v_ctnr]):
+            # reverse direction
+            attr = G[u][v]
+            G.remove_edge(u, v)
+            G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
 
 
 def fix_edge_directions_in_causal_graph(
@@ -241,13 +250,14 @@ def fix_edge_directions_in_causal_graph(
     2. Fix directions based on the network call graph.
     """
     service_dep_graph: nx.DiGraph = SERVICE_CALL_DIGRAPH.reverse()
+    container_dep_graph: nx.DiGraph = CONTAINER_CALL_DIGRAPH.reverse()
     # Traverse the all edges of G via the neighbors
     for u, nbrsdict in G.adjacency():
         nbrs = list(nbrsdict.keys())  # to avoid 'RuntimeError: dictionary changed size during iteration'
         for v in nbrs:
             # u -> v
             fix_edge_direction_based_hieralchy(G, u, v)
-            fix_edge_direction_based_network_call(G, u, v, service_dep_graph)
+            fix_edge_direction_based_network_call(G, u, v, service_dep_graph, container_dep_graph)
     return G
 
 

@@ -33,19 +33,30 @@ from diag_cause import diag
             'nwcall01: service to service',
             [
                 ("s-user_latency", "s-front-end_latency"),
-                ("s-front-end_latency", "s-user_latency"),
+                ("s-front-end_latency", "s-user_latency"),  # wrong
                 ("s-user_latency", "s-orders_throughput"),
             ],
             [
                 ("s-user_latency", "s-front-end_latency", {}),
                 ("s-user_latency", "s-orders_throughput", {}),
             ],
-        )
+        ),
+        (
+            'nwcall02: container to container',
+            [
+                ("c-user_cpu_usage_seconds_total", "c-user-db_cpu_usage_seconds_total"),  # wrong
+                ("c-user_cpu_usage_seconds_total", "s-user_latency"),
+            ],
+            [
+                ("c-user-db_cpu_usage_seconds_total", "c-user_cpu_usage_seconds_total", {}),
+                ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
+            ],
+        ),
     ],
-    ids=['hieralchy01', 'hieralchy02', 'nwcall01'],
+    ids=['hieralchy01', 'hieralchy02', 'nwcall01', 'nwcall02'],
 )
 def test_fix_edge_directions_in_causal_graph(case, input, expected):
     G = nx.DiGraph()
     G.add_edges_from(input)
     got = diag.fix_edge_directions_in_causal_graph(G)
-    assert list(nx.to_edgelist(got)) == expected
+    assert list(nx.to_edgelist(got)).sort() == expected.sort()
