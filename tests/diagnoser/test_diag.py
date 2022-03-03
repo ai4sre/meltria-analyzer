@@ -7,7 +7,7 @@ from diag_cause import diag
     "case,input,expected",
     [
         (
-            'reverse single direction edge',
+            'hieralchy01: reverse single direction edge',
             [
                 ("s-user_latency", "s-front-end_latency"),
                 ("s-user_latency", "c-user_cpu_usage_seconds_total"),
@@ -18,7 +18,7 @@ from diag_cause import diag
             ],
         ),
         (
-            'determine bi-direction edge',
+            'hieralchy02: determine bi-direction edge',
             [
                 ("s-user_latency", "s-front-end_latency"),
                 ("s-user_latency", "c-user_cpu_usage_seconds_total"),
@@ -28,9 +28,21 @@ from diag_cause import diag
                 ("s-user_latency", "s-front-end_latency", {}),
                 ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
             ],
+        ),
+        (
+            'nwcall01: service to service',
+            [
+                ("s-user_latency", "s-front-end_latency"),
+                ("s-front-end_latency", "s-user_latency"),
+                ("s-user_latency", "s-orders_throughput"),
+            ],
+            [
+                ("s-user_latency", "s-front-end_latency", {}),
+                ("s-user_latency", "s-orders_throughput", {}),
+            ],
         )
     ],
-    ids=['reverse_single', 'determine_bidirection'],
+    ids=['hieralchy01', 'hieralchy02', 'nwcall01'],
 )
 def test_fix_edge_directions_in_causal_graph(case, input, expected):
     G = nx.DiGraph()
