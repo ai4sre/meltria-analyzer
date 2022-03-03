@@ -16,9 +16,21 @@ from diag_cause import diag
                 ("s-user_latency", "s-front-end_latency", {}),
                 ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
             ],
+        ),
+        (
+            'determine bi-direction edge',
+            [
+                ("s-user_latency", "s-front-end_latency"),
+                ("s-user_latency", "c-user_cpu_usage_seconds_total"),
+                ("c-user_cpu_usage_seconds_total", "s-user_latency"),
+            ],
+            [
+                ("s-user_latency", "s-front-end_latency", {}),
+                ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
+            ],
         )
     ],
-    ids=['reverse_single'],
+    ids=['reverse_single', 'determine_bidirection'],
 )
 def test_fix_edge_directions_in_causal_graph(case, input, expected):
     G = nx.DiGraph()
