@@ -6,11 +6,6 @@ services:
     volumes:
       - .:/usr/src/app
     entrypoint: ["/usr/src/app/bin/tsdr_cli.py"]
-  diag-cause:
-    build: .
-    volumes:
-      - .:/usr/src/app
-    entrypoint: ["/usr/src/app/bin/diag_cause_cli.py"]
   eval-tsdr:
     build: .
     volumes:

@@ -1,19 +1,13 @@
-import argparse
-import base64
 import json
 import os
-import sys
 import time
-from datetime import datetime
 from itertools import combinations
 from typing import Any
 
-import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pcalg
-from IPython.display import Image
 from lib.metrics import (CONTAINER_CALL_DIGRAPH, CONTAINER_CALL_GRAPH,
                          ROOT_METRIC_LABEL, SERVICE_CALL_DIGRAPH,
                          SERVICE_CONTAINERS, check_cause_metrics)
@@ -361,103 +355,3 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.G
         'building_graph_elapsed_sec': building_graph_elapsed,
     }
     return g, stats
-
-
-def diag(tsdr_file, citest_alpha, pc_stable, library, out_dir):
-    """[deprecated]
-    """
-    reduced_df, metrics_dimension, clustering_info, mappings, metrics_meta = \
-        read_data_file(tsdr_file)
-    if ROOT_METRIC_LABEL not in reduced_df.columns:
-        raise ValueError(
-            f"{tsdr_file} has no root metric node: {ROOT_METRIC_LABEL}")
-
-    labels = {}
-    for i in range(len(reduced_df.columns)):
-        labels[i] = reduced_df.columns[i]
-
-    print("--> Building no paths", file=sys.stderr)
-    no_paths = build_no_paths(labels, mappings)
-
-    print("--> Preparing initial graph", file=sys.stderr)
-    init_g = prepare_init_graph(reduced_df, no_paths)
-
-    print("--> Building causal graph", file=sys.stderr)
-    if library == 'pcalg':
-        g = build_causal_graph_with_pcalg(
-            reduced_df.values, labels, init_g, citest_alpha, pc_stable)
-    elif library == 'pgmpy':
-        g = build_causal_graphs_with_pgmpy(
-            reduced_df, citest_alpha, pc_stable)
-    else:
-        raise ValueError('library should be pcalg or pgmpy')
-
-    print("--> Checking causal graph including chaos-injected metrics", file=sys.stderr)
-    chaos_type = metrics_meta['injected_chaos_type']
-    chaos_comp = metrics_meta['chaos_injected_component']
-    is_cause_metrics, cause_metric_nodes = check_cause_metrics(
-        list(g.nodes()), chaos_type, chaos_comp)
-    if is_cause_metrics:
-        print(
-            f"Found cause metric {cause_metric_nodes} in '{chaos_comp}' '{chaos_type}'", file=sys.stderr)
-    else:
-        print(
-            f"Not found cause metric in '{chaos_comp}' '{chaos_type}'", file=sys.stderr)
-
-    agraph = nx.nx_agraph.to_agraph(g)
-    img = agraph.draw(prog='sfdp', format='png')
-    if out_dir is None:
-        Image(img)
-    else:
-        id = os.path.splitext(os.path.basename(tsdr_file))[0]
-        out_dir = os.path.join(out_dir, id)
-        if not os.path.isdir(out_dir):
-            os.makedirs(out_dir)
-        ts = datetime.now().strftime("%Y%m%d%H%M%S")
-        imgfile = os.path.join(out_dir, ts) + '.png'
-        plt.savefig(imgfile)
-        print(
-            f"Saved the file of causal graph image to {imgfile}", file=sys.stderr)
-
-        metadata = {
-            'metrics_meta': metrics_meta,
-            'parameters': {
-                'pc-stable': pc_stable,
-                'citest_alpha': citest_alpha,
-            },
-            'causal_graph_stats': {
-                'cause_metric_nodes': cause_metric_nodes,
-                'nodes_num': g.number_of_nodes(),
-                'edges_num': g.number_of_edges(),
-            },
-            'metrics_dimension': metrics_dimension,
-            'clustering_info': clustering_info,
-            # convert base64 encoded bytes to string to serialize it as json
-            'raw_image': base64.b64encode(img).decode('utf-8'),
-        }
-        metafile = os.path.join(out_dir, ts) + '.json'
-        with open(metafile, mode='w') as f:
-            json.dump(metadata, f, indent=4)
-        print(f"Saved the file of metadata to {metafile}", file=sys.stderr)
-        return metadata
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("tsdr_resultfile", help="results file of tsdr")
-    parser.add_argument("--citest-alpha",
-                        default=SIGNIFICANCE_LEVEL,
-                        type=float,
-                        help="alpha value of independence test for building causality graph")
-    parser.add_argument("--pc-stable",
-                        action='store_true',
-                        help='whether to use stable method of PC-algorithm')
-    parser.add_argument("--library",
-                        default='pcalg',
-                        help='pcalg or pgmpy')
-    parser.add_argument("--out-dir",
-                        help='output directory for saving graph image and metadata from tsdr')
-    args = parser.parse_args()
-
-    diag(args.tsdr_resultfile, args.citest_alpha,
-         args.pc_stable, args.library, args.out_dir)
