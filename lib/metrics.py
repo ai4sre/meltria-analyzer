@@ -2,6 +2,8 @@ import re
 from collections import defaultdict
 from typing import Any
 
+import networkx as nx
+
 CHAOS_TO_CAUSE_METRIC_PATTERNS = {
     'pod-cpu-hog': [
         'cpu_.+', 'threads', 'sockets', 'file_descriptors', 'processes', 'memory_cache', 'memory_mapped_file',
@@ -15,6 +17,35 @@ CHAOS_TO_CAUSE_METRIC_PATTERNS = {
 }
 
 ROOT_METRIC_LABEL = "s-front-end_latency"
+
+SERVICE_CALL_DIGRAPH: nx.DiGraph = nx.DiGraph([
+    ('front-end', 'orders'),
+    ('front-end', 'catalogue'),
+    ('front-end', 'user'),
+    ('front-end', 'carts'),
+    ('orders', 'shipping'),
+    ('orders', 'payment'),
+    ('orders', 'user'),
+    ('orders', 'carts'),
+])
+
+CONTAINER_CALL_DIGRAPH: nx.DiGraph = nx.DiGraph([
+    ('front-end', 'orders'),
+    ('front-end', 'carts'),
+    ('front-end', 'user'),
+    ('front-end', 'catalogue'),
+    ('front-end', 'session-db'),
+    ('orders', 'shipping'),
+    ('orders', 'payment'),
+    ('orders', 'user'),
+    ('orders', 'carts'),
+    ('orders', 'orders-db'),
+    ('catalogue', 'catalogue-db'),
+    ('user', 'user-db'),
+    ('carts', 'carts-db'),
+    ('shipping', 'rabbitmq'),
+    ('rabbitmq', 'queue-master'),
+])
 
 CONTAINER_CALL_GRAPH: dict[str, list[str]] = {
     "front-end": ["orders", "carts", "user", "catalogue"],

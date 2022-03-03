@@ -14,7 +14,8 @@ import numpy as np
 import pandas as pd
 import pcalg
 from IPython.display import Image
-from lib.metrics import (CONTAINER_CALL_GRAPH, ROOT_METRIC_LABEL,
+from lib.metrics import (CONTAINER_CALL_DIGRAPH, CONTAINER_CALL_GRAPH,
+                         ROOT_METRIC_LABEL, SERVICE_CALL_DIGRAPH,
                          SERVICE_CONTAINERS, check_cause_metrics)
 from pgmpy import estimators
 
@@ -198,48 +199,110 @@ def prepare_init_graph(data_df: pd.DataFrame, no_paths) -> nx.Graph:
     return init_g
 
 
+def nx_reverse_edge_direction(G: nx.DiGraph, u, v):
+    attr = G[u][v]
+    G.remove_edge(u, v)
+    G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
+
+
+def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
+    # check whether u is service metric and v is container metric
+    if not (u.startswith('s-') and v.startswith('c-')):
+        return
+    # check whether u and v in the same service
+    u_service = u.split('-', maxsplit=1)[1].split('_')[0]
+    v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+    if u_service != v_service:
+        return
+    nx_reverse_edge_direction(G, u, v)
+
+
+def fix_edge_direction_based_network_call(
+    G: nx.DiGraph, u: str, v: str,
+    service_dep_graph: nx.DiGraph,
+    container_dep_graph: nx.DiGraph,
+) -> None:
+    # From service to service
+    if (u.startswith('s-') and v.startswith('s-')):
+        u_service = u.split('-', maxsplit=1)[1].split('_')[0]
+        v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+        if (v_service not in service_dep_graph[u_service]) and \
+           (u_service in service_dep_graph[v_service]):
+            nx_reverse_edge_direction(G, u, v)
+
+    # From container to container
+    if (u.startswith('c-') and v.startswith('c-')):
+        u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
+        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
+        if (v_ctnr not in container_dep_graph[u_ctnr]) and \
+           (u_ctnr in container_dep_graph[v_ctnr]):
+            nx_reverse_edge_direction(G, u, v)
+
+
+def fix_edge_directions_in_causal_graph(
+    G: nx.DiGraph,
+) -> nx.DiGraph:
+    """Fix the edge directions in the causal graphs.
+    1. Fix directions based on the system hieralchy such as a service and a container
+    2. Fix directions based on the network call graph.
+    """
+    service_dep_graph: nx.DiGraph = SERVICE_CALL_DIGRAPH.reverse()
+    container_dep_graph: nx.DiGraph = CONTAINER_CALL_DIGRAPH.reverse()
+    # Traverse the all edges of G via the neighbors
+    for u, nbrsdict in G.adjacency():
+        nbrs = list(nbrsdict.keys())  # to avoid 'RuntimeError: dictionary changed size during iteration'
+        for v in nbrs:
+            # u -> v
+            fix_edge_direction_based_hieralchy(G, u, v)
+            fix_edge_direction_based_network_call(G, u, v, service_dep_graph, container_dep_graph)
+    return G
+
+
 def build_causal_graph_with_pcalg(
     dm: np.ndarray,
     labels: dict[int, str],
     init_g: nx.Graph,
-    alpha: float,
-    pc_stable: bool,
-):
+    pc_citest_alpha: float,
+    pc_variant: str = '',
+    pc_citest: str = 'fisher-z',
+) -> nx.DiGraph:
     """
     Build causal graph with PC algorithm.
     """
     cm = np.corrcoef(dm.T)
-    pc_method = 'stable' if pc_stable else None
+    ci_test = ci_test_fisher_z if pc_citest == 'fisher-z' else pc_citest
     (G, sep_set) = pcalg.estimate_skeleton(
-        indep_test_func=ci_test_fisher_z,
+        indep_test_func=ci_test,
         data_matrix=dm,
-        alpha=alpha,
+        alpha=pc_citest_alpha,
         corr_matrix=cm,
         init_graph=init_g,
-        method=pc_method,
+        method=pc_variant,
     )
-    G = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
-    G = nx.relabel_nodes(G, labels)
-    return find_dags(G)
+    DG: nx.DiGraph = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
+    DG = nx.relabel_nodes(DG, labels)
+    DG = find_dags(DG)
+    return fix_edge_directions_in_causal_graph(DG)
 
 
 def build_causal_graphs_with_pgmpy(
     df: pd.DataFrame,
-    alpha: float,
-    pc_stable: bool,
-) -> nx.Graph:
+    pc_citest_alpha: float,
+    pc_variant: str = 'orig',
+    pc_citest: str = 'fisher-z',
+) -> nx.DiGraph:
     c = estimators.PC(data=df)
-    pc_method = 'stable' if pc_stable else None
-    g = c.estimate(
-        variant=pc_method,
-        ci_test=fisher_z,
-        significance_level=alpha,
+    ci_test = fisher_z if pc_citest == 'fisher-z' else pc_citest
+    G = c.estimate(
+        variant=pc_variant,
+        ci_test=ci_test,
+        significance_level=pc_citest_alpha,
         return_type='pdag',
     )
-    return find_dags(g)
+    return find_dags(G)
 
 
-def find_dags(G: nx.Graph) -> nx.Graph:
+def find_dags(G: nx.DiGraph) -> nx.DiGraph:
     # Exclude nodes that have no path to "s-front-end_latency" for visualization
     remove_nodes = []
     undirected_G = G.to_undirected()
@@ -266,7 +329,7 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.G
     if ROOT_METRIC_LABEL not in dataset.columns:
         raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
 
-    building_graph_start: time.Time = time.time()
+    building_graph_start: float = time.time()
 
     labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
     no_paths = build_no_paths(labels, mappings)
@@ -274,12 +337,16 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.G
     if kwargs['pc_library'] == 'pcalg':
         g = build_causal_graph_with_pcalg(
             dataset.to_numpy(), labels, init_g,
-            kwargs['pc_citest_alpha'],
-            kwargs['pc_variant'],
+            pc_variant=kwargs['pc_variant'],
+            pc_citest=kwargs['pc_citest'],
+            pc_citest_alpha=kwargs['pc_citest_alpha'],
         )
     elif kwargs['pc_library'] == 'pgmpy':
         g = build_causal_graphs_with_pgmpy(
-            dataset, kwargs['pc_citest_alpha'], kwargs['pc_variant'],
+            dataset,
+            pc_variant=kwargs['pc_variant'],
+            pc_citest=kwargs['pc_citest'],
+            pc_citest_alpha=kwargs['pc_citest_alpha'],
         )
     else:
         raise ValueError('library should be pcalg or pgmpy')
