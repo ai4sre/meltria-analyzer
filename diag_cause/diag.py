@@ -218,7 +218,8 @@ def fix_edge_directions_in_causal_graph(
                 continue
             attr = G[u][v]
             G.remove_edge(u, v)
-            G.add_edge(v, u, attr=attr)
+            G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
+
     return G
 
 
