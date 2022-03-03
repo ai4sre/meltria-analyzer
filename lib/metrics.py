@@ -2,6 +2,8 @@ import re
 from collections import defaultdict
 from typing import Any
 
+import networkx as nx
+
 CHAOS_TO_CAUSE_METRIC_PATTERNS = {
     'pod-cpu-hog': [
         'cpu_.+', 'threads', 'sockets', 'file_descriptors', 'processes', 'memory_cache', 'memory_mapped_file',
@@ -32,6 +34,17 @@ CONTAINER_CALL_GRAPH: dict[str, list[str]] = {
     "carts-db": ["carts"],
     "session-db": ["front-end"]
 }
+
+SERVICE_CALL_DIGRAPH: nx.DiGraph = nx.DiGraph([
+    ('front-end', 'orders'),
+    ('front-end', 'catalogue'),
+    ('front-end', 'user'),
+    ('front-end', 'carts'),
+    ('orders', 'shipping'),
+    ('orders', 'payment'),
+    ('orders', 'user'),
+    ('orders', 'carts'),
+])
 
 # Use list of tuple because of supporting multiple routes
 SERVICE_TO_SERVICES: dict[str, list[str]] = {
