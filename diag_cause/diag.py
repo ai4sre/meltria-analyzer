@@ -199,6 +199,12 @@ def prepare_init_graph(data_df: pd.DataFrame, no_paths) -> nx.Graph:
     return init_g
 
 
+def nx_reverse_edge_direction(G: nx.DiGraph, u, v):
+    attr = G[u][v]
+    G.remove_edge(u, v)
+    G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
+
+
 def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
     # check whether u is service metric and v is container metric
     if not (u.startswith('s-') and v.startswith('c-')):
@@ -208,10 +214,7 @@ def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
     v_service = v.split('-', maxsplit=1)[1].split('_')[0]
     if u_service != v_service:
         return
-    # reverse direction
-    attr = G[u][v]
-    G.remove_edge(u, v)
-    G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
+    nx_reverse_edge_direction(G, u, v)
 
 
 def fix_edge_direction_based_network_call(
@@ -225,10 +228,7 @@ def fix_edge_direction_based_network_call(
         v_service = v.split('-', maxsplit=1)[1].split('_')[0]
         if (v_service not in service_dep_graph[u_service]) and \
            (u_service in service_dep_graph[v_service]):
-            # reverse direction
-            attr = G[u][v]
-            G.remove_edge(u, v)
-            G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
+            nx_reverse_edge_direction(G, u, v)
 
     # From container to container
     if (u.startswith('c-') and v.startswith('c-')):
@@ -236,10 +236,7 @@ def fix_edge_direction_based_network_call(
         v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
         if (v_ctnr not in container_dep_graph[u_ctnr]) and \
            (u_ctnr in container_dep_graph[v_ctnr]):
-            # reverse direction
-            attr = G[u][v]
-            G.remove_edge(u, v)
-            G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
+            nx_reverse_edge_direction(G, u, v)
 
 
 def fix_edge_directions_in_causal_graph(
