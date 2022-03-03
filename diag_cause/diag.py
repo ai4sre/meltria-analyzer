@@ -198,19 +198,33 @@ def prepare_init_graph(data_df: pd.DataFrame, no_paths) -> nx.Graph:
     return init_g
 
 
+def fix_edge_orientations_in_causal_graph(
+    G: nx.Graph,
+    mappings: dict[str, Any],
+    # nw_call_graph,
+) -> nx.Graph:
+    """Fix the edge orientations in the causal graphs
+    """
+    node_ids = G.nodes()
+    for (i, j) in combinations(node_ids, 2):
+        pass
+    print(mappings)
+    return G
+
+
 def build_causal_graph_with_pcalg(
     dm: np.ndarray,
     labels: dict[int, str],
     init_g: nx.Graph,
     pc_citest_alpha: float,
     pc_variant: str = '',
-    pc_citest: str = 'fisher_z',
+    pc_citest: str = 'fisher-z',
 ):
     """
     Build causal graph with PC algorithm.
     """
     cm = np.corrcoef(dm.T)
-    ci_test = ci_test_fisher_z if pc_citest == 'fisher_z' else pc_citest
+    ci_test = ci_test_fisher_z if pc_citest == 'fisher-z' else pc_citest
     (G, sep_set) = pcalg.estimate_skeleton(
         indep_test_func=ci_test,
         data_matrix=dm,
@@ -228,10 +242,10 @@ def build_causal_graphs_with_pgmpy(
     df: pd.DataFrame,
     pc_citest_alpha: float,
     pc_variant: str = 'orig',
-    pc_citest: str = 'fisher_z',
+    pc_citest: str = 'fisher-z',
 ) -> nx.Graph:
     c = estimators.PC(data=df)
-    ci_test = fisher_z if pc_citest == 'fisher_z' else pc_citest
+    ci_test = fisher_z if pc_citest == 'fisher-z' else pc_citest
     g = c.estimate(
         variant=pc_variant,
         ci_test=ci_test,
