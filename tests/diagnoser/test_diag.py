@@ -10,7 +10,7 @@ from diag_cause import diag
             'hieralchy01: reverse single direction edge',
             [
                 ("s-user_latency", "s-front-end_latency"),
-                ("s-user_latency", "c-user_cpu_usage_seconds_total"),
+                ("s-user_latency", "c-user_cpu_usage_seconds_total"),  # wrong
             ],
             [
                 ("s-user_latency", "s-front-end_latency", {}),
@@ -52,8 +52,22 @@ from diag_cause import diag
                 ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
             ],
         ),
+        (
+            'hybrid01: mixed hieralchy and nwcall',
+            [
+                ("s-user_latency", "s-front-end_latency"),
+                ("s-user_latency", "c-user_cpu_usage_seconds_total"),  # wrong
+                ("c-user_cpu_usage_seconds_total", "c-user-db_cpu_usage_seconds_total"),  # wrong
+                ("c-user_cpu_usage_seconds_total", "s-user_latency"),
+            ],
+            [
+                ("s-user_latency", "s-front-end_latency", {}),
+                ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
+                ("c-user_cpu_usage_seconds_total", "c-user-db_cpu_usage_seconds_total", {}),
+            ],
+        )
     ],
-    ids=['hieralchy01', 'hieralchy02', 'nwcall01', 'nwcall02'],
+    ids=['hieralchy01', 'hieralchy02', 'nwcall01', 'nwcall02', 'hybrid01'],
 )
 def test_fix_edge_directions_in_causal_graph(case, input, expected):
     G = nx.DiGraph()
