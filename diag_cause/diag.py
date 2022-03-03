@@ -198,17 +198,27 @@ def prepare_init_graph(data_df: pd.DataFrame, no_paths) -> nx.Graph:
     return init_g
 
 
-def fix_edge_orientations_in_causal_graph(
-    G: nx.Graph,
-    mappings: dict[str, Any],
-    # nw_call_graph,
-) -> nx.Graph:
-    """Fix the edge orientations in the causal graphs
+def fix_edge_directions_in_causal_graph(
+    G: nx.DiGraph,
+) -> nx.DiGraph:
+    """Fix the edge directions in the causal graphs.
     """
-    node_ids = G.nodes()
-    for (i, j) in combinations(node_ids, 2):
-        pass
-    print(mappings)
+    # Traverse the all edges of G via the neighbors
+    for u, nbrsdict in G.adjacency():
+        nbrs = list(nbrsdict.keys())  # to avoid 'RuntimeError: dictionary changed size during iteration'
+        for v in nbrs:
+            # u -> v
+            # check whether u is service metric and v is container metric
+            if not (u.startswith('s-') and v.startswith('c-')):
+                continue
+            # check whether u and v in the same service
+            u_service = u.split('_', maxsplit=1)[0].split('-')[-1]
+            v_service = v.split('_', maxsplit=1)[0].split('-')[-1]
+            if u_service != v_service:
+                continue
+            attr = G[u][v]
+            G.remove_edge(u, v)
+            G.add_edge(v, u, attr=attr)
     return G
 
 
@@ -219,7 +229,7 @@ def build_causal_graph_with_pcalg(
     pc_citest_alpha: float,
     pc_variant: str = '',
     pc_citest: str = 'fisher-z',
-):
+) -> nx.DiGraph:
     """
     Build causal graph with PC algorithm.
     """
@@ -233,9 +243,10 @@ def build_causal_graph_with_pcalg(
         init_graph=init_g,
         method=pc_variant,
     )
-    G = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
-    G = nx.relabel_nodes(G, labels)
-    return find_dags(G)
+    DG: nx.DiGraph = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
+    DG = nx.relabel_nodes(DG, labels)
+    DG = find_dags(DG)
+    return fix_edge_directions_in_causal_graph(DG)
 
 
 def build_causal_graphs_with_pgmpy(
@@ -243,19 +254,19 @@ def build_causal_graphs_with_pgmpy(
     pc_citest_alpha: float,
     pc_variant: str = 'orig',
     pc_citest: str = 'fisher-z',
-) -> nx.Graph:
+) -> nx.DiGraph:
     c = estimators.PC(data=df)
     ci_test = fisher_z if pc_citest == 'fisher-z' else pc_citest
-    g = c.estimate(
+    G = c.estimate(
         variant=pc_variant,
         ci_test=ci_test,
         significance_level=pc_citest_alpha,
         return_type='pdag',
     )
-    return find_dags(g)
+    return find_dags(G)
 
 
-def find_dags(G: nx.Graph) -> nx.Graph:
+def find_dags(G: nx.DiGraph) -> nx.DiGraph:
     # Exclude nodes that have no path to "s-front-end_latency" for visualization
     remove_nodes = []
     undirected_G = G.to_undirected()
