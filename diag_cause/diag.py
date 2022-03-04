@@ -63,23 +63,25 @@ def read_data_file(tsdr_result_file: os.PathLike
         tsdr_result['metrics_meta']
 
 
-def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
+def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]) -> list[list[int]]:
+    """Build unnecessary edge paths in causal graph based on the prior knowledge.
+    """
     containers_list, services_list, nodes_list = [], [], []
     for v in labels.values():
         if v.startswith('c-'):
-            container_name = v.split("_")[0].replace("c-", "")
+            container_name: str = v.split("_")[0].replace("c-", "")
             if container_name not in containers_list:
                 containers_list.append(container_name)
         elif v.startswith('s-'):
-            service_name = v.split("_")[0].replace("s-", "")
+            service_name: str = v.split("_")[0].replace("s-", "")
             if service_name not in services_list:
                 services_list.append(service_name)
         elif v.startswith('n-'):
-            node_name = v.split("_")[0].replace("n-", "")
+            node_name: str = v.split("_")[0].replace("n-", "")
             if node_name not in nodes_list:
                 nodes_list.append(node_name)
 
-    containers_metrics = {}
+    containers_metrics: dict[str, list[int]] = {}
     for c in containers_list:
         nodes = []
         for k, v in labels.items():
@@ -87,7 +89,7 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
                 nodes.append(k)
         containers_metrics[c] = nodes
 
-    services_metrics = {}
+    services_metrics: dict[str, list[int]] = {}
     for s in services_list:
         nodes = []
         for k, v in labels.items():
@@ -95,7 +97,7 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
                 nodes.append(k)
         services_metrics[s] = nodes
 
-    nodes_metrics = {}
+    nodes_metrics: dict[str, list[int]] = {}
     for n in nodes_list:
         nodes = []
         for k, v in labels.items():
