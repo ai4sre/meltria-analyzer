@@ -33,7 +33,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
         columns=[
             'chaos_type', 'chaos_comp', 'metrics_file', 'num_series',
             'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges',
-            'building_graph_elapsed_sec', 'found_cause_metrics', 'grafana_dashboard_url',
+            'building_graph_elapsed_sec', 'routes', 'grafana_dashboard_url',
         ],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'],
     ).dropna()
@@ -72,15 +72,10 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                 }
             )
 
-            logger.info("--> Checking causal graph including chaos-injected metrics")
-            found_cause_metrics, cause_metric_nodes = metrics.check_cause_metrics(
-                list(causal_graph.nodes()), record.chaos_type, record.chaos_comp,
-            )
-            if found_cause_metrics:
-                logger.info(f"Found cause metric {cause_metric_nodes} in '{chaos_comp}' '{chaos_type}'")
-            else:
-                logger.info(f"Not found cause metric in '{chaos_comp}' '{chaos_type}'")
-
+            logger.info(">> Checking causal graph including chaos-injected metrics")
+            graph_ok, routes = metrics.check_causal_graph(causal_graph, chaos_type, chaos_comp)
+            if not graph_ok:
+                logger.info("wrong causal graph in '{chaos_comp}' '{chaos_type}'")
             tests_df = tests_df.append(
                 pd.Series(
                     [
@@ -88,7 +83,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                         stats['init_graph_nodes_num'], stats['init_graph_edges_num'],
                         stats['graph_nodes_num'], stats['graph_edges_num'],
                         stats['building_graph_elapsed_sec'],
-                        found_cause_metrics, grafana_dashboard_url,
+                        ','.join(['[' + ','.join(route) + ']' for route in routes]), grafana_dashboard_url,
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
@@ -97,6 +92,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
 
     run['tests/table'].upload(neptune.types.File.as_html(tests_df))
+    logger.info(tests_df.info())
 
 
 @hydra.main(config_path='../conf/diagnoser', config_name='config')

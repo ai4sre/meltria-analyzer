@@ -320,7 +320,7 @@ def find_dags(G: nx.DiGraph) -> nx.DiGraph:
     return G
 
 
-def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.Graph, dict[str, Any]]:
+def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.DiGraph, dict[str, Any]]:
     dataset = filter_by_target_metrics(dataset)
     if ROOT_METRIC_LABEL not in dataset.columns:
         raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
