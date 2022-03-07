@@ -4,7 +4,7 @@ from typing import Any
 
 import networkx as nx
 
-CHAOS_TO_CAUSE_METRIC_PATTERNS = {
+CHAOS_TO_CAUSE_METRIC_PATTERNS: dict[str, list[str]] = {
     'pod-cpu-hog': [
         'cpu_.+', 'threads', 'sockets', 'file_descriptors', 'processes', 'memory_cache', 'memory_mapped_file',
     ],
@@ -16,7 +16,7 @@ CHAOS_TO_CAUSE_METRIC_PATTERNS = {
     'pod-network-latency': ['network_.+'],
 }
 
-ROOT_METRIC_LABEL = "s-front-end_latency"
+ROOT_METRIC_LABEL: str = "s-front-end_latency"
 
 SERVICE_CALL_DIGRAPH: nx.DiGraph = nx.DiGraph([
     ('front-end', 'orders'),
@@ -94,6 +94,8 @@ SERVICE_CONTAINERS: dict[str, list[str]] = {
     "catalogue": ["catalogue", "catalogue-db"],
     "orders": ["orders", "orders-db"],
 }
+
+CONTAINER_TO_SERVICE: dict[str, str] = {c: s for s, ctnrs in SERVICE_CONTAINERS.items() for c in ctnrs}
 
 SKIP_CONTAINERS = ["queue-master", "rabbitmq", "session-db"]
 
@@ -179,3 +181,41 @@ def check_cause_metrics(metrics: list[str], chaos_type: str, chaos_comp: str
     if len(cause_metrics) > 0:
         return True, cause_metrics
     return False, cause_metrics
+
+
+def check_causal_graph(
+    G: nx.DiGraph, chaos_type: str, chaos_comp: str,
+) -> tuple[bool, list[list[str]]]:
+    """Check that the causal graph (G) has the accurate route.
+    """
+    call_graph: nx.DiGraph = G.reverse()  # for traverse starting from root node
+    cause_metric_exps: list[str] = CHAOS_TO_CAUSE_METRIC_PATTERNS[chaos_type]
+    cause_metric_pattern: re.Pattern = re.compile(f"^c-{chaos_comp}_({'|'.join(cause_metric_exps)})$")
+
+    match_routes: list[list[Any]] = []
+    # see https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.simple_paths.all_simple_paths.html
+    leaves: list[str] = [v for v, d in call_graph.out_degree() if d == 0]
+    for path in nx.all_simple_paths(call_graph, source=ROOT_METRIC_LABEL, target=leaves):
+        if len(path) <= 1:
+            continue
+        # compare the path with ground truth paths
+        for i, node in enumerate(path[1:], start=1):  # skip ROOT_METRIC
+            comp: str = node.split('-', maxsplit=1)[1].split('_')[0]
+            prev_node: str = path[i-1]
+            prev_comp: str = prev_node.split('-', maxsplit=1)[1].split('_')[0]
+            if node.startswith('s-'):
+                if prev_node.startswith('c-'):
+                    prev_service = CONTAINER_TO_SERVICE[prev_comp]
+                else:
+                    prev_service = prev_comp
+                if not SERVICE_CALL_DIGRAPH.has_edge(prev_service, comp):
+                    break
+            elif node.startswith('c-'):
+                if not CONTAINER_CALL_DIGRAPH.has_edge(prev_comp, comp):
+                    break
+                if i == (len(path) - 1):  # is leaf?
+                    if cause_metric_pattern.match(node):
+                        match_routes.append(path)
+                        break
+            # TODO: middleware
+    return len(match_routes) > 0, match_routes
