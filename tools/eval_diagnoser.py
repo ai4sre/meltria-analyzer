@@ -75,7 +75,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             logger.info(">> Checking causal graph including chaos-injected metrics")
             graph_ok, routes = metrics.check_causal_graph(causal_graph, chaos_type, chaos_comp)
             if not graph_ok:
-                logger.info("wrong causal graph in '{chaos_comp}' '{chaos_type}'")
+                logger.info(f"wrong causal graph in '{chaos_comp}' '{chaos_type}'")
             tests_df = tests_df.append(
                 pd.Series(
                     [
