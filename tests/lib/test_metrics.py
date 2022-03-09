@@ -93,12 +93,35 @@ def test_check_tsdr_ground_truth_by_route():
                 ['s-front-end_latency', 's-orders_latency', 's-user_latency', 'c-user-db_cpu_usage_seconds_total'],
                 ['s-front-end_latency', 's-user_latency', 'c-user-db_cpu_usage_seconds_total'],
             ]
-        ),
+        ), (
+            'normal02: cause container metric -> the other service metric',
+            [
+                # u (cause) -> v
+                ("c-user-db_cpu_usage_seconds_total", "s-front-end_latency"),
+            ],
+            [
+                ['s-front-end_latency', 'c-user-db_cpu_usage_seconds_total'],
+            ]
+        ), (
+            'normal03: cause container metric -> container metric',
+            [
+                # u (cause) -> v
+                ("c-user-db_cpu_usage_seconds_total", "s-front-end_latency"),
+                ("c-user-db_cpu_usage_seconds_total", "c-user-db_cpu_user_seconds_total"),
+                ("s-orders_latency", "s-front-end_latency"),
+                ("c-user-db_cpu_user_seconds_total", "s-orders_latency")
+            ],
+            [
+                ['s-front-end_latency', 's-orders_latency',
+                 'c-user-db_cpu_user_seconds_total', 'c-user-db_cpu_usage_seconds_total'],
+                ['s-front-end_latency', 'c-user-db_cpu_usage_seconds_total'],
+            ]
+        )
     ],
-    ids=['normal01'],
+    ids=['normal01', 'normal02', 'normal03'],
 )
 def test_check_causal_graph(case, input, expected):
     G = nx.DiGraph(input)
     ok, routes = libmetrics.check_causal_graph(G, 'pod-cpu-hog', 'user-db')
     assert ok
-    assert routes.sort() == expected.sort()
+    assert sorted(routes) == sorted(expected)

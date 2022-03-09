@@ -208,11 +208,17 @@ def check_causal_graph(
                     prev_service = CONTAINER_TO_SERVICE[prev_comp]
                 else:
                     prev_service = prev_comp
+                    print(prev_service, comp)
                 if not SERVICE_CALL_DIGRAPH.has_edge(prev_service, comp):
                     break
             elif node.startswith('c-'):
-                if not CONTAINER_CALL_DIGRAPH.has_edge(prev_comp, comp):
-                    break
+                if prev_node.startswith('s-'):
+                    cur_service = CONTAINER_TO_SERVICE[comp]
+                    if not (prev_comp == cur_service or SERVICE_CALL_DIGRAPH.has_edge(prev_comp, cur_service)):
+                        break
+                elif prev_node.startswith('c-'):
+                    if not (prev_comp == comp) or CONTAINER_CALL_DIGRAPH.has_edge(prev_comp, comp):
+                        break
                 if i == (len(path) - 1):  # is leaf?
                     if cause_metric_pattern.match(node):
                         match_routes.append(path)
