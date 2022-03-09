@@ -9,8 +9,9 @@ import numpy as np
 import pandas as pd
 import pcalg
 from lib.metrics import (CONTAINER_CALL_DIGRAPH, CONTAINER_CALL_GRAPH,
-                         ROOT_METRIC_LABEL, SERVICE_CALL_DIGRAPH,
-                         SERVICE_CONTAINERS, check_cause_metrics)
+                         CONTAINER_TO_SERVICE, ROOT_METRIC_LABEL,
+                         SERVICE_CALL_DIGRAPH, SERVICE_CONTAINERS,
+                         check_cause_metrics)
 from pgmpy import estimators
 
 from .citest.fisher_z import ci_test_fisher_z
@@ -232,6 +233,24 @@ def fix_edge_direction_based_network_call(
         v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
         if (v_ctnr not in container_dep_graph[u_ctnr]) and \
            (u_ctnr in container_dep_graph[v_ctnr]):
+            nx_reverse_edge_direction(G, u, v)
+
+    # From service to container
+    if (u.startswith('s-') and v.startswith('c-')):
+        u_service = u.split('-', maxsplit=1)[1].split('_')[0]
+        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
+        v_service = CONTAINER_TO_SERVICE[v_ctnr]
+        if (v_service not in service_dep_graph[u_service]) and \
+           (u_service in service_dep_graph[v_service]):
+            nx_reverse_edge_direction(G, u, v)
+
+    # From container to service
+    if (u.startswith('c-') and v.startswith('s-')):
+        u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
+        v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+        u_service = CONTAINER_TO_SERVICE[u_ctnr]
+        if (v_service not in service_dep_graph[u_service]) and \
+           (u_service in service_dep_graph[v_service]):
             nx_reverse_edge_direction(G, u, v)
 
 
