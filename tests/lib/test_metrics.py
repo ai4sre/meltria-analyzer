@@ -116,11 +116,29 @@ def test_check_tsdr_ground_truth_by_route():
             [
                 ['s-front-end_latency', 's-orders_latency',
                  'c-user-db_cpu_user_seconds_total', 'c-user-db_cpu_usage_seconds_total'],
+                ['s-front-end_latency', 's-orders_latency',
+                 'c-user-db_cpu_user_seconds_total'],
                 ['s-front-end_latency', 'c-user-db_cpu_usage_seconds_total'],
+            ]
+        ), (
+            'correct04: bi-directed graph',
+            'pod-cpu-hog', 'carts',
+            [
+                ['c-carts_cpu_user_seconds_total', 's-front-end_latency'],
+                ['s-carts_latency', 's-front-end_latency'],
+                ['c-carts_threads', 's-carts_latency'],
+                ['c-carts_threads', 'c-carts_cpu_user_seconds_total'],
+                ['c-carts_cpu_user_seconds_total', 'c-carts_threads'],
+            ],
+            [
+                ['s-front-end_latency', 'c-carts_cpu_user_seconds_total'],
+                ['s-front-end_latency', 'c-carts_cpu_user_seconds_total', 'c-carts_threads'],
+                ['s-front-end_latency', 's-carts_latency', 'c-carts_threads'],
+                ['s-front-end_latency', 's-carts_latency', 'c-carts_threads', 'c-carts_cpu_user_seconds_total'],
             ]
         ),
     ],
-    ids=['correct01', 'correct02', 'correct03'],
+    ids=['correct01', 'correct02', 'correct03', 'correct04'],
 )
 def test_check_causal_graph(desc, chaos_type, chaos_comp, input, expected):
     G = nx.DiGraph(input)

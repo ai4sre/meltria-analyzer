@@ -193,8 +193,8 @@ def check_causal_graph(
     cause_metric_pattern: re.Pattern = re.compile(f"^c-{chaos_comp}_({'|'.join(cause_metric_exps)})$")
 
     match_routes: list[list[Any]] = []
-    # see https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.simple_paths.all_simple_paths.html
-    leaves: list[str] = [v for v, d in call_graph.out_degree() if d == 0]
+    leaves = list(call_graph.nodes)
+    leaves.remove(ROOT_METRIC_LABEL)
     for path in nx.all_simple_paths(call_graph, source=ROOT_METRIC_LABEL, target=leaves):
         if len(path) <= 1:
             continue
