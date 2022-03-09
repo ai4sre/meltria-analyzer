@@ -5,16 +5,17 @@ import os
 from multiprocessing import cpu_count
 
 import hydra
-import matplotlib.pyplot as plt
 import meltria.loader as meltria_loader
 import neptune.new as neptune
 import networkx as nx
+import numpy as np
 import pandas as pd
 from diag_cause import diag
 from lib import metrics
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
+from sklearn.metrics import accuracy_score
 from tsdr import tsdr
 
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
@@ -29,16 +30,23 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
     )
     logger.info("Dataset loading complete")
 
+    scores_df = pd.DataFrame(
+        columns=['chaos_type', 'chaos_comp', 'accuracy', 'elapsed_time'],
+        index=['chaos_type', 'chaos_comp']
+    ).dropna()
     tests_df = pd.DataFrame(
         columns=[
             'chaos_type', 'chaos_comp', 'metrics_file', 'num_series',
             'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges',
-            'building_graph_elapsed_sec', 'found_cause_metrics', 'grafana_dashboard_url',
+            'building_graph_elapsed_sec', 'routes', 'grafana_dashboard_url',
         ],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'],
     ).dropna()
 
     for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
+        y_pred: list[int] = []
+        graph_building_elapsed_secs: list[float] = []
+
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
 
@@ -72,15 +80,12 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                 }
             )
 
-            logger.info("--> Checking causal graph including chaos-injected metrics")
-            found_cause_metrics, cause_metric_nodes = metrics.check_cause_metrics(
-                list(causal_graph.nodes()), record.chaos_type, record.chaos_comp,
-            )
-            if found_cause_metrics:
-                logger.info(f"Found cause metric {cause_metric_nodes} in '{chaos_comp}' '{chaos_type}'")
-            else:
-                logger.info(f"Not found cause metric in '{chaos_comp}' '{chaos_type}'")
-
+            logger.info(">> Checking causal graph including chaos-injected metrics")
+            graph_ok, routes = metrics.check_causal_graph(causal_graph, chaos_type, chaos_comp)
+            if not graph_ok:
+                logger.info(f"wrong causal graph in '{chaos_comp}' '{chaos_type}'")
+            y_pred.append(1 if graph_ok else 0)
+            graph_building_elapsed_secs.append(stats['building_graph_elapsed_sec'])
             tests_df = tests_df.append(
                 pd.Series(
                     [
@@ -88,7 +93,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                         stats['init_graph_nodes_num'], stats['init_graph_edges_num'],
                         stats['graph_nodes_num'], stats['graph_edges_num'],
                         stats['building_graph_elapsed_sec'],
-                        found_cause_metrics, grafana_dashboard_url,
+                        ','.join(['[' + ','.join(route) + ']' for route in routes]), grafana_dashboard_url,
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
@@ -96,7 +101,18 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
             run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
 
+        accuracy = accuracy_score([1] * len(y_pred), y_pred)
+        scores_df = scores_df.append(
+            pd.Series([
+                chaos_type, chaos_comp, accuracy, np.mean(graph_building_elapsed_secs),
+                ], index=scores_df.columns,
+            ), ignore_index=True,
+        )
+
     run['tests/table'].upload(neptune.types.File.as_html(tests_df))
+    logger.info(tests_df)
+    run['scores/table'].upload(neptune.types.File.as_html(scores_df))
+    logger.info(scores_df)
 
 
 @hydra.main(config_path='../conf/diagnoser', config_name='config')

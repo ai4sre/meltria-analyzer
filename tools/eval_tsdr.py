@@ -28,7 +28,6 @@ logger.setLevel(logging.INFO)
 STEP1_METHODS = ['df', 'adf']
 
 
-
 class TimeSeriesPlotter:
     run: neptune.Run
     enable_upload_plots: bool

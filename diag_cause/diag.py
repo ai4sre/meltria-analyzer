@@ -63,23 +63,25 @@ def read_data_file(tsdr_result_file: os.PathLike
         tsdr_result['metrics_meta']
 
 
-def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
+def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]) -> list[list[int]]:
+    """Build unnecessary edge paths in causal graph based on the prior knowledge.
+    """
     containers_list, services_list, nodes_list = [], [], []
     for v in labels.values():
         if v.startswith('c-'):
-            container_name = v.split("_")[0].replace("c-", "")
+            container_name: str = v.split("_")[0].replace("c-", "")
             if container_name not in containers_list:
                 containers_list.append(container_name)
         elif v.startswith('s-'):
-            service_name = v.split("_")[0].replace("s-", "")
+            service_name: str = v.split("_")[0].replace("s-", "")
             if service_name not in services_list:
                 services_list.append(service_name)
         elif v.startswith('n-'):
-            node_name = v.split("_")[0].replace("n-", "")
+            node_name: str = v.split("_")[0].replace("n-", "")
             if node_name not in nodes_list:
                 nodes_list.append(node_name)
 
-    containers_metrics = {}
+    containers_metrics: dict[str, list[int]] = {}
     for c in containers_list:
         nodes = []
         for k, v in labels.items():
@@ -87,7 +89,7 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
                 nodes.append(k)
         containers_metrics[c] = nodes
 
-    services_metrics = {}
+    services_metrics: dict[str, list[int]] = {}
     for s in services_list:
         nodes = []
         for k, v in labels.items():
@@ -95,7 +97,7 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
                 nodes.append(k)
         services_metrics[s] = nodes
 
-    nodes_metrics = {}
+    nodes_metrics: dict[str, list[int]] = {}
     for n in nodes_list:
         nodes = []
         for k, v in labels.items():
@@ -118,9 +120,9 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
         if j not in CONTAINER_CALL_GRAPH[i] and nodes_containers[i] != nodes_containers[j]:
             no_deps_C_C_pair.append([i, j])
     for pair in no_deps_C_C_pair:
-        for i in containers_metrics[pair[0]]:
-            for j in containers_metrics[pair[1]]:
-                no_paths.append([i, j])
+        for cm_i in containers_metrics[pair[0]]:
+            for cm_j in containers_metrics[pair[1]]:
+                no_paths.append([cm_i, cm_j])
 
     # S-S
     no_deps_S_S_pair = []
@@ -133,27 +135,27 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
         if not has_comm:
             no_deps_S_S_pair.append([i, j])
     for pair in no_deps_S_S_pair:
-        for i in services_metrics[pair[0]]:
-            for j in services_metrics[pair[1]]:
-                no_paths.append([i, j])
+        for sm_i in services_metrics[pair[0]]:
+            for sm_j in services_metrics[pair[1]]:
+                no_paths.append([sm_i, sm_j])
 
     # N-N
     no_deps_N_N_pair = []
     for i, j in combinations(nodes_list, 2):
         no_deps_N_N_pair.append([i, j])
-        for n1 in nodes_metrics[i]:
-            for n2 in nodes_metrics[j]:
-                no_paths.append([n1, n2])
+        for nm1 in nodes_metrics[i]:
+            for nm2 in nodes_metrics[j]:
+                no_paths.append([nm1, nm2])
 
     # C-N
     for node in nodes_list:
         for con, host_node in nodes_containers.items():
             if node != host_node:
-                for n1 in nodes_metrics[node]:
+                for nm1 in nodes_metrics[node]:
                     if con not in containers_metrics:
                         continue
-                    for c2 in containers_metrics[con]:
-                        no_paths.append([n1, c2])
+                    for cm2 in containers_metrics[con]:
+                        no_paths.append([nm1, cm2])
 
     # S-N
     for service in SERVICE_CONTAINERS:
@@ -165,9 +167,9 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
             if node not in host_list:
                 if service not in services_metrics:
                     continue
-                for s1 in services_metrics[service]:
-                    for n2 in nodes_metrics[node]:
-                        no_paths.append([s1, n2])
+                for sm1 in services_metrics[service]:
+                    for nm2 in nodes_metrics[node]:
+                        no_paths.append([sm1, nm2])
 
     # C-S
     for service in SERVICE_CONTAINERS:
@@ -175,9 +177,9 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]):
             if con not in SERVICE_CONTAINERS[service]:
                 if service not in services_metrics:
                     continue
-                for s1 in services_metrics[service]:
-                    for c2 in containers_metrics[con]:
-                        no_paths.append([s1, c2])
+                for sm1 in services_metrics[service]:
+                    for cm2 in containers_metrics[con]:
+                        no_paths.append([sm1, cm2])
 
     return no_paths
 
@@ -318,7 +320,7 @@ def find_dags(G: nx.DiGraph) -> nx.DiGraph:
     return G
 
 
-def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.Graph, dict[str, Any]]:
+def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.DiGraph, dict[str, Any]]:
     dataset = filter_by_target_metrics(dataset)
     if ROOT_METRIC_LABEL not in dataset.columns:
         raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
