@@ -208,7 +208,6 @@ def check_causal_graph(
                     prev_service = CONTAINER_TO_SERVICE[prev_comp]
                 else:
                     prev_service = prev_comp
-                    print(prev_service, comp)
                 if not SERVICE_CALL_DIGRAPH.has_edge(prev_service, comp):
                     break
             elif node.startswith('c-'):
