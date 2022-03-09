@@ -59,8 +59,15 @@ from diag_cause import diag
             [
                 ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
             ],
-        ),
-        (
+        ), (
+            'nwcall04: container to service',
+            [
+                ("c-orders_cpu_usage_seconds_total", "s-user_latency"),  # wrong
+            ],
+            [
+                ("s-user_latency", "c-orders_cpu_usage_seconds_total", {}),
+            ],
+        ), (
             'hybrid01: mixed hieralchy and nwcall',
             [
                 ("s-user_latency", "s-front-end_latency"),
@@ -75,7 +82,7 @@ from diag_cause import diag
             ],
         )
     ],
-    ids=['hieralchy01', 'hieralchy02', 'nwcall01', 'nwcall02', 'nwcall03', 'hybrid01'],
+    ids=['hieralchy01', 'hieralchy02', 'nwcall01', 'nwcall02', 'nwcall03', 'nwcall04', 'hybrid01'],
 )
 def test_fix_edge_directions_in_causal_graph(case, input, expected):
     G = nx.DiGraph()

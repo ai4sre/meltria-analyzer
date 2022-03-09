@@ -244,6 +244,15 @@ def fix_edge_direction_based_network_call(
            (u_service in service_dep_graph[v_service]):
             nx_reverse_edge_direction(G, u, v)
 
+    # From container to service
+    if (u.startswith('c-') and v.startswith('s-')):
+        u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
+        v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+        u_service = CONTAINER_TO_SERVICE[u_ctnr]
+        if (v_service not in service_dep_graph[u_service]) and \
+           (u_service in service_dep_graph[v_service]):
+            nx_reverse_edge_direction(G, u, v)
+
 
 def fix_edge_directions_in_causal_graph(
     G: nx.DiGraph,
