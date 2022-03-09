@@ -92,7 +92,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
 
     run['tests/table'].upload(neptune.types.File.as_html(tests_df))
-    logger.info(tests_df.info())
+    logger.info(tests_df)
 
 
 @hydra.main(config_path='../conf/diagnoser', config_name='config')
