@@ -78,7 +78,7 @@ from diag_cause import diag
             [
                 ("s-user_latency", "s-front-end_latency", {}),
                 ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
-                ("c-user_cpu_usage_seconds_total", "c-user-db_cpu_usage_seconds_total", {}),
+                ("c-user-db_cpu_usage_seconds_total", "c-user_cpu_usage_seconds_total", {}),
             ],
         )
     ],
@@ -88,4 +88,4 @@ def test_fix_edge_directions_in_causal_graph(case, input, expected):
     G = nx.DiGraph()
     G.add_edges_from(input)
     got = diag.fix_edge_directions_in_causal_graph(G)
-    assert list(nx.to_edgelist(got)).sort() == expected.sort()
+    assert sorted(list(nx.to_edgelist(got))) == sorted(expected)
