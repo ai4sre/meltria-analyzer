@@ -77,10 +77,10 @@ def test_check_tsdr_ground_truth_by_route():
 
 
 @pytest.mark.parametrize(
-    "case,input,expected",
+    "desc,chaos_type,chaos_comp,input,expected",
     [
         (
-            'normal01',
+            'correct01', 'pod-cpu-hog', 'user-db',
             [
                 # u (cause) -> v
                 ("s-user_latency", "s-front-end_latency"),
@@ -94,7 +94,8 @@ def test_check_tsdr_ground_truth_by_route():
                 ['s-front-end_latency', 's-user_latency', 'c-user-db_cpu_usage_seconds_total'],
             ]
         ), (
-            'normal02: cause container metric -> the other service metric',
+            'correct02: cause container metric -> the other service metric',
+            'pod-cpu-hog', 'user-db',
             [
                 # u (cause) -> v
                 ("c-user-db_cpu_usage_seconds_total", "s-front-end_latency"),
@@ -103,7 +104,8 @@ def test_check_tsdr_ground_truth_by_route():
                 ['s-front-end_latency', 'c-user-db_cpu_usage_seconds_total'],
             ]
         ), (
-            'normal03: cause container metric -> container metric',
+            'correct03: cause container metric -> container metric',
+            'pod-cpu-hog', 'user-db',
             [
                 # u (cause) -> v
                 ("c-user-db_cpu_usage_seconds_total", "s-front-end_latency"),
@@ -116,12 +118,12 @@ def test_check_tsdr_ground_truth_by_route():
                  'c-user-db_cpu_user_seconds_total', 'c-user-db_cpu_usage_seconds_total'],
                 ['s-front-end_latency', 'c-user-db_cpu_usage_seconds_total'],
             ]
-        )
+        ),
     ],
-    ids=['normal01', 'normal02', 'normal03'],
+    ids=['correct01', 'correct02', 'correct03'],
 )
-def test_check_causal_graph(case, input, expected):
+def test_check_causal_graph(desc, chaos_type, chaos_comp, input, expected):
     G = nx.DiGraph(input)
-    ok, routes = libmetrics.check_causal_graph(G, 'pod-cpu-hog', 'user-db')
+    ok, routes = libmetrics.check_causal_graph(G, chaos_type, chaos_comp)
     assert ok
     assert sorted(routes) == sorted(expected)
