@@ -1,4 +1,5 @@
 import networkx as nx
+import pytest
 
 import lib.metrics as libmetrics
 
@@ -75,21 +76,29 @@ def test_check_tsdr_ground_truth_by_route():
     assert found_metrics == expected
 
 
-def test_check_causal_graph():
-    G = nx.DiGraph(
-        [
-            # u (cause) -> v
-            ("s-user_latency", "s-front-end_latency"),
-            ("c-user-db_cpu_usage_seconds_total", "s-user_latency"),
-            ("s-orders_latency", "s-front-end_latency"),
-            ("c-orders-db_cpu_usage_seconds_total", "s-orders_latency"),
-            ("s-user_latency", "s-orders_latency"),
-        ],
-    )
-    expected = [
-        ['s-front-end_latency', 's-orders_latency', 's-user_latency', 'c-user-db_cpu_usage_seconds_total'],
-        ['s-front-end_latency', 's-user_latency', 'c-user-db_cpu_usage_seconds_total'],
-    ]
+@pytest.mark.parametrize(
+    "case,input,expected",
+    [
+        (
+            'normal01',
+            [
+                # u (cause) -> v
+                ("s-user_latency", "s-front-end_latency"),
+                ("c-user-db_cpu_usage_seconds_total", "s-user_latency"),
+                ("s-orders_latency", "s-front-end_latency"),
+                ("c-orders-db_cpu_usage_seconds_total", "s-orders_latency"),
+                ("s-user_latency", "s-orders_latency"),
+            ],
+            [
+                ['s-front-end_latency', 's-orders_latency', 's-user_latency', 'c-user-db_cpu_usage_seconds_total'],
+                ['s-front-end_latency', 's-user_latency', 'c-user-db_cpu_usage_seconds_total'],
+            ]
+        ),
+    ],
+    ids=['normal01'],
+)
+def test_check_causal_graph(case, input, expected):
+    G = nx.DiGraph(input)
     ok, routes = libmetrics.check_causal_graph(G, 'pod-cpu-hog', 'user-db')
     assert ok
     assert routes.sort() == expected.sort()
