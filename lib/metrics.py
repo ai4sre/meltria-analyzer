@@ -16,7 +16,7 @@ CHAOS_TO_CAUSE_METRIC_PATTERNS: dict[str, list[str]] = {
     'pod-network-latency': ['network_.+'],
 }
 
-ROOT_METRIC_LABEL: str = "s-front-end_latency"
+ROOT_METRIC_LABELS: tuple[str, str, str] = ("s-front-end_latency", "s-front-end_throughput", "s-front-end_errors")
 
 SERVICE_CALL_DIGRAPH: nx.DiGraph = nx.DiGraph([
     ('front-end', 'orders'),
@@ -193,34 +193,35 @@ def check_causal_graph(
     cause_metric_pattern: re.Pattern = re.compile(f"^c-{chaos_comp}_({'|'.join(cause_metric_exps)})$")
 
     match_routes: list[list[Any]] = []
-    leaves = list(call_graph.nodes)
-    leaves.remove(ROOT_METRIC_LABEL)
-    for path in nx.all_simple_paths(call_graph, source=ROOT_METRIC_LABEL, target=leaves):
-        if len(path) <= 1:
-            continue
-        # compare the path with ground truth paths
-        for i, node in enumerate(path[1:], start=1):  # skip ROOT_METRIC
-            comp: str = node.split('-', maxsplit=1)[1].split('_')[0]
-            prev_node: str = path[i-1]
-            prev_comp: str = prev_node.split('-', maxsplit=1)[1].split('_')[0]
-            if node.startswith('s-'):
-                if prev_node.startswith('c-'):
-                    prev_service = CONTAINER_TO_SERVICE[prev_comp]
-                else:
-                    prev_service = prev_comp
-                if not SERVICE_CALL_DIGRAPH.has_edge(prev_service, comp):
-                    break
-            elif node.startswith('c-'):
-                if prev_node.startswith('s-'):
-                    cur_service = CONTAINER_TO_SERVICE[comp]
-                    if not (prev_comp == cur_service or SERVICE_CALL_DIGRAPH.has_edge(prev_comp, cur_service)):
+    leaves = [n for n in call_graph.nodes if n not in ROOT_METRIC_LABELS]
+    roots = [r for r in ROOT_METRIC_LABELS if call_graph.has_node(r)]
+    for root in roots:
+        for path in nx.all_simple_paths(call_graph, source=root, target=leaves):
+            if len(path) <= 1:
+                continue
+            # compare the path with ground truth paths
+            for i, node in enumerate(path[1:], start=1):  # skip ROOT_METRIC
+                comp: str = node.split('-', maxsplit=1)[1].split('_')[0]
+                prev_node: str = path[i-1]
+                prev_comp: str = prev_node.split('-', maxsplit=1)[1].split('_')[0]
+                if node.startswith('s-'):
+                    if prev_node.startswith('c-'):
+                        prev_service = CONTAINER_TO_SERVICE[prev_comp]
+                    else:
+                        prev_service = prev_comp
+                    if not SERVICE_CALL_DIGRAPH.has_edge(prev_service, comp):
                         break
-                elif prev_node.startswith('c-'):
-                    if not (prev_comp == comp or CONTAINER_CALL_DIGRAPH.has_edge(prev_comp, comp)):
-                        break
-                if i == (len(path) - 1):  # is leaf?
-                    if cause_metric_pattern.match(node):
-                        match_routes.append(path)
-                        break
-            # TODO: middleware
+                elif node.startswith('c-'):
+                    if prev_node.startswith('s-'):
+                        cur_service = CONTAINER_TO_SERVICE[comp]
+                        if not (prev_comp == cur_service or SERVICE_CALL_DIGRAPH.has_edge(prev_comp, cur_service)):
+                            break
+                    elif prev_node.startswith('c-'):
+                        if not (prev_comp == comp or CONTAINER_CALL_DIGRAPH.has_edge(prev_comp, comp)):
+                            break
+                    if i == (len(path) - 1):  # is leaf?
+                        if cause_metric_pattern.match(node):
+                            match_routes.append(path)
+                            break
+                # TODO: middleware
     return len(match_routes) > 0, match_routes

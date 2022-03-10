@@ -3,6 +3,7 @@
 import logging
 import os
 from multiprocessing import cpu_count
+from multiprocessing.sharedctypes import Value
 
 import hydra
 import meltria.loader as meltria_loader
@@ -71,19 +72,24 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
 
             logger.info(f">> Running diagnosis of {record.chaos_case_file()} ...")
 
-            causal_graph, stats = diag.run(
-                reduced_df, mappings_by_metrics_file[record.metrics_file], **{
-                    'pc_library': cfg.params.pc_library,
-                    'pc_citest': cfg.params.pc_citest,
-                    'pc_citest_alpha': cfg.params.pc_citest_alpha,
-                    'pc_variant': cfg.params.pc_variant,
-                }
-            )
+            try:
+                causal_graph, stats = diag.run(
+                    reduced_df, mappings_by_metrics_file[record.metrics_file], **{
+                        'pc_library': cfg.params.pc_library,
+                        'pc_citest': cfg.params.pc_citest,
+                        'pc_citest_alpha': cfg.params.pc_citest_alpha,
+                        'pc_variant': cfg.params.pc_variant,
+                    }
+                )
+            except ValueError as e:
+                logger.error(e)
+                logger.info(f">> Skip because of error {record.chaos_case_file()}")
+                continue
 
-            logger.info(">> Checking causal graph including chaos-injected metrics")
+            logger.info(f">> Checking causal graph including chaos-injected metrics of {record.chaos_case_file()}")
             graph_ok, routes = metrics.check_causal_graph(causal_graph, chaos_type, chaos_comp)
             if not graph_ok:
-                logger.info(f"wrong causal graph in '{chaos_comp}' '{chaos_type}'")
+                logger.info(f"wrong causal graph in {record.chaos_case_file()}")
             y_pred.append(1 if graph_ok else 0)
             graph_building_elapsed_secs.append(stats['building_graph_elapsed_sec'])
             tests_df = tests_df.append(
