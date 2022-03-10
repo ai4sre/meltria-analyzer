@@ -20,7 +20,7 @@ SIGNIFICANCE_LEVEL = 0.05
 
 TARGET_DATA: dict[str, list[str]] = {
     "containers": [],  # all
-    "services": ["throughput", "latency"],
+    "services": ["throughput", "latency", "errors"],
     "nodes": [
         "node_cpu_seconds_total",
         "node_disk_io_now",
