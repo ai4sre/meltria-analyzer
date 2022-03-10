@@ -64,127 +64,6 @@ def read_data_file(tsdr_result_file: os.PathLike
         tsdr_result['metrics_meta']
 
 
-def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]) -> list[list[int]]:
-    """[deprecated] Build unnecessary edge paths in causal graph based on the prior knowledge.
-    """
-    containers_list, services_list, nodes_list = [], [], []
-    for v in labels.values():
-        if v.startswith('c-'):
-            container_name: str = v.split("_")[0].replace("c-", "")
-            if container_name not in containers_list:
-                containers_list.append(container_name)
-        elif v.startswith('s-'):
-            service_name: str = v.split("_")[0].replace("s-", "")
-            if service_name not in services_list:
-                services_list.append(service_name)
-        elif v.startswith('n-'):
-            node_name: str = v.split("_")[0].replace("n-", "")
-            if node_name not in nodes_list:
-                nodes_list.append(node_name)
-
-    containers_metrics: dict[str, list[int]] = {}
-    for c in containers_list:
-        nodes = []
-        for k, v in labels.items():
-            if v.startswith(f"c-{v}_"):
-                nodes.append(k)
-        containers_metrics[c] = nodes
-
-    services_metrics: dict[str, list[int]] = {}
-    for s in services_list:
-        nodes = []
-        for k, v in labels.items():
-            if v.startswith(f"s-{s}_"):
-                nodes.append(k)
-        services_metrics[s] = nodes
-
-    nodes_metrics: dict[str, list[int]] = {}
-    for n in nodes_list:
-        nodes = []
-        for k, v in labels.items():
-            if v.startswith(f"n-{n}_"):
-                nodes.append(k)
-        nodes_metrics[n] = nodes
-
-    # Share host
-    nodes_containers = {}
-    for node, containers in mappings["nodes-containers"].items():
-        for container in containers:
-            if container == "nsenter":
-                continue
-            nodes_containers[container] = node
-
-    # C-C
-    no_paths = []
-    no_deps_C_C_pair = []
-    for i, j in combinations(containers_list, 2):
-        if j not in CONTAINER_CALL_GRAPH[i] and nodes_containers[i] != nodes_containers[j]:
-            no_deps_C_C_pair.append([i, j])
-    for pair in no_deps_C_C_pair:
-        for cm_i in containers_metrics[pair[0]]:
-            for cm_j in containers_metrics[pair[1]]:
-                no_paths.append([cm_i, cm_j])
-
-    # S-S
-    no_deps_S_S_pair = []
-    for i, j in combinations(services_list, 2):
-        has_comm = False
-        for c1 in SERVICE_CONTAINERS[i]:
-            for c2 in SERVICE_CONTAINERS[j]:
-                if c2 in CONTAINER_CALL_GRAPH[c1]:
-                    has_comm = True
-        if not has_comm:
-            no_deps_S_S_pair.append([i, j])
-    for pair in no_deps_S_S_pair:
-        for sm_i in services_metrics[pair[0]]:
-            for sm_j in services_metrics[pair[1]]:
-                no_paths.append([sm_i, sm_j])
-
-    # N-N
-    no_deps_N_N_pair = []
-    for i, j in combinations(nodes_list, 2):
-        no_deps_N_N_pair.append([i, j])
-        for nm1 in nodes_metrics[i]:
-            for nm2 in nodes_metrics[j]:
-                no_paths.append([nm1, nm2])
-
-    # C-N
-    for node in nodes_list:
-        for con, host_node in nodes_containers.items():
-            if node != host_node:
-                for nm1 in nodes_metrics[node]:
-                    if con not in containers_metrics:
-                        continue
-                    for cm2 in containers_metrics[con]:
-                        no_paths.append([nm1, cm2])
-
-    # S-N
-    for service in SERVICE_CONTAINERS:
-        host_list = []
-        for con in SERVICE_CONTAINERS[service]:
-            if nodes_containers[con] not in host_list:
-                host_list.append(nodes_containers[con])
-        for node in nodes_list:
-            if node not in host_list:
-                if service not in services_metrics:
-                    continue
-                for sm1 in services_metrics[service]:
-                    for nm2 in nodes_metrics[node]:
-                        no_paths.append([sm1, nm2])
-
-    # C-S
-    for service in SERVICE_CONTAINERS:
-        for con in containers_metrics:
-            if con not in SERVICE_CONTAINERS[service]:
-                if service not in services_metrics:
-                    continue
-                for sm1 in services_metrics[service]:
-                    for cm2 in containers_metrics[con]:
-                        no_paths.append([sm1, cm2])
-
-    return no_paths
-
-
 def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, Any]) -> nx.Graph:
     """Build a subgraph consisting of removal edges with prior knowledges.
     """
@@ -410,7 +289,6 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.D
     building_graph_start: float = time.time()
 
     labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
-    # no_paths = build_no_paths(labels, mappings)
     init_g: nx.Graph = prepare_init_graph(labels, mappings)
     if kwargs['pc_library'] == 'pcalg':
         g = build_causal_graph_with_pcalg(
