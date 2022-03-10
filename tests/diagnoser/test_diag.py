@@ -99,6 +99,20 @@ def test_build_subgraph_of_removal_edges():
                 ("s-user_latency", "c-orders_cpu_usage_seconds_total", {}),
             ],
         ), (
+            'nwcall05: container to container or service to service in the same container or service',
+            [
+                ("s-user_throughput", "s-user_latency"),  # wrong
+                ("c-user_cpu_usage_seconds_total", "s-user_latency"),
+                ("c-user_cpu_usage_seconds_total", "c-user_memory_working_set_bytes"),  # wrong
+            ],
+            [
+                ("s-user_throughput", "s-user_latency", {}),
+                ("s-user_latency", "s-user_throughput", {}),
+                ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
+                ("c-user_cpu_usage_seconds_total", "c-user_memory_working_set_bytes", {}),
+                ("c-user_memory_working_set_bytes", "c-user_cpu_usage_seconds_total", {}),
+            ],
+        ), (
             'hybrid01: mixed hieralchy and nwcall',
             [
                 ("s-user_latency", "s-front-end_latency"),
@@ -113,7 +127,7 @@ def test_build_subgraph_of_removal_edges():
             ],
         )
     ],
-    ids=['hieralchy01', 'hieralchy02', 'nwcall01', 'nwcall02', 'nwcall03', 'nwcall04', 'hybrid01'],
+    ids=['hieralchy01', 'hieralchy02', 'nwcall01', 'nwcall02', 'nwcall03', 'nwcall04', 'nwcall05', 'hybrid01'],
 )
 def test_fix_edge_directions_in_causal_graph(case, input, expected):
     G = nx.DiGraph()
