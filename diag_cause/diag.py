@@ -149,15 +149,14 @@ def nx_set_bidirected_edge(G: nx.DiGraph, u, v):
 
 
 def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
-    # check whether u is service metric and v is container metric
-    if not (u.startswith('s-') and v.startswith('c-')):
-        return
-    # check whether u and v in the same service
-    u_service = u.split('-', maxsplit=1)[1].split('_')[0]
-    v_service = v.split('-', maxsplit=1)[1].split('_')[0]
-    if u_service != v_service:
-        return
-    nx_reverse_edge_direction(G, u, v)
+    # Force direction from (container -> service) to (service -> container) in same service
+    if u.startswith('s-') and v.startswith('c-'):
+        # check whether u and v in the same service
+        u_service = u.split('-', maxsplit=1)[1].split('_')[0]
+        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
+        v_service = CONTAINER_TO_SERVICE[v_ctnr]
+        if u_service == v_service:
+            nx_reverse_edge_direction(G, u, v)
 
 
 def fix_edge_direction_based_network_call(
