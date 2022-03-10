@@ -3,6 +3,37 @@ import pytest
 from diag_cause import diag
 
 
+def test_build_subgraph_of_removal_edges():
+    metrics = [
+        's-front-end_latency', 's-orders_latency', 'c-orders_sockets', 'c-orders-db_cpu_usage_seconds_total',
+        's-user_latency', 'c-user_sockets', 'c-user_cpu_usage_seconds_total', 'c-user-db_cpu_usage_seconds_total',
+        'n-gke-test-default-pool-66a015a8-9pw7_cpu_seconds_total',
+        'n-gke-test-default-pool-1dda290g-n10b_cpu_seconds_total',
+    ]
+    labels: dict[int, str] = {i: v for i, v in enumerate(metrics)}
+    RG: nx.Graph = diag.build_subgraph_of_removal_edges(labels, {
+        'nodes-containers': {
+            'gke-test-default-pool-66a015a8-9pw7': ['user', 'front-end', 'orders-db'],
+            'gke-test-default-pool-1dda290g-n10b': ['user-db', 'orders'],
+        },
+    })
+    RG = nx.relabel_nodes(RG, labels)
+    expected = [
+        ('c-orders_sockets', 'c-user-db_cpu_usage_seconds_total'),
+        ('c-orders_sockets', 'n-gke-test-default-pool-66a015a8-9pw7_cpu_seconds_total'),
+        ('c-user-db_cpu_usage_seconds_total', 'c-orders-db_cpu_usage_seconds_total'),
+        ('c-orders-db_cpu_usage_seconds_total', 'c-user_sockets'),
+        ('c-orders-db_cpu_usage_seconds_total', 'c-user_cpu_usage_seconds_total'),
+        ('c-user-db_cpu_usage_seconds_total', 'n-gke-test-default-pool-66a015a8-9pw7_cpu_seconds_total'),
+        ('n-gke-test-default-pool-1dda290g-n10b_cpu_seconds_total', 'c-orders-db_cpu_usage_seconds_total'),
+        ('n-gke-test-default-pool-1dda290g-n10b_cpu_seconds_total', 'c-user_cpu_usage_seconds_total'),
+        ('n-gke-test-default-pool-1dda290g-n10b_cpu_seconds_total', 'c-user_sockets'),
+        ('n-gke-test-default-pool-1dda290g-n10b_cpu_seconds_total', 'n-gke-test-default-pool-66a015a8-9pw7_cpu_seconds_total'),
+        ('s-front-end_latency', 'n-gke-test-default-pool-1dda290g-n10b_cpu_seconds_total'),
+    ]
+    assert sorted(list(RG.edges)) == sorted(expected)
+
+
 @pytest.mark.parametrize(
     "case,input,expected",
     [
