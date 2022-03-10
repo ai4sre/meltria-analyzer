@@ -15,7 +15,7 @@ import pandas as pd
 import scipy.stats
 from arch.unitroot import PhillipsPerron
 from arch.utility.exceptions import InfeasibleTestException
-from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
+from lib.metrics import ROOT_METRIC_LABELS, check_cause_metrics
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import hamming, pdist, squareform
 from statsmodels.tsa.stattools import adfuller
@@ -704,7 +704,7 @@ def main():
     # Check that the results include SLO metric
     root_metrics: list[str] = []
     for column in list(reduced_df.columns):
-        if column == ROOT_METRIC_LABEL:
+        if column in ROOT_METRIC_LABELS:
             root_metrics.append(column)
 
     # Check that the results include cause metric

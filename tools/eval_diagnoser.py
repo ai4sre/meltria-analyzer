@@ -3,6 +3,7 @@
 import logging
 import os
 from multiprocessing import cpu_count
+from multiprocessing.sharedctypes import Value
 
 import hydra
 import meltria.loader as meltria_loader
@@ -37,7 +38,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
     tests_df = pd.DataFrame(
         columns=[
             'chaos_type', 'chaos_comp', 'metrics_file', 'num_series',
-            'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges', 'g_density', 'g_flow_hieralchy',
+            'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges', 'g_density', 'g_flow_hierarchy',
             'building_graph_elapsed_sec', 'routes', 'grafana_dashboard_url',
         ],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'],
@@ -71,19 +72,24 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
 
             logger.info(f">> Running diagnosis of {record.chaos_case_file()} ...")
 
-            causal_graph, stats = diag.run(
-                reduced_df, mappings_by_metrics_file[record.metrics_file], **{
-                    'pc_library': cfg.params.pc_library,
-                    'pc_citest': cfg.params.pc_citest,
-                    'pc_citest_alpha': cfg.params.pc_citest_alpha,
-                    'pc_variant': cfg.params.pc_variant,
-                }
-            )
+            try:
+                causal_graph, stats = diag.run(
+                    reduced_df, mappings_by_metrics_file[record.metrics_file], **{
+                        'pc_library': cfg.params.pc_library,
+                        'pc_citest': cfg.params.pc_citest,
+                        'pc_citest_alpha': cfg.params.pc_citest_alpha,
+                        'pc_variant': cfg.params.pc_variant,
+                    }
+                )
+            except ValueError as e:
+                logger.error(e)
+                logger.info(f">> Skip because of error {record.chaos_case_file()}")
+                continue
 
-            logger.info(">> Checking causal graph including chaos-injected metrics")
+            logger.info(f">> Checking causal graph including chaos-injected metrics of {record.chaos_case_file()}")
             graph_ok, routes = metrics.check_causal_graph(causal_graph, chaos_type, chaos_comp)
             if not graph_ok:
-                logger.info(f"wrong causal graph in '{chaos_comp}' '{chaos_type}'")
+                logger.info(f"wrong causal graph in {record.chaos_case_file()}")
             y_pred.append(1 if graph_ok else 0)
             graph_building_elapsed_secs.append(stats['building_graph_elapsed_sec'])
             tests_df = tests_df.append(
@@ -92,7 +98,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                         chaos_type, chaos_comp, metrics_file, metrics_dimension['total'][2],
                         stats['init_graph_nodes_num'], stats['init_graph_edges_num'],
                         stats['causal_graph_nodes_num'], stats['causal_graph_edges_num'],
-                        stats['causal_graph_density'], stats['causal_graph_flow_hieralchy'],
+                        stats['causal_graph_density'], stats['causal_graph_flow_hierarchy'],
                         stats['building_graph_elapsed_sec'],
                         ','.join(['[' + ','.join(route) + ']' for route in routes]), grafana_dashboard_url,
                     ], index=tests_df.columns,

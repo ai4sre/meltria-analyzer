@@ -8,10 +8,9 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pcalg
-from lib.metrics import (CONTAINER_CALL_DIGRAPH, CONTAINER_CALL_GRAPH,
-                         CONTAINER_TO_SERVICE, ROOT_METRIC_LABEL,
-                         SERVICE_CALL_DIGRAPH, SERVICE_CONTAINERS,
-                         check_cause_metrics)
+from lib.metrics import (CONTAINER_CALL_DIGRAPH, CONTAINER_TO_SERVICE,
+                         ROOT_METRIC_LABELS, SERVICE_CALL_DIGRAPH,
+                         SERVICE_CONTAINERS)
 from pgmpy import estimators
 
 from .citest.fisher_z import ci_test_fisher_z
@@ -21,7 +20,7 @@ SIGNIFICANCE_LEVEL = 0.05
 
 TARGET_DATA: dict[str, list[str]] = {
     "containers": [],  # all
-    "services": ["throughput", "latency"],
+    "services": ["throughput", "latency", "errors"],
     "nodes": [
         "node_cpu_seconds_total",
         "node_disk_io_now",
@@ -271,12 +270,16 @@ def build_causal_graphs_with_pgmpy(
 
 
 def find_dags(G: nx.DiGraph) -> nx.DiGraph:
-    # Exclude nodes that have no path to "s-front-end_latency" for visualization
+    # Exclude nodes that have no path to root node for visualization
     remove_nodes = []
-    undirected_G = G.to_undirected()
+    UG: nx.Graph = G.to_undirected()
     nodes: nx.classes.reportviews.NodeView = G.nodes
     for node in nodes:
-        if not nx.has_path(undirected_G, node, ROOT_METRIC_LABEL):
+        has_paths: list[bool] = []
+        for root in ROOT_METRIC_LABELS:
+            if UG.has_node(root) and UG.has_node(node):
+                has_paths.append(nx.has_path(UG, root, node))
+        if not any(has_paths):
             remove_nodes.append(node)
             continue
         if node.startswith('s-'):
@@ -294,8 +297,8 @@ def find_dags(G: nx.DiGraph) -> nx.DiGraph:
 
 def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.DiGraph, dict[str, Any]]:
     dataset = filter_by_target_metrics(dataset)
-    if ROOT_METRIC_LABEL not in dataset.columns:
-        raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABEL}")
+    if not any(label in dataset.columns for label in ROOT_METRIC_LABELS):
+        raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABELS}")
 
     building_graph_start: float = time.time()
 
@@ -326,7 +329,7 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.D
         'causal_graph_nodes_num': g.number_of_nodes(),
         'causal_graph_edges_num': g.number_of_edges(),
         'causal_graph_density': nx.density(g),
-        'causal_graph_flow_hieralchy': nx.flow_hierarchy(g),
+        'causal_graph_flow_hierarchy': nx.flow_hierarchy(g),
         'building_graph_elapsed_sec': building_graph_elapsed,
     }
     return g, stats

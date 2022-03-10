@@ -3,7 +3,7 @@
 import argparse
 import json
 
-from lib.metrics import ROOT_METRIC_LABEL, check_cause_metrics
+from lib.metrics import ROOT_METRIC_LABELS, check_cause_metrics
 
 
 def main():
@@ -24,11 +24,11 @@ def main():
         chaos_comp: str = meta['chaos_injected_component']
         root_metrics: list[str] = []
         for column in metrics:
-            if column == ROOT_METRIC_LABEL:
+            if column in ROOT_METRIC_LABELS:
                 root_metrics.append(column)
         if len(root_metrics) < 1:
             print(
-                f"{tsdrfile}: [{method}] {chaos_type} to {chaos_comp}: {ROOT_METRIC_LABEL} does not exists")
+                f"{tsdrfile}: [{method}] {chaos_type} to {chaos_comp}: {ROOT_METRIC_LABELS} does not exists")
 
         ok, cause_metrics = check_cause_metrics(
             metrics, chaos_type, chaos_comp,
