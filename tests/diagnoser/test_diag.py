@@ -3,6 +3,23 @@ import pytest
 from diag_cause import diag
 
 
+def test_build_subgraph_of_removal_edges():
+    metrics = [
+        's-front-end_latency', 's-orders_latency', 'c-orders_sockets', 'c-orders-db_cpu_usage_seconds_total',
+        's-user_latency', 'c-user_sockets', 'c-user_cpu_usage_seconds_total', 'c-user-db_cpu_usage_seconds_total',
+    ]
+    labels: dict[int, str] = {i: v for i, v in enumerate(metrics)}
+    RG: nx.Graph = diag.build_subgraph_of_removal_edges(labels)
+    RG = nx.relabel_nodes(RG, labels)
+    expected = [
+        ('c-orders_sockets', 'c-user-db_cpu_usage_seconds_total'),
+        ('c-user-db_cpu_usage_seconds_total', 'c-orders-db_cpu_usage_seconds_total'),
+        ('c-orders-db_cpu_usage_seconds_total', 'c-user_sockets'),
+        ('c-orders-db_cpu_usage_seconds_total', 'c-user_cpu_usage_seconds_total'),
+    ]
+    assert sorted(list(RG.edges)) == sorted(expected)
+
+
 @pytest.mark.parametrize(
     "case,input,expected",
     [

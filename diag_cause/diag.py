@@ -65,7 +65,7 @@ def read_data_file(tsdr_result_file: os.PathLike
 
 
 def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]) -> list[list[int]]:
-    """Build unnecessary edge paths in causal graph based on the prior knowledge.
+    """[deprecated] Build unnecessary edge paths in causal graph based on the prior knowledge.
     """
     containers_list, services_list, nodes_list = [], [], []
     for v in labels.values():
@@ -185,14 +185,43 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]) -> list[lis
     return no_paths
 
 
-def prepare_init_graph(data_df: pd.DataFrame, no_paths) -> nx.Graph:
+def build_subgraph_of_removal_edges(labels: dict[int, str]) -> nx.Graph:
+    """Build a subgraph consisting of removal edges with prior knowledges.
+    """
+    ctnr_graph: nx.Graph = CONTAINER_CALL_DIGRAPH.to_undirected()
+    service_graph: nx.Graph = SERVICE_CALL_DIGRAPH.to_undirected()
+    G: nx.Graph = nx.Graph()
+    for (u_i, u), (v_i, v) in combinations(labels.items(), 2):
+        (u_comp, v_comp) = (n.split('-', maxsplit=1)[1].split('_')[0] for n in (u, v))
+        if u.startswith('c-') and v.startswith('c-'):
+            if u_comp == v_comp or ctnr_graph.has_edge(u_comp, v_comp):
+                continue
+        elif u.startswith('c-') and v.startswith('s-'):
+            u_service: str = CONTAINER_TO_SERVICE[u_comp]
+            if u_service == v_comp or service_graph.has_edge(u_service, v_comp):
+                continue
+        elif u.startswith('s-') and v.startswith('c-'):
+            v_service: str = CONTAINER_TO_SERVICE[v_comp]
+            if u_comp == v_service or service_graph.has_edge(u_comp, v_service):
+                continue
+        elif u.startswith('s-') and v.startswith('s-'):
+            if u_comp == v_comp or service_graph.has_edge(u_comp, v_comp):
+                continue
+        # TODO: node and middleware metrics
+        else:
+            raise ValueError(f"'{u}' or '{v}' has unexpected format")
+        # use node number because 'pgmpy' package handles only graph nodes consisted with numpy array.
+        G.add_edge(u_i, v_i)
+    return G
+
+
+def prepare_init_graph(labels: dict[int, str]) -> nx.Graph:
+    """Prepare initialized causal graph."""
     init_g = nx.Graph()
-    node_ids = range(len(data_df.columns))
-    init_g.add_nodes_from(node_ids)
-    for (i, j) in combinations(node_ids, 2):
+    for (i, j) in combinations(labels.keys(), 2):
         init_g.add_edge(i, j)
-    for no_path in no_paths:
-        init_g.remove_edge(no_path[0], no_path[1])
+    RG: nx.Graph = build_subgraph_of_removal_edges(labels)
+    init_g.remove_edges_from(RG.edges())
     return init_g
 
 
@@ -347,8 +376,8 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.D
     building_graph_start: float = time.time()
 
     labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
-    no_paths = build_no_paths(labels, mappings)
-    init_g = prepare_init_graph(dataset, no_paths)
+    # no_paths = build_no_paths(labels, mappings)
+    init_g: nx.Graph = prepare_init_graph(labels)
     if kwargs['pc_library'] == 'pcalg':
         g = build_causal_graph_with_pcalg(
             dataset.to_numpy(), labels, init_g,
