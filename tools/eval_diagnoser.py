@@ -37,7 +37,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
     tests_df = pd.DataFrame(
         columns=[
             'chaos_type', 'chaos_comp', 'metrics_file', 'num_series',
-            'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges', 'g_density', 'g_flow_hieralchy',
+            'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges', 'g_density', 'g_flow_hierarchy',
             'building_graph_elapsed_sec', 'routes', 'grafana_dashboard_url',
         ],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'],
@@ -92,7 +92,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                         chaos_type, chaos_comp, metrics_file, metrics_dimension['total'][2],
                         stats['init_graph_nodes_num'], stats['init_graph_edges_num'],
                         stats['causal_graph_nodes_num'], stats['causal_graph_edges_num'],
-                        stats['causal_graph_density'], stats['causal_graph_flow_hieralchy'],
+                        stats['causal_graph_density'], stats['causal_graph_flow_hierarchy'],
                         stats['building_graph_elapsed_sec'],
                         ','.join(['[' + ','.join(route) + ']' for route in routes]), grafana_dashboard_url,
                     ], index=tests_df.columns,

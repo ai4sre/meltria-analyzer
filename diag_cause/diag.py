@@ -326,7 +326,7 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.D
         'causal_graph_nodes_num': g.number_of_nodes(),
         'causal_graph_edges_num': g.number_of_edges(),
         'causal_graph_density': nx.density(g),
-        'causal_graph_flow_hieralchy': nx.flow_hierarchy(g),
+        'causal_graph_flow_hierarchy': nx.flow_hierarchy(g),
         'building_graph_elapsed_sec': building_graph_elapsed,
     }
     return g, stats
