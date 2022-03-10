@@ -153,7 +153,8 @@ def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
     if u.startswith('s-') and v.startswith('c-'):
         # check whether u and v in the same service
         u_service = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
+        v_service = CONTAINER_TO_SERVICE[v_ctnr]
         if u_service == v_service:
             nx_reverse_edge_direction(G, u, v)
 
