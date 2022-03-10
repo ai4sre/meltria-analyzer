@@ -185,11 +185,18 @@ def build_no_paths(labels: dict[int, str], mappings: dict[str, Any]) -> list[lis
     return no_paths
 
 
-def build_subgraph_of_removal_edges(labels: dict[int, str]) -> nx.Graph:
+def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, Any]) -> nx.Graph:
     """Build a subgraph consisting of removal edges with prior knowledges.
     """
     ctnr_graph: nx.Graph = CONTAINER_CALL_DIGRAPH.to_undirected()
     service_graph: nx.Graph = SERVICE_CALL_DIGRAPH.to_undirected()
+    node_ctnr_graph: nx.Graph = nx.Graph()  # Here, a node means a host running containers.
+    if (nodes_ctnrs := mappings.get('nodes-containers')):
+        for node, ctnrs in nodes_ctnrs.items():
+            # TODO: 'nsenter' container should be removed from original dataset.
+            for ctnr in [c for c in ctnrs if c != 'nsenter']:
+                node_ctnr_graph.add_edge(node, ctnr)
+
     G: nx.Graph = nx.Graph()
     for (u_i, u), (v_i, v) in combinations(labels.items(), 2):
         (u_comp, v_comp) = (n.split('-', maxsplit=1)[1].split('_')[0] for n in (u, v))
@@ -207,6 +214,33 @@ def build_subgraph_of_removal_edges(labels: dict[int, str]) -> nx.Graph:
         elif u.startswith('s-') and v.startswith('s-'):
             if u_comp == v_comp or service_graph.has_edge(u_comp, v_comp):
                 continue
+        elif u.startswith('n-') and v.startswith('n-'):
+            # each node has no connectivity.
+            pass
+        elif u.startswith('n-') and v.startswith('c-'):
+            if node_ctnr_graph.has_edge(u_comp, v_comp):
+                continue
+        elif u.startswith('c-') and v.startswith('n-'):
+            if node_ctnr_graph.has_edge(u_comp, v_comp):
+                continue
+        elif (u.startswith('n-') and v.startswith('s-')):
+            v_ctnrs: list[str] = SERVICE_CONTAINERS[v_comp]
+            has_ctnr_on_node = False
+            for v_ctnr in v_ctnrs:
+                if node_ctnr_graph.has_edge(u_comp, v_ctnr):
+                    has_ctnr_on_node = True
+                    break
+            if has_ctnr_on_node:
+                continue
+        elif u.startswith('s-') and v.startswith('n-'):
+            u_ctnrs: list[str] = SERVICE_CONTAINERS[u_comp]
+            has_ctnr_on_node = False
+            for u_ctnr in u_ctnrs:
+                if node_ctnr_graph.has_edge(u_ctnr, v_comp):
+                    has_ctnr_on_node = True
+                    break
+            if has_ctnr_on_node:
+                continue
         # TODO: node and middleware metrics
         else:
             raise ValueError(f"'{u}' or '{v}' has unexpected format")
@@ -215,12 +249,12 @@ def build_subgraph_of_removal_edges(labels: dict[int, str]) -> nx.Graph:
     return G
 
 
-def prepare_init_graph(labels: dict[int, str]) -> nx.Graph:
+def prepare_init_graph(labels: dict[int, str], mappings: dict[str, Any]) -> nx.Graph:
     """Prepare initialized causal graph."""
     init_g = nx.Graph()
     for (i, j) in combinations(labels.keys(), 2):
         init_g.add_edge(i, j)
-    RG: nx.Graph = build_subgraph_of_removal_edges(labels)
+    RG: nx.Graph = build_subgraph_of_removal_edges(labels, mappings)
     init_g.remove_edges_from(RG.edges())
     return init_g
 
@@ -377,7 +411,7 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.D
 
     labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
     # no_paths = build_no_paths(labels, mappings)
-    init_g: nx.Graph = prepare_init_graph(labels)
+    init_g: nx.Graph = prepare_init_graph(labels, mappings)
     if kwargs['pc_library'] == 'pcalg':
         g = build_causal_graph_with_pcalg(
             dataset.to_numpy(), labels, init_g,
