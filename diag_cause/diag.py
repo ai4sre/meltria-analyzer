@@ -144,6 +144,11 @@ def nx_reverse_edge_direction(G: nx.DiGraph, u, v):
     G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
 
 
+def nx_set_bidirected_edge(G: nx.DiGraph, u, v):
+    G.add_edge(u, v)
+    G.add_edge(v, u)
+
+
 def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
     # check whether u is service metric and v is container metric
     if not (u.startswith('s-') and v.startswith('c-')):
@@ -165,6 +170,9 @@ def fix_edge_direction_based_network_call(
     if (u.startswith('s-') and v.startswith('s-')):
         u_service = u.split('-', maxsplit=1)[1].split('_')[0]
         v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+        # If u and v is in the same service, force bi-directed edge.
+        if u_service == v_service:
+            nx_set_bidirected_edge(G, u, v)
         if (v_service not in service_dep_graph[u_service]) and \
            (u_service in service_dep_graph[v_service]):
             nx_reverse_edge_direction(G, u, v)
@@ -173,7 +181,10 @@ def fix_edge_direction_based_network_call(
     if (u.startswith('c-') and v.startswith('c-')):
         u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
         v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
-        if (v_ctnr not in container_dep_graph[u_ctnr]) and \
+        # If u and v is in the same container, force bi-directed edge.
+        if u_ctnr == v_ctnr:
+            nx_set_bidirected_edge(G, u, v)
+        elif (v_ctnr not in container_dep_graph[u_ctnr]) and \
            (u_ctnr in container_dep_graph[v_ctnr]):
             nx_reverse_edge_direction(G, u, v)
 
