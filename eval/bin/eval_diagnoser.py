@@ -11,11 +11,12 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from diag_cause import diag
-from lib import metrics
+from eval import metrics
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
 from sklearn.metrics import accuracy_score
+
 from tsdr import tsdr
 
 # see https://docs.neptune.ai/api-reference/integrations/python-logger

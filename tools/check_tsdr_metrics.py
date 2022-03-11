@@ -3,7 +3,7 @@
 import argparse
 import json
 
-from lib.metrics import ROOT_METRIC_LABELS, check_cause_metrics
+from eval.metrics import ROOT_METRIC_LABELS, check_cause_metrics
 
 
 def main():

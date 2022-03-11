@@ -1,7 +1,6 @@
+import eval.metrics as libmetrics
 import networkx as nx
 import pytest
-
-import lib.metrics as libmetrics
 
 
 def test_check_tsdr_ground_truth_by_route():

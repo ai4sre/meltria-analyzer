@@ -8,11 +8,10 @@ import sys
 from collections import defaultdict
 from enum import Enum
 
-import lib.metrics
 import numpy as np
 import pandas as pd
 import ruptures as rpt
-from scipy import interpolate
+from eval import metrics
 from statsmodels.tsa import stattools
 from tsdr import tsdr
 
@@ -116,7 +115,7 @@ def main():
         sli = 's-front-end_latency'
         sli_status = detect_anomaly(args.ad_method, data_df[sli])
 
-        _, cause_metrics = lib.metrics.check_cause_metrics(list(data_df.columns), chaos_type, chaos_comp)
+        _, cause_metrics = metrics.check_cause_metrics(list(data_df.columns), chaos_type, chaos_comp)
         cause_metrics_series = data_df[cause_metrics]
         cause_metrics_status = {}
         for feature, samples in cause_metrics_series.items():

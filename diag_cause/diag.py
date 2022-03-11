@@ -8,9 +8,9 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pcalg
-from lib.metrics import (CONTAINER_CALL_DIGRAPH, CONTAINER_TO_SERVICE,
-                         ROOT_METRIC_LABELS, SERVICE_CALL_DIGRAPH,
-                         SERVICE_CONTAINERS)
+from eval.metrics import (CONTAINER_CALL_DIGRAPH, CONTAINER_TO_SERVICE,
+                          ROOT_METRIC_LABELS, SERVICE_CALL_DIGRAPH,
+                          SERVICE_CONTAINERS)
 from pgmpy import estimators
 
 from .citest.fisher_z import ci_test_fisher_z
