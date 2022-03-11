@@ -124,7 +124,8 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
     run['tests/table'].upload(neptune.types.File.as_html(tests_df))
     logger.info(tests_df)
     run['scores/table'].upload(neptune.types.File.as_html(scores_df))
-    logger.info(scores_df)
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+        logger.info(scores_df)
 
 
 @hydra.main(config_path='../conf/diagnoser', config_name='config')
