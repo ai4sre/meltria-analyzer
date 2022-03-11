@@ -5,9 +5,7 @@ This project includes scripts for analyzing data collected from [Meltria](https:
 ## Setup
 
 ```shell-session
-$ pip install poetry
-$ poetry install
-$ poetry shell
+$ make init
 ```
 
 ## Directory Layout
@@ -20,6 +18,12 @@ $ poetry shell
 ├── tests   	# Python test code
 ├── tools	# Small util scripts
 └── tsdr	# A package of time series reduction
+```
+
+## Run test
+
+```shell-session
+$ make test
 ```
 
 ## Evaluation
