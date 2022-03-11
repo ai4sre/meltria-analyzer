@@ -3,7 +3,6 @@
 import logging
 import os
 from multiprocessing import cpu_count
-from multiprocessing.sharedctypes import Value
 
 import hydra
 import meltria.loader as meltria_loader
@@ -39,7 +38,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
         columns=[
             'chaos_type', 'chaos_comp', 'metrics_file', 'num_series',
             'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges', 'g_density', 'g_flow_hierarchy',
-            'building_graph_elapsed_sec', 'routes', 'grafana_dashboard_url',
+            'building_graph_elapsed_sec', 'routes', 'found_cause_metrics', 'grafana_dashboard_url',
         ],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'],
     ).dropna()
@@ -86,6 +85,11 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                 logger.info(f">> Skip because of error {record.chaos_case_file()}")
                 continue
 
+            # Check whether cause metrics exists in the causal graph
+            _, found_cause_metrics = metrics.check_cause_metrics(
+                list(causal_graph.nodes), chaos_type, chaos_comp,
+            )
+
             logger.info(f">> Checking causal graph including chaos-injected metrics of {record.chaos_case_file()}")
             graph_ok, routes = metrics.check_causal_graph(causal_graph, chaos_type, chaos_comp)
             if not graph_ok:
@@ -100,7 +104,8 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                         stats['causal_graph_nodes_num'], stats['causal_graph_edges_num'],
                         stats['causal_graph_density'], stats['causal_graph_flow_hierarchy'],
                         stats['building_graph_elapsed_sec'],
-                        ','.join(['[' + ','.join(route) + ']' for route in routes]), grafana_dashboard_url,
+                        ', '.join(['[' + ','.join(route) + ']' for route in routes]),
+                        ','.join(found_cause_metrics), grafana_dashboard_url,
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
