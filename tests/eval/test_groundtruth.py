@@ -1,7 +1,6 @@
 import networkx as nx
 import pytest
-
-import lib.metrics as libmetrics
+from eval import groundtruth
 
 
 def test_check_tsdr_ground_truth_by_route():
@@ -14,7 +13,7 @@ def test_check_tsdr_ground_truth_by_route():
         's-orders_latency',
         's-front-end_latency',
     ]
-    ok, found_metrics = libmetrics.check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'user-db')
+    ok, found_metrics = groundtruth.check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'user-db')
     assert ok is True
     expected = [
         'c-user-db_cpu_usage_seconds_total',
@@ -33,7 +32,7 @@ def test_check_tsdr_ground_truth_by_route():
         's-user_latency',
         's-front-end_latency',
     ]
-    ok, found_metrics = libmetrics.check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'user-db')
+    ok, found_metrics = groundtruth.check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'user-db')
     assert ok is True
     expected = [
         'c-user-db_cpu_usage_seconds_total',
@@ -50,7 +49,7 @@ def test_check_tsdr_ground_truth_by_route():
         'c-user-db_network_receive_bytes',
         's-user_latency',
     ]
-    ok, found_metrics = libmetrics.check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'user-db')
+    ok, found_metrics = groundtruth.check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'user-db')
     assert ok is False
     expected = [
         'c-user-db_cpu_usage_seconds_total',
@@ -66,7 +65,7 @@ def test_check_tsdr_ground_truth_by_route():
         'c-user-db_network_receive_bytes',
         's-front-end_latency',
     ]
-    ok, found_metrics = libmetrics.check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'front-end')
+    ok, found_metrics = groundtruth.check_tsdr_ground_truth_by_route(metrics, 'pod-cpu-hog', 'front-end')
     assert ok is True
     expected = [
         'c-front-end_cpu_usage_seconds_total',
@@ -142,6 +141,6 @@ def test_check_tsdr_ground_truth_by_route():
 )
 def test_check_causal_graph(desc, chaos_type, chaos_comp, input, expected):
     G = nx.DiGraph(input)
-    ok, routes = libmetrics.check_causal_graph(G, chaos_type, chaos_comp)
+    ok, routes = groundtruth.check_causal_graph(G, chaos_type, chaos_comp)
     assert ok
     assert sorted(routes) == sorted(expected)

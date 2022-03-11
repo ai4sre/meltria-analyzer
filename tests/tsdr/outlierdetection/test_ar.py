@@ -8,7 +8,6 @@ def test_ar_outlier_detector_score():
     ar = AROutlierDetector()
     input = np.array([1, 2, 10, 2, 1, 0.5, 0.8, 1.5, 5.0, 4.8, 7.2, 9.0, 12.1])
     got = ar.score(input)[0]
-    print(got)
     expected = np.array(
         [
             0.0, 0.0898689, 3.7183485, 3.8075135, 0.61580086, 0.56543386,

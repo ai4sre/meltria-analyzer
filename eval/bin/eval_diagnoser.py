@@ -10,8 +10,8 @@ import neptune.new as neptune
 import networkx as nx
 import numpy as np
 import pandas as pd
-from diag_cause import diag
-from lib import metrics
+from diagnoser import diag
+from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
@@ -86,12 +86,12 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                 continue
 
             # Check whether cause metrics exists in the causal graph
-            _, found_cause_metrics = metrics.check_cause_metrics(
+            _, found_cause_metrics = groundtruth.check_cause_metrics(
                 list(causal_graph.nodes), chaos_type, chaos_comp,
             )
 
             logger.info(f">> Checking causal graph including chaos-injected metrics of {record.chaos_case_file()}")
-            graph_ok, routes = metrics.check_causal_graph(causal_graph, chaos_type, chaos_comp)
+            graph_ok, routes = groundtruth.check_causal_graph(causal_graph, chaos_type, chaos_comp)
             if not graph_ok:
                 logger.info(f"wrong causal graph in {record.chaos_case_file()}")
             y_pred.append(1 if graph_ok else 0)

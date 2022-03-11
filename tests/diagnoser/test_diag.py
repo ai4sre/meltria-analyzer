@@ -1,6 +1,7 @@
 import networkx as nx
 import pytest
-from diag_cause import diag
+
+from diagnoser import diag
 
 
 def test_build_subgraph_of_removal_edges():
