@@ -13,12 +13,11 @@ import meltria.loader as meltria_loader
 import neptune.new as neptune
 import numpy as np
 import pandas as pd
-from eval.metrics import check_tsdr_ground_truth_by_route
+from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
-
 from tsdr import tsdr
 
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
@@ -51,7 +50,7 @@ class TimeSeriesPlotter:
 
         self.logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
 
-        _, ground_truth_metrics = check_tsdr_ground_truth_by_route(
+        _, ground_truth_metrics = groundtruth.check_tsdr_ground_truth_by_route(
             metrics=record.metrics_names(),  # pre-reduced data frame
             chaos_type=record.chaos_type,
             chaos_comp=record.chaos_comp,
