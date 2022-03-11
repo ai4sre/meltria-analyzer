@@ -3,7 +3,8 @@
 import argparse
 import json
 
-from eval.groundtruth import ROOT_METRIC_LABELS, check_cause_metrics
+from eval.groundtruth import check_cause_metrics
+from eval.priorknowledge import ROOT_METRIC_LABELS
 
 
 def main():

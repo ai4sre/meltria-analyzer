@@ -4,13 +4,11 @@ import time
 from itertools import combinations
 from typing import Any
 
+import eval.priorknowledge as pk
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pcalg
-from eval.groundtruth import (CONTAINER_CALL_DIGRAPH, CONTAINER_TO_SERVICE,
-                              ROOT_METRIC_LABELS, SERVICE_CALL_DIGRAPH,
-                              SERVICE_CONTAINERS)
 from pgmpy import estimators
 
 from .citest.fisher_z import ci_test_fisher_z
@@ -18,38 +16,24 @@ from .citest.fisher_z_pgmpy import fisher_z
 
 SIGNIFICANCE_LEVEL = 0.05
 
-TARGET_DATA: dict[str, list[str]] = {
-    "containers": [],  # all
-    "services": ["throughput", "latency", "errors"],
-    "nodes": [
-        "node_cpu_seconds_total",
-        "node_disk_io_now",
-        "node_filesystem_avail_bytes",
-        "node_memory_MemAvailable_bytes",
-        "node_network_receive_bytes_total",
-        "node_network_transmit_bytes_total"
-    ],
-    # "middlewares": "all"}
-}
-
 
 def filter_by_target_metrics(data_df: pd.DataFrame) -> pd.DataFrame:
     """Filter by specified target metrics
     """
     containers_df, services_df, nodes_df, middlewares_df = None, None, None, None
-    if 'containers' in TARGET_DATA:
+    if 'containers' in pk.DIAGNOSER_TARGET_DATA:
         containers_df = data_df.filter(
-            regex=f"^c-.+({'|'.join(TARGET_DATA['containers'])})$")
-    if 'services' in TARGET_DATA:
+            regex=f"^c-.+({'|'.join(pk.DIAGNOSER_TARGET_DATA['containers'])})$")
+    if 'services' in pk.DIAGNOSER_TARGET_DATA:
         services_df = data_df.filter(
-            regex=f"^s-.+({'|'.join(TARGET_DATA['services'])})$")
-    if 'nodes' in TARGET_DATA:
+            regex=f"^s-.+({'|'.join(pk.DIAGNOSER_TARGET_DATA['services'])})$")
+    if 'nodes' in pk.DIAGNOSER_TARGET_DATA:
         nodes_df = data_df.filter(
-            regex=f"^n-.+({'|'.join(TARGET_DATA['nodes'])})$")
-    if 'middlewares' in TARGET_DATA:
+            regex=f"^n-.+({'|'.join(pk.DIAGNOSER_TARGET_DATA['nodes'])})$")
+    if 'middlewares' in pk.DIAGNOSER_TARGET_DATA:
         # TODO: middleware
         middlewares_df = data_df.filter(
-            regex=f"^m-.+({'|'.join(TARGET_DATA['middlewares'])})$")
+            regex=f"^m-.+({'|'.join(pk.DIAGNOSER_TARGET_DATA['middlewares'])})$")
     return pd.concat([containers_df, services_df, nodes_df], axis=1)
 
 
@@ -66,8 +50,8 @@ def read_data_file(tsdr_result_file: os.PathLike
 def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, Any]) -> nx.Graph:
     """Build a subgraph consisting of removal edges with prior knowledges.
     """
-    ctnr_graph: nx.Graph = CONTAINER_CALL_DIGRAPH.to_undirected()
-    service_graph: nx.Graph = SERVICE_CALL_DIGRAPH.to_undirected()
+    ctnr_graph: nx.Graph = pk.CONTAINER_CALL_DIGRAPH.to_undirected()
+    service_graph: nx.Graph = pk.SERVICE_CALL_DIGRAPH.to_undirected()
     node_ctnr_graph: nx.Graph = nx.Graph()  # Here, a node means a host running containers.
     if (nodes_ctnrs := mappings.get('nodes-containers')):
         for node, ctnrs in nodes_ctnrs.items():
@@ -82,11 +66,11 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
             if u_comp == v_comp or ctnr_graph.has_edge(u_comp, v_comp):
                 continue
         elif u.startswith('c-') and v.startswith('s-'):
-            u_service: str = CONTAINER_TO_SERVICE[u_comp]
+            u_service: str = pk.CONTAINER_TO_SERVICE[u_comp]
             if u_service == v_comp or service_graph.has_edge(u_service, v_comp):
                 continue
         elif u.startswith('s-') and v.startswith('c-'):
-            v_service: str = CONTAINER_TO_SERVICE[v_comp]
+            v_service: str = pk.CONTAINER_TO_SERVICE[v_comp]
             if u_comp == v_service or service_graph.has_edge(u_comp, v_service):
                 continue
         elif u.startswith('s-') and v.startswith('s-'):
@@ -102,7 +86,7 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
             if node_ctnr_graph.has_edge(u_comp, v_comp):
                 continue
         elif (u.startswith('n-') and v.startswith('s-')):
-            v_ctnrs: list[str] = SERVICE_CONTAINERS[v_comp]
+            v_ctnrs: list[str] = pk.SERVICE_CONTAINERS[v_comp]
             has_ctnr_on_node = False
             for v_ctnr in v_ctnrs:
                 if node_ctnr_graph.has_edge(u_comp, v_ctnr):
@@ -111,7 +95,7 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
             if has_ctnr_on_node:
                 continue
         elif u.startswith('s-') and v.startswith('n-'):
-            u_ctnrs: list[str] = SERVICE_CONTAINERS[u_comp]
+            u_ctnrs: list[str] = pk.SERVICE_CONTAINERS[u_comp]
             has_ctnr_on_node = False
             for u_ctnr in u_ctnrs:
                 if node_ctnr_graph.has_edge(u_ctnr, v_comp):
@@ -154,7 +138,7 @@ def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
         # check whether u and v in the same service
         u_service = u.split('-', maxsplit=1)[1].split('_')[0]
         v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = CONTAINER_TO_SERVICE[v_ctnr]
+        v_service = pk.CONTAINER_TO_SERVICE[v_ctnr]
         if u_service == v_service:
             nx_reverse_edge_direction(G, u, v)
 
@@ -190,7 +174,7 @@ def fix_edge_direction_based_network_call(
     if (u.startswith('s-') and v.startswith('c-')):
         u_service = u.split('-', maxsplit=1)[1].split('_')[0]
         v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = CONTAINER_TO_SERVICE[v_ctnr]
+        v_service = pk.CONTAINER_TO_SERVICE[v_ctnr]
         if (v_service not in service_dep_graph[u_service]) and \
            (u_service in service_dep_graph[v_service]):
             nx_reverse_edge_direction(G, u, v)
@@ -199,7 +183,7 @@ def fix_edge_direction_based_network_call(
     if (u.startswith('c-') and v.startswith('s-')):
         u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
         v_service = v.split('-', maxsplit=1)[1].split('_')[0]
-        u_service = CONTAINER_TO_SERVICE[u_ctnr]
+        u_service = pk.CONTAINER_TO_SERVICE[u_ctnr]
         if (v_service not in service_dep_graph[u_service]) and \
            (u_service in service_dep_graph[v_service]):
             nx_reverse_edge_direction(G, u, v)
@@ -212,8 +196,8 @@ def fix_edge_directions_in_causal_graph(
     1. Fix directions based on the system hieralchy such as a service and a container
     2. Fix directions based on the network call graph.
     """
-    service_dep_graph: nx.DiGraph = SERVICE_CALL_DIGRAPH.reverse()
-    container_dep_graph: nx.DiGraph = CONTAINER_CALL_DIGRAPH.reverse()
+    service_dep_graph: nx.DiGraph = pk.SERVICE_CALL_DIGRAPH.reverse()
+    container_dep_graph: nx.DiGraph = pk.CONTAINER_CALL_DIGRAPH.reverse()
     # Traverse the all edges of G via the neighbors
     for u, nbrsdict in G.adjacency():
         nbrs = list(nbrsdict.keys())  # to avoid 'RuntimeError: dictionary changed size during iteration'
@@ -275,7 +259,7 @@ def find_dags(G: nx.DiGraph) -> nx.DiGraph:
     nodes: nx.classes.reportviews.NodeView = G.nodes
     for node in nodes:
         has_paths: list[bool] = []
-        for root in ROOT_METRIC_LABELS:
+        for root in pk.ROOT_METRIC_LABELS:
             if UG.has_node(root) and UG.has_node(node):
                 has_paths.append(nx.has_path(UG, root, node))
         if not any(has_paths):
@@ -296,8 +280,8 @@ def find_dags(G: nx.DiGraph) -> nx.DiGraph:
 
 def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.DiGraph, dict[str, Any]]:
     dataset = filter_by_target_metrics(dataset)
-    if not any(label in dataset.columns for label in ROOT_METRIC_LABELS):
-        raise ValueError(f"dataset has no root metric node: {ROOT_METRIC_LABELS}")
+    if not any(label in dataset.columns for label in pk.ROOT_METRIC_LABELS):
+        raise ValueError(f"dataset has no root metric node: {pk.ROOT_METRIC_LABELS}")
 
     building_graph_start: float = time.time()
 

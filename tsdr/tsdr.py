@@ -10,12 +10,13 @@ from datetime import datetime
 from typing import Any, Callable
 
 import banpei
+import eval.priorknowledge as pk
 import numpy as np
 import pandas as pd
 import scipy.stats
 from arch.unitroot import PhillipsPerron
 from arch.utility.exceptions import InfeasibleTestException
-from eval.groundtruth import ROOT_METRIC_LABELS, check_cause_metrics
+from eval import groundtruth
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import hamming, pdist, squareform
 from statsmodels.tsa.stattools import adfuller
@@ -704,11 +705,11 @@ def main():
     # Check that the results include SLO metric
     root_metrics: list[str] = []
     for column in list(reduced_df.columns):
-        if column in ROOT_METRIC_LABELS:
+        if column in pk.ROOT_METRIC_LABELS:
             root_metrics.append(column)
 
     # Check that the results include cause metric
-    _, cause_metrics = check_cause_metrics(
+    _, cause_metrics = groundtruth.check_cause_metrics(
         list(reduced_df.columns),
         metrics_meta['injected_chaos_type'],
         metrics_meta['chaos_injected_component'],

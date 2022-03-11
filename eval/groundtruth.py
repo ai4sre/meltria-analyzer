@@ -4,6 +4,8 @@ from typing import Any
 
 import networkx as nx
 
+import eval.priorknowledge as pk
+
 CHAOS_TO_CAUSE_METRIC_PATTERNS: dict[str, list[str]] = {
     'pod-cpu-hog': [
         'cpu_.+', 'threads', 'sockets', 'file_descriptors', 'processes', 'memory_cache', 'memory_mapped_file',
@@ -16,93 +18,10 @@ CHAOS_TO_CAUSE_METRIC_PATTERNS: dict[str, list[str]] = {
     'pod-network-latency': ['network_.+'],
 }
 
-ROOT_METRIC_LABELS: tuple[str, str, str] = ("s-front-end_latency", "s-front-end_throughput", "s-front-end_errors")
-
-SERVICE_CALL_DIGRAPH: nx.DiGraph = nx.DiGraph([
-    ('front-end', 'orders'),
-    ('front-end', 'catalogue'),
-    ('front-end', 'user'),
-    ('front-end', 'carts'),
-    ('orders', 'shipping'),
-    ('orders', 'payment'),
-    ('orders', 'user'),
-    ('orders', 'carts'),
-])
-
-CONTAINER_CALL_DIGRAPH: nx.DiGraph = nx.DiGraph([
-    ('front-end', 'orders'),
-    ('front-end', 'carts'),
-    ('front-end', 'user'),
-    ('front-end', 'catalogue'),
-    ('front-end', 'session-db'),
-    ('orders', 'shipping'),
-    ('orders', 'payment'),
-    ('orders', 'user'),
-    ('orders', 'carts'),
-    ('orders', 'orders-db'),
-    ('catalogue', 'catalogue-db'),
-    ('user', 'user-db'),
-    ('carts', 'carts-db'),
-    ('shipping', 'rabbitmq'),
-    ('rabbitmq', 'queue-master'),
-])
-
-CONTAINER_CALL_GRAPH: dict[str, list[str]] = {
-    "front-end": ["orders", "carts", "user", "catalogue"],
-    "catalogue": ["front-end", "catalogue-db"],
-    "catalogue-db": ["catalogue"],
-    "orders": ["front-end", "orders-db", "carts", "user", "payement", "shipping"],
-    "orders-db": ["orders"],
-    "user": ["front-end", "user-db", "orders"],
-    "user-db": ["user"],
-    "payment": ["orders"],
-    "shipping": ["orders", "rabbitmq"],
-    "queue-master": ["rabbitmq"],
-    "rabbitmq": ["shipping", "queue-master"],
-    "carts": ["front-end", "carts-db", "orders"],
-    "carts-db": ["carts"],
-    "session-db": ["front-end"]
-}
-
-# Use list of tuple because of supporting multiple routes
-SERVICE_TO_SERVICES: dict[str, list[str]] = {
-    'orders': ['front-end'],
-    'carts': ['orders', 'front-end'],
-    'user': ['orders', 'front-end'],
-    'catalogue': ['front-end'],
-    'payment': ['orders'],
-    'shipping': ['orders'],
-    'front-end': [],
-}
-
-SERVICE_TO_SERVICE_ROUTES: dict[str, list[tuple[str, ...]]] = {
-    'orders': [('front-end',)],
-    'carts': [('orders', 'front-end'), ('front-end',)],
-    'user': [('orders', 'front-end'), ('front-end',)],
-    'catalogue': [('front-end',)],
-    'payment': [('orders',)],
-    'shipping': [('orders',)],
-    'front-end': [()],
-}
-
-SERVICE_CONTAINERS: dict[str, list[str]] = {
-    "carts": ["carts", "carts-db"],
-    "payment": ["payment"],
-    "shipping": ["shipping"],
-    "front-end": ["front-end"],
-    "user": ["user", "user-db"],
-    "catalogue": ["catalogue", "catalogue-db"],
-    "orders": ["orders", "orders-db"],
-}
-
-CONTAINER_TO_SERVICE: dict[str, str] = {c: s for s, ctnrs in SERVICE_CONTAINERS.items() for c in ctnrs}
-
-SKIP_CONTAINERS = ["queue-master", "rabbitmq", "session-db"]
-
 
 def generate_containers_to_service() -> dict[str, str]:
     ctos: dict[str, str] = {}
-    for service, ctnrs in SERVICE_CONTAINERS.items():
+    for service, ctnrs in pk.SERVICE_CONTAINERS.items():
         for ctnr in ctnrs:
             ctos[ctnr] = service
     return ctos
@@ -112,12 +31,12 @@ def generate_tsdr_ground_truth() -> dict[str, Any]:
     all_gt_routes: dict[str, dict[str, list[list[str]]]] = defaultdict(lambda: defaultdict(list))
     ctos: dict[str, str] = generate_containers_to_service()
     for chaos, metric_patterns in CHAOS_TO_CAUSE_METRIC_PATTERNS.items():
-        for ctnr in CONTAINER_CALL_GRAPH.keys():
-            if ctnr in SKIP_CONTAINERS:
+        for ctnr in pk.CONTAINER_CALL_GRAPH.keys():
+            if ctnr in pk.SKIP_CONTAINERS:
                 continue
             routes: list[list[str]] = all_gt_routes[chaos][ctnr]
             cause_service: str = ctos[ctnr]
-            stos_routes: list[tuple[str, ...]] = SERVICE_TO_SERVICE_ROUTES[cause_service]
+            stos_routes: list[tuple[str, ...]] = pk.SERVICE_TO_SERVICE_ROUTES[cause_service]
 
             # allow to match any of multiple routes
             for stos_route in stos_routes:
@@ -193,8 +112,8 @@ def check_causal_graph(
     cause_metric_pattern: re.Pattern = re.compile(f"^c-{chaos_comp}_({'|'.join(cause_metric_exps)})$")
 
     match_routes: list[list[Any]] = []
-    leaves = [n for n in call_graph.nodes if n not in ROOT_METRIC_LABELS]
-    roots = [r for r in ROOT_METRIC_LABELS if call_graph.has_node(r)]
+    leaves = [n for n in call_graph.nodes if n not in pk.ROOT_METRIC_LABELS]
+    roots = [r for r in pk.ROOT_METRIC_LABELS if call_graph.has_node(r)]
     for root in roots:
         for path in nx.all_simple_paths(call_graph, source=root, target=leaves):
             if len(path) <= 1:
@@ -206,18 +125,18 @@ def check_causal_graph(
                 prev_comp: str = prev_node.split('-', maxsplit=1)[1].split('_')[0]
                 if node.startswith('s-'):
                     if prev_node.startswith('c-'):
-                        prev_service = CONTAINER_TO_SERVICE[prev_comp]
+                        prev_service = pk.CONTAINER_TO_SERVICE[prev_comp]
                     else:
                         prev_service = prev_comp
-                    if not SERVICE_CALL_DIGRAPH.has_edge(prev_service, comp):
+                    if not pk.SERVICE_CALL_DIGRAPH.has_edge(prev_service, comp):
                         break
                 elif node.startswith('c-'):
                     if prev_node.startswith('s-'):
-                        cur_service = CONTAINER_TO_SERVICE[comp]
-                        if not (prev_comp == cur_service or SERVICE_CALL_DIGRAPH.has_edge(prev_comp, cur_service)):
+                        cur_service = pk.CONTAINER_TO_SERVICE[comp]
+                        if not (prev_comp == cur_service or pk.SERVICE_CALL_DIGRAPH.has_edge(prev_comp, cur_service)):
                             break
                     elif prev_node.startswith('c-'):
-                        if not (prev_comp == comp or CONTAINER_CALL_DIGRAPH.has_edge(prev_comp, comp)):
+                        if not (prev_comp == comp or pk.CONTAINER_CALL_DIGRAPH.has_edge(prev_comp, comp)):
                             break
                     if i == (len(path) - 1):  # is leaf?
                         if cause_metric_pattern.match(node):
