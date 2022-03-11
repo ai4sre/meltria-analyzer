@@ -11,6 +11,8 @@ import pandas as pd
 import pcalg
 from pgmpy import estimators
 
+from diagnoser import nx_util
+
 from .citest.fisher_z import ci_test_fisher_z
 from .citest.fisher_z_pgmpy import fisher_z
 
@@ -121,17 +123,6 @@ def prepare_init_graph(labels: dict[int, str], mappings: dict[str, Any]) -> nx.G
     return init_g
 
 
-def nx_reverse_edge_direction(G: nx.DiGraph, u, v):
-    attr = G[u][v]
-    G.remove_edge(u, v)
-    G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
-
-
-def nx_set_bidirected_edge(G: nx.DiGraph, u, v):
-    G.add_edge(u, v)
-    G.add_edge(v, u)
-
-
 def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
     # Force direction from (container -> service) to (service -> container) in same service
     if u.startswith('s-') and v.startswith('c-'):
@@ -140,7 +131,7 @@ def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
         v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
         v_service = pk.CONTAINER_TO_SERVICE[v_ctnr]
         if u_service == v_service:
-            nx_reverse_edge_direction(G, u, v)
+            nx_util.reverse_edge_direction(G, u, v)
 
 
 def fix_edge_direction_based_network_call(
@@ -154,10 +145,10 @@ def fix_edge_direction_based_network_call(
         v_service = v.split('-', maxsplit=1)[1].split('_')[0]
         # If u and v is in the same service, force bi-directed edge.
         if u_service == v_service:
-            nx_set_bidirected_edge(G, u, v)
+            nx_util.set_bidirected_edge(G, u, v)
         if (v_service not in service_dep_graph[u_service]) and \
            (u_service in service_dep_graph[v_service]):
-            nx_reverse_edge_direction(G, u, v)
+            nx_util.reverse_edge_direction(G, u, v)
 
     # From container to container
     if (u.startswith('c-') and v.startswith('c-')):
@@ -165,10 +156,10 @@ def fix_edge_direction_based_network_call(
         v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
         # If u and v is in the same container, force bi-directed edge.
         if u_ctnr == v_ctnr:
-            nx_set_bidirected_edge(G, u, v)
+            nx_util.set_bidirected_edge(G, u, v)
         elif (v_ctnr not in container_dep_graph[u_ctnr]) and \
            (u_ctnr in container_dep_graph[v_ctnr]):
-            nx_reverse_edge_direction(G, u, v)
+            nx_util.reverse_edge_direction(G, u, v)
 
     # From service to container
     if (u.startswith('s-') and v.startswith('c-')):
@@ -177,7 +168,7 @@ def fix_edge_direction_based_network_call(
         v_service = pk.CONTAINER_TO_SERVICE[v_ctnr]
         if (v_service not in service_dep_graph[u_service]) and \
            (u_service in service_dep_graph[v_service]):
-            nx_reverse_edge_direction(G, u, v)
+            nx_util.reverse_edge_direction(G, u, v)
 
     # From container to service
     if (u.startswith('c-') and v.startswith('s-')):
@@ -186,7 +177,7 @@ def fix_edge_direction_based_network_call(
         u_service = pk.CONTAINER_TO_SERVICE[u_ctnr]
         if (v_service not in service_dep_graph[u_service]) and \
            (u_service in service_dep_graph[v_service]):
-            nx_reverse_edge_direction(G, u, v)
+            nx_util.reverse_edge_direction(G, u, v)
 
 
 def fix_edge_directions_in_causal_graph(
