@@ -11,6 +11,7 @@ import pandas as pd
 import pcalg
 from pgmpy import estimators
 
+import diagnoser.metric_node as mn
 from diagnoser import nx_util
 
 from .citest.fisher_z import ci_test_fisher_z
@@ -61,46 +62,46 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
             for ctnr in [c for c in ctnrs if c != 'nsenter']:
                 node_ctnr_graph.add_edge(node, ctnr)
 
+    nodes: list[mn.MetricNode] = mn.metric_nodes_from_labels(labels)
     G: nx.Graph = nx.Graph()
-    for (u_i, u), (v_i, v) in combinations(labels.items(), 2):
-        (u_comp, v_comp) = (n.split('-', maxsplit=1)[1].split('_')[0] for n in (u, v))
-        if u.startswith('c-') and v.startswith('c-'):
-            if u_comp == v_comp or ctnr_graph.has_edge(u_comp, v_comp):
+    for u, v in combinations(nodes, 2):
+        if u.is_container() and v.is_container():
+            if u.comp == v.comp or ctnr_graph.has_edge(u.comp, v.comp):
                 continue
-        elif u.startswith('c-') and v.startswith('s-'):
-            u_service: str = pk.CONTAINER_TO_SERVICE[u_comp]
-            if u_service == v_comp or service_graph.has_edge(u_service, v_comp):
+        elif u.is_container() and v.is_service():
+            u_service: str = pk.CONTAINER_TO_SERVICE[u.comp]
+            if u_service == v.comp or service_graph.has_edge(u_service, v.comp):
                 continue
-        elif u.startswith('s-') and v.startswith('c-'):
-            v_service: str = pk.CONTAINER_TO_SERVICE[v_comp]
-            if u_comp == v_service or service_graph.has_edge(u_comp, v_service):
+        elif u.is_service() and v.is_container():
+            v_service: str = pk.CONTAINER_TO_SERVICE[v.comp]
+            if u.comp == v_service or service_graph.has_edge(u.comp, v_service):
                 continue
-        elif u.startswith('s-') and v.startswith('s-'):
-            if u_comp == v_comp or service_graph.has_edge(u_comp, v_comp):
+        elif u.is_service() and v.is_service():
+            if u.comp == v.comp or service_graph.has_edge(u.comp, v.comp):
                 continue
-        elif u.startswith('n-') and v.startswith('n-'):
+        elif u.is_node() and v.is_node():
             # each node has no connectivity.
             pass
-        elif u.startswith('n-') and v.startswith('c-'):
-            if node_ctnr_graph.has_edge(u_comp, v_comp):
+        elif u.is_node() and v.is_container():
+            if node_ctnr_graph.has_edge(u.comp, v.comp):
                 continue
-        elif u.startswith('c-') and v.startswith('n-'):
-            if node_ctnr_graph.has_edge(u_comp, v_comp):
+        elif u.is_container() and v.is_node():
+            if node_ctnr_graph.has_edge(u.comp, v.comp):
                 continue
-        elif (u.startswith('n-') and v.startswith('s-')):
-            v_ctnrs: list[str] = pk.SERVICE_CONTAINERS[v_comp]
+        elif (u.is_node() and v.is_service()):
+            v_ctnrs: list[str] = pk.SERVICE_CONTAINERS[v.comp]
             has_ctnr_on_node = False
             for v_ctnr in v_ctnrs:
-                if node_ctnr_graph.has_edge(u_comp, v_ctnr):
+                if node_ctnr_graph.has_edge(u.comp, v_ctnr):
                     has_ctnr_on_node = True
                     break
             if has_ctnr_on_node:
                 continue
-        elif u.startswith('s-') and v.startswith('n-'):
-            u_ctnrs: list[str] = pk.SERVICE_CONTAINERS[u_comp]
+        elif u.is_service() and v.is_node():
+            u_ctnrs: list[str] = pk.SERVICE_CONTAINERS[u.comp]
             has_ctnr_on_node = False
             for u_ctnr in u_ctnrs:
-                if node_ctnr_graph.has_edge(u_ctnr, v_comp):
+                if node_ctnr_graph.has_edge(u_ctnr, v.comp):
                     has_ctnr_on_node = True
                     break
             if has_ctnr_on_node:
@@ -109,7 +110,7 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
         else:
             raise ValueError(f"'{u}' or '{v}' has unexpected format")
         # use node number because 'pgmpy' package handles only graph nodes consisted with numpy array.
-        G.add_edge(u_i, v_i)
+        G.add_edge(u.id, v.id)
     return G
 
 
