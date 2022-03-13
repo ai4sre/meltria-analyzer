@@ -26,6 +26,7 @@ pyhomogeneity = "^1.1"
 pmdarima = "^1.8.4"
 banpei = "^0.1.2"
 hydra-core = "^1.1.1"
+pyvis = "^0.1.9"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.9.2"
