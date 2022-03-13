@@ -86,7 +86,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                 continue
 
             # Check whether cause metrics exists in the causal graph
-            _, found_cause_metrics = groundtruth.check_cause_metrics(
+            _, found_cause_nodes = groundtruth.check_cause_metrics(
                 list(causal_graph.nodes), chaos_type, chaos_comp,
             )
 
@@ -104,8 +104,8 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                         stats['causal_graph_nodes_num'], stats['causal_graph_edges_num'],
                         stats['causal_graph_density'], stats['causal_graph_flow_hierarchy'],
                         stats['building_graph_elapsed_sec'],
-                        ', '.join(['[' + ','.join(route) + ']' for route in routes]),
-                        ','.join(found_cause_metrics), grafana_dashboard_url,
+                        ', '.join(['[' + ','.join([r.label for r in route]) + ']' for route in routes]),
+                        ','.join([n.label for n in found_cause_nodes]), grafana_dashboard_url,
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )

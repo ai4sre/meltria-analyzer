@@ -2,6 +2,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
+import diagnoser.metric_node as mn
 import networkx as nx
 
 import eval.priorknowledge as pk
@@ -89,14 +90,14 @@ def check_route(metrics: list[str], gt_route: list[str]) -> tuple[bool, list[str
     return True, match_metrics
 
 
-def check_cause_metrics(metrics: list[str], chaos_type: str, chaos_comp: str
+def check_cause_metrics(nodes: list[mn.MetricNode], chaos_type: str, chaos_comp: str
                         ) -> tuple[bool, list[Any]]:
     metric_patterns = CHAOS_TO_CAUSE_METRIC_PATTERNS[chaos_type]
     cause_metrics = []
-    for metric in metrics:
+    for node in nodes:
         for pattern in metric_patterns:
-            if re.match(f"^c-{chaos_comp}_{pattern}$", metric):
-                cause_metrics.append(metric)
+            if re.match(f"^c-{chaos_comp}_{pattern}$", node.label):
+                cause_metrics.append(node)
     if len(cause_metrics) > 0:
         return True, cause_metrics
     return False, cause_metrics
@@ -104,42 +105,40 @@ def check_cause_metrics(metrics: list[str], chaos_type: str, chaos_comp: str
 
 def check_causal_graph(
     G: nx.DiGraph, chaos_type: str, chaos_comp: str,
-) -> tuple[bool, list[list[str]]]:
+) -> tuple[bool, list[list[mn.MetricNode]]]:
     """Check that the causal graph (G) has the accurate route.
     """
     call_graph: nx.DiGraph = G.reverse()  # for traverse starting from root node
     cause_metric_exps: list[str] = CHAOS_TO_CAUSE_METRIC_PATTERNS[chaos_type]
     cause_metric_pattern: re.Pattern = re.compile(f"^c-{chaos_comp}_({'|'.join(cause_metric_exps)})$")
 
-    match_routes: list[list[Any]] = []
-    leaves = [n for n in call_graph.nodes if n not in pk.ROOT_METRIC_LABELS]
-    roots = [r for r in pk.ROOT_METRIC_LABELS if call_graph.has_node(r)]
+    match_routes: list[list[mn.MetricNode]] = []
+    leaves = [n for n in call_graph.nodes if n.label not in pk.ROOT_METRIC_LABELS]
+    roots = [mn.MetricNode(r) for r in pk.ROOT_METRIC_LABELS if call_graph.has_node(mn.MetricNode(r))]
     for root in roots:
         for path in nx.all_simple_paths(call_graph, source=root, target=leaves):
             if len(path) <= 1:
                 continue
             # compare the path with ground truth paths
             for i, node in enumerate(path[1:], start=1):  # skip ROOT_METRIC
-                comp: str = node.split('-', maxsplit=1)[1].split('_')[0]
-                prev_node: str = path[i-1]
-                prev_comp: str = prev_node.split('-', maxsplit=1)[1].split('_')[0]
-                if node.startswith('s-'):
-                    if prev_node.startswith('c-'):
-                        prev_service = pk.CONTAINER_TO_SERVICE[prev_comp]
+                prev_node: mn.MetricNode = path[i-1]
+                if node.is_service():
+                    if prev_node.is_container():
+                        prev_service = pk.CONTAINER_TO_SERVICE[prev_node.comp]
                     else:
-                        prev_service = prev_comp
-                    if not pk.SERVICE_CALL_DIGRAPH.has_edge(prev_service, comp):
+                        prev_service = prev_node.comp
+                    if not pk.SERVICE_CALL_DIGRAPH.has_edge(prev_service, node.comp):
                         break
-                elif node.startswith('c-'):
-                    if prev_node.startswith('s-'):
-                        cur_service = pk.CONTAINER_TO_SERVICE[comp]
-                        if not (prev_comp == cur_service or pk.SERVICE_CALL_DIGRAPH.has_edge(prev_comp, cur_service)):
+                elif node.is_container():
+                    if prev_node.is_service():
+                        cur_service = pk.CONTAINER_TO_SERVICE[node.comp]
+                        if not ( prev_node.comp == cur_service or pk.SERVICE_CALL_DIGRAPH.has_edge(prev_node.comp, cur_service)):
                             break
-                    elif prev_node.startswith('c-'):
-                        if not (prev_comp == comp or pk.CONTAINER_CALL_DIGRAPH.has_edge(prev_comp, comp)):
+                    elif prev_node.is_container():
+                        if not (prev_node.comp == node.comp or pk.CONTAINER_CALL_DIGRAPH.has_edge(prev_node.comp, node.comp)):
                             break
                     if i == (len(path) - 1):  # is leaf?
-                        if cause_metric_pattern.match(node):
+                        if cause_metric_pattern.match(node.label):
                             match_routes.append(path)
                             break
                 # TODO: middleware

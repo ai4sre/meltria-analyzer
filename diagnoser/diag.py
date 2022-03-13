@@ -110,74 +110,67 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
         else:
             raise ValueError(f"'{u}' or '{v}' has unexpected format")
         # use node number because 'pgmpy' package handles only graph nodes consisted with numpy array.
-        G.add_edge(u.id, v.id)
+        G.add_edge(u, v)
     return G
 
 
 def prepare_init_graph(labels: dict[int, str], mappings: dict[str, Any]) -> nx.Graph:
     """Prepare initialized causal graph."""
+    nodes: list[mn.MetricNode] = mn.metric_nodes_from_labels(labels)
     init_g = nx.Graph()
-    for (i, j) in combinations(labels.keys(), 2):
-        init_g.add_edge(i, j)
+    for (u, v) in combinations(nodes, 2):
+        init_g.add_edge(u, v)
     RG: nx.Graph = build_subgraph_of_removal_edges(labels, mappings)
     init_g.remove_edges_from(RG.edges())
     return init_g
 
 
-def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
+def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: mn.MetricNode, v: mn.MetricNode) -> None:
     # Force direction from (container -> service) to (service -> container) in same service
-    if u.startswith('s-') and v.startswith('c-'):
+    if u.is_service() and v.is_container():
         # check whether u and v in the same service
-        u_service = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = pk.CONTAINER_TO_SERVICE[v_ctnr]
-        if u_service == v_service:
+        v_service = pk.CONTAINER_TO_SERVICE[v.comp]
+        if u.comp == v_service:
             nx_util.reverse_edge_direction(G, u, v)
 
 
 def fix_edge_direction_based_network_call(
-    G: nx.DiGraph, u: str, v: str,
+    G: nx.DiGraph, u: mn.MetricNode, v: mn.MetricNode,
     service_dep_graph: nx.DiGraph,
     container_dep_graph: nx.DiGraph,
 ) -> None:
     # From service to service
-    if (u.startswith('s-') and v.startswith('s-')):
-        u_service = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+    if u.is_service() and v.is_service():
         # If u and v is in the same service, force bi-directed edge.
-        if u_service == v_service:
+        if u.comp == v.comp:
             nx_util.set_bidirected_edge(G, u, v)
-        if (v_service not in service_dep_graph[u_service]) and \
-           (u_service in service_dep_graph[v_service]):
+        if (v.comp not in service_dep_graph[u.comp]) and \
+           (u.comp in service_dep_graph[v.comp]):
             nx_util.reverse_edge_direction(G, u, v)
 
     # From container to container
-    if (u.startswith('c-') and v.startswith('c-')):
-        u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
+    if u.is_container() and v.is_container():
         # If u and v is in the same container, force bi-directed edge.
-        if u_ctnr == v_ctnr:
+        if u.comp == v.comp:
             nx_util.set_bidirected_edge(G, u, v)
-        elif (v_ctnr not in container_dep_graph[u_ctnr]) and \
-           (u_ctnr in container_dep_graph[v_ctnr]):
+        elif (v.comp not in container_dep_graph[u.comp]) and \
+             (u.comp in container_dep_graph[v.comp]):
             nx_util.reverse_edge_direction(G, u, v)
 
     # From service to container
-    if (u.startswith('s-') and v.startswith('c-')):
-        u_service = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = pk.CONTAINER_TO_SERVICE[v_ctnr]
-        if (v_service not in service_dep_graph[u_service]) and \
-           (u_service in service_dep_graph[v_service]):
+    if u.is_service() and v.is_container():
+        v_service = pk.CONTAINER_TO_SERVICE[v.comp]
+        if (v_service not in service_dep_graph[u.comp]) and \
+           (u.comp in service_dep_graph[v_service]):
             nx_util.reverse_edge_direction(G, u, v)
 
     # From container to service
-    if (u.startswith('c-') and v.startswith('s-')):
-        u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = v.split('-', maxsplit=1)[1].split('_')[0]
-        u_service = pk.CONTAINER_TO_SERVICE[u_ctnr]
-        if (v_service not in service_dep_graph[u_service]) and \
-           (u_service in service_dep_graph[v_service]):
+    if u.is_container() and v.is_service():
+        # u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
+        # v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+        u_service = pk.CONTAINER_TO_SERVICE[u.comp]
+        if (v.comp not in service_dep_graph[u_service]) and \
+           (u_service in service_dep_graph[v.comp]):
             nx_util.reverse_edge_direction(G, u, v)
 
 
@@ -211,6 +204,9 @@ def build_causal_graph_with_pcalg(
     """
     Build causal graph with PC algorithm.
     """
+    node_to_ids = {n: n.id for n in init_g.nodes}
+    node_ids_to_node = {n.id: n for n in init_g.nodes}
+    init_g = nx.relabel_nodes(init_g, mapping=node_to_ids)
     cm = np.corrcoef(dm.T)
     ci_test = ci_test_fisher_z if pc_citest == 'fisher-z' else pc_citest
     (G, sep_set) = pcalg.estimate_skeleton(
@@ -222,7 +218,7 @@ def build_causal_graph_with_pcalg(
         method=pc_variant,
     )
     DG: nx.DiGraph = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
-    DG = nx.relabel_nodes(DG, labels)
+    DG = nx.relabel_nodes(DG, mapping=node_ids_to_node)
     DG = find_dags(DG)
     return fix_edge_directions_in_causal_graph(DG)
 
@@ -252,16 +248,17 @@ def find_dags(G: nx.DiGraph) -> nx.DiGraph:
     for node in nodes:
         has_paths: list[bool] = []
         for root in pk.ROOT_METRIC_LABELS:
-            if UG.has_node(root) and UG.has_node(node):
-                has_paths.append(nx.has_path(UG, root, node))
+            rmn = mn.MetricNode(root)
+            if UG.has_node(rmn) and UG.has_node(node):
+                has_paths.append(nx.has_path(UG, rmn, node))
         if not any(has_paths):
             remove_nodes.append(node)
             continue
-        if node.startswith('s-'):
+        if node.is_service():
             color = "red"
-        elif node.startswith('c-'):
+        elif node.is_container():
             color = "blue"
-        elif node.startswith('m-'):
+        elif node.is_middleware():
             color = "purple"
         else:
             color = "green"

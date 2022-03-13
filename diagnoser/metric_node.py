@@ -32,7 +32,10 @@ class MetricNode:
             raise ValueError(f"no prefix: {label}")
 
     def __eq__(self, other) -> bool:
-        return self.id == other.id and self.label == other.label
+        return self.label == other.label
+
+    def __hash__(self) -> int:
+        return hash(self.label)
 
     def __str__(self) -> str:
         return self.label
