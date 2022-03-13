@@ -1,5 +1,5 @@
-from copy import copy
 from enum import Enum
+from functools import total_ordering
 
 import pandas as pd
 
@@ -11,6 +11,7 @@ class MetricType(Enum):
     MIDDLEWARE = 4
 
 
+@total_ordering
 class MetricNode:
     label: str
     comp: str
@@ -33,7 +34,14 @@ class MetricNode:
             raise ValueError(f"no prefix: {label}")
 
     def __eq__(self, other) -> bool:
+        if not isinstance(other, type(self)):
+            return NotImplemented
         return self.label == other.label
+
+    def __lt__(self, other) -> bool:
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return self.label < other.label
 
     def __hash__(self) -> int:
         return hash(self.label)
