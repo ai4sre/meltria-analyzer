@@ -149,6 +149,49 @@ def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataF
     return df
 
 
+def save_scores(
+    run: neptune.Run,
+    scores_df: pd.DataFrame, tests_df: pd.DataFrame,
+    clustering_df: pd.DataFrame, non_clustered_df: pd.DataFrame,
+) -> None:
+    run['tests/clustering/clustered_table'].upload(neptune.types.File.as_html(clustering_df))
+    run['tests/clustering/non_clustered_table'].upload(neptune.types.File.as_html(non_clustered_df))
+
+    run['tests/table'].upload(neptune.types.File.as_html(tests_df))
+
+    tn = scores_df['tn'].sum()
+    fp = scores_df['fp'].sum()
+    fn = scores_df['fn'].sum()
+    tp = scores_df['tp'].sum()
+    run['scores/tn'] = tn
+    run['scores/fp'] = fp
+    run['scores/fn'] = fn
+    run['scores/tp'] = tp
+    run['scores/accuracy'] = (tp + tn) / (tn + fp + fn + tp)
+    run['scores/reduction_rate'] = {
+        'mean': scores_df['reduction_rate'].mean(),
+        'max': scores_df['reduction_rate'].max(),
+        'min': scores_df['reduction_rate'].min(),
+    }
+    run['scores/elapsed_time'] = {
+        'mean': scores_df['elapsed_time'].mean(),
+        'max': scores_df['elapsed_time'].max(),
+        'min': scores_df['elapsed_time'].min(),
+    }
+    run['scores/table'].upload(neptune.types.File.as_html(scores_df))
+
+    scores_df_by_chaos_type = get_scores_by_index(scores_df, ['chaos_type', 'step'])
+    run['scores/table_grouped_by_chaos_type'].upload(neptune.types.File.as_html(scores_df_by_chaos_type))
+    scores_df_by_chaos_comp = get_scores_by_index(scores_df, ['chaos_comp', 'step'])
+    run['scores/table_grouped_by_chaos_comp'].upload(neptune.types.File.as_html(scores_df_by_chaos_comp))
+
+    logger.info(tests_df.head())
+    logger.info(scores_df.head())
+    logger.info(scores_df_by_chaos_type)
+    logger.info(scores_df_by_chaos_comp)
+    logger.info(clustering_df.head())
+
+
 def eval_tsdr(run: neptune.Run, cfg: DictConfig):
     ts_plotter: TimeSeriesPlotter = TimeSeriesPlotter(
         run=run,
@@ -312,42 +355,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 ), ignore_index=True,
             )
 
-    run['tests/clustering/clustered_table'].upload(neptune.types.File.as_html(clustering_df))
-    run['tests/clustering/non_clustered_table'].upload(neptune.types.File.as_html(non_clustered_df))
-
-    run['tests/table'].upload(neptune.types.File.as_html(tests_df))
-
-    tn = scores_df['tn'].sum()
-    fp = scores_df['fp'].sum()
-    fn = scores_df['fn'].sum()
-    tp = scores_df['tp'].sum()
-    run['scores/tn'] = tn
-    run['scores/fp'] = fp
-    run['scores/fn'] = fn
-    run['scores/tp'] = tp
-    run['scores/accuracy'] = (tp + tn) / (tn + fp + fn + tp)
-    run['scores/reduction_rate'] = {
-        'mean': scores_df['reduction_rate'].mean(),
-        'max': scores_df['reduction_rate'].max(),
-        'min': scores_df['reduction_rate'].min(),
-    }
-    run['scores/elapsed_time'] = {
-        'mean': scores_df['elapsed_time'].mean(),
-        'max': scores_df['elapsed_time'].max(),
-        'min': scores_df['elapsed_time'].min(),
-    }
-    run['scores/table'].upload(neptune.types.File.as_html(scores_df))
-
-    scores_df_by_chaos_type = get_scores_by_index(scores_df, ['chaos_type', 'step'])
-    run['scores/table_grouped_by_chaos_type'].upload(neptune.types.File.as_html(scores_df_by_chaos_type))
-    scores_df_by_chaos_comp = get_scores_by_index(scores_df, ['chaos_comp', 'step'])
-    run['scores/table_grouped_by_chaos_comp'].upload(neptune.types.File.as_html(scores_df_by_chaos_comp))
-
-    logger.info(tests_df.head())
-    logger.info(scores_df.head())
-    logger.info(scores_df_by_chaos_type)
-    logger.info(scores_df_by_chaos_comp)
-    logger.info(clustering_df.head())
+    save_scores(run, scores_df, tests_df, clustering_df, non_clustered_df)
 
 
 @hydra.main(config_path='../conf/tsdr', config_name='config')
