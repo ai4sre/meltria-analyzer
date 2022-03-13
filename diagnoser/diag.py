@@ -11,6 +11,9 @@ import pandas as pd
 import pcalg
 from pgmpy import estimators
 
+import diagnoser.metric_node as mn
+from diagnoser import nx_util
+
 from .citest.fisher_z import ci_test_fisher_z
 from .citest.fisher_z_pgmpy import fisher_z
 
@@ -47,7 +50,7 @@ def read_data_file(tsdr_result_file: os.PathLike
         tsdr_result['metrics_meta']
 
 
-def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, Any]) -> nx.Graph:
+def build_subgraph_of_removal_edges(nodes: mn.MetricNodes, mappings: dict[str, Any]) -> nx.Graph:
     """Build a subgraph consisting of removal edges with prior knowledges.
     """
     ctnr_graph: nx.Graph = pk.CONTAINER_CALL_DIGRAPH.to_undirected()
@@ -60,45 +63,44 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
                 node_ctnr_graph.add_edge(node, ctnr)
 
     G: nx.Graph = nx.Graph()
-    for (u_i, u), (v_i, v) in combinations(labels.items(), 2):
-        (u_comp, v_comp) = (n.split('-', maxsplit=1)[1].split('_')[0] for n in (u, v))
-        if u.startswith('c-') and v.startswith('c-'):
-            if u_comp == v_comp or ctnr_graph.has_edge(u_comp, v_comp):
+    for u, v in combinations(nodes, 2):
+        if u.is_container() and v.is_container():
+            if u.comp == v.comp or ctnr_graph.has_edge(u.comp, v.comp):
                 continue
-        elif u.startswith('c-') and v.startswith('s-'):
-            u_service: str = pk.CONTAINER_TO_SERVICE[u_comp]
-            if u_service == v_comp or service_graph.has_edge(u_service, v_comp):
+        elif u.is_container() and v.is_service():
+            u_service: str = pk.CONTAINER_TO_SERVICE[u.comp]
+            if u_service == v.comp or service_graph.has_edge(u_service, v.comp):
                 continue
-        elif u.startswith('s-') and v.startswith('c-'):
-            v_service: str = pk.CONTAINER_TO_SERVICE[v_comp]
-            if u_comp == v_service or service_graph.has_edge(u_comp, v_service):
+        elif u.is_service() and v.is_container():
+            v_service: str = pk.CONTAINER_TO_SERVICE[v.comp]
+            if u.comp == v_service or service_graph.has_edge(u.comp, v_service):
                 continue
-        elif u.startswith('s-') and v.startswith('s-'):
-            if u_comp == v_comp or service_graph.has_edge(u_comp, v_comp):
+        elif u.is_service() and v.is_service():
+            if u.comp == v.comp or service_graph.has_edge(u.comp, v.comp):
                 continue
-        elif u.startswith('n-') and v.startswith('n-'):
+        elif u.is_node() and v.is_node():
             # each node has no connectivity.
             pass
-        elif u.startswith('n-') and v.startswith('c-'):
-            if node_ctnr_graph.has_edge(u_comp, v_comp):
+        elif u.is_node() and v.is_container():
+            if node_ctnr_graph.has_edge(u.comp, v.comp):
                 continue
-        elif u.startswith('c-') and v.startswith('n-'):
-            if node_ctnr_graph.has_edge(u_comp, v_comp):
+        elif u.is_container() and v.is_node():
+            if node_ctnr_graph.has_edge(u.comp, v.comp):
                 continue
-        elif (u.startswith('n-') and v.startswith('s-')):
-            v_ctnrs: list[str] = pk.SERVICE_CONTAINERS[v_comp]
+        elif (u.is_node() and v.is_service()):
+            v_ctnrs: list[str] = pk.SERVICE_CONTAINERS[v.comp]
             has_ctnr_on_node = False
             for v_ctnr in v_ctnrs:
-                if node_ctnr_graph.has_edge(u_comp, v_ctnr):
+                if node_ctnr_graph.has_edge(u.comp, v_ctnr):
                     has_ctnr_on_node = True
                     break
             if has_ctnr_on_node:
                 continue
-        elif u.startswith('s-') and v.startswith('n-'):
-            u_ctnrs: list[str] = pk.SERVICE_CONTAINERS[u_comp]
+        elif u.is_service() and v.is_node():
+            u_ctnrs: list[str] = pk.SERVICE_CONTAINERS[u.comp]
             has_ctnr_on_node = False
             for u_ctnr in u_ctnrs:
-                if node_ctnr_graph.has_edge(u_ctnr, v_comp):
+                if node_ctnr_graph.has_edge(u_ctnr, v.comp):
                     has_ctnr_on_node = True
                     break
             if has_ctnr_on_node:
@@ -107,86 +109,67 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
         else:
             raise ValueError(f"'{u}' or '{v}' has unexpected format")
         # use node number because 'pgmpy' package handles only graph nodes consisted with numpy array.
-        G.add_edge(u_i, v_i)
+        G.add_edge(u, v)
     return G
 
 
-def prepare_init_graph(labels: dict[int, str], mappings: dict[str, Any]) -> nx.Graph:
+def prepare_init_graph(nodes: mn.MetricNodes, mappings: dict[str, Any]) -> nx.Graph:
     """Prepare initialized causal graph."""
     init_g = nx.Graph()
-    for (i, j) in combinations(labels.keys(), 2):
-        init_g.add_edge(i, j)
-    RG: nx.Graph = build_subgraph_of_removal_edges(labels, mappings)
+    for (u, v) in combinations(nodes, 2):
+        init_g.add_edge(u, v)
+    RG: nx.Graph = build_subgraph_of_removal_edges(nodes, mappings)
     init_g.remove_edges_from(RG.edges())
     return init_g
 
 
-def nx_reverse_edge_direction(G: nx.DiGraph, u, v):
-    attr = G[u][v]
-    G.remove_edge(u, v)
-    G.add_edge(v, u, attr=attr) if attr else G.add_edge(v, u)
-
-
-def nx_set_bidirected_edge(G: nx.DiGraph, u, v):
-    G.add_edge(u, v)
-    G.add_edge(v, u)
-
-
-def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: str, v: str) -> None:
+def fix_edge_direction_based_hieralchy(G: nx.DiGraph, u: mn.MetricNode, v: mn.MetricNode) -> None:
     # Force direction from (container -> service) to (service -> container) in same service
-    if u.startswith('s-') and v.startswith('c-'):
+    if u.is_service() and v.is_container():
         # check whether u and v in the same service
-        u_service = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = pk.CONTAINER_TO_SERVICE[v_ctnr]
-        if u_service == v_service:
-            nx_reverse_edge_direction(G, u, v)
+        v_service = pk.CONTAINER_TO_SERVICE[v.comp]
+        if u.comp == v_service:
+            nx_util.reverse_edge_direction(G, u, v)
 
 
 def fix_edge_direction_based_network_call(
-    G: nx.DiGraph, u: str, v: str,
+    G: nx.DiGraph, u: mn.MetricNode, v: mn.MetricNode,
     service_dep_graph: nx.DiGraph,
     container_dep_graph: nx.DiGraph,
 ) -> None:
     # From service to service
-    if (u.startswith('s-') and v.startswith('s-')):
-        u_service = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+    if u.is_service() and v.is_service():
         # If u and v is in the same service, force bi-directed edge.
-        if u_service == v_service:
-            nx_set_bidirected_edge(G, u, v)
-        if (v_service not in service_dep_graph[u_service]) and \
-           (u_service in service_dep_graph[v_service]):
-            nx_reverse_edge_direction(G, u, v)
+        if u.comp == v.comp:
+            nx_util.set_bidirected_edge(G, u, v)
+        if (v.comp not in service_dep_graph[u.comp]) and \
+           (u.comp in service_dep_graph[v.comp]):
+            nx_util.reverse_edge_direction(G, u, v)
 
     # From container to container
-    if (u.startswith('c-') and v.startswith('c-')):
-        u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
+    if u.is_container() and v.is_container():
         # If u and v is in the same container, force bi-directed edge.
-        if u_ctnr == v_ctnr:
-            nx_set_bidirected_edge(G, u, v)
-        elif (v_ctnr not in container_dep_graph[u_ctnr]) and \
-           (u_ctnr in container_dep_graph[v_ctnr]):
-            nx_reverse_edge_direction(G, u, v)
+        if u.comp == v.comp:
+            nx_util.set_bidirected_edge(G, u, v)
+        elif (v.comp not in container_dep_graph[u.comp]) and \
+             (u.comp in container_dep_graph[v.comp]):
+            nx_util.reverse_edge_direction(G, u, v)
 
     # From service to container
-    if (u.startswith('s-') and v.startswith('c-')):
-        u_service = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_ctnr = v.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = pk.CONTAINER_TO_SERVICE[v_ctnr]
-        if (v_service not in service_dep_graph[u_service]) and \
-           (u_service in service_dep_graph[v_service]):
-            nx_reverse_edge_direction(G, u, v)
+    if u.is_service() and v.is_container():
+        v_service = pk.CONTAINER_TO_SERVICE[v.comp]
+        if (v_service not in service_dep_graph[u.comp]) and \
+           (u.comp in service_dep_graph[v_service]):
+            nx_util.reverse_edge_direction(G, u, v)
 
     # From container to service
-    if (u.startswith('c-') and v.startswith('s-')):
-        u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
-        v_service = v.split('-', maxsplit=1)[1].split('_')[0]
-        u_service = pk.CONTAINER_TO_SERVICE[u_ctnr]
-        if (v_service not in service_dep_graph[u_service]) and \
-           (u_service in service_dep_graph[v_service]):
-            nx_reverse_edge_direction(G, u, v)
+    if u.is_container() and v.is_service():
+        # u_ctnr = u.split('-', maxsplit=1)[1].split('_')[0]
+        # v_service = v.split('-', maxsplit=1)[1].split('_')[0]
+        u_service = pk.CONTAINER_TO_SERVICE[u.comp]
+        if (v.comp not in service_dep_graph[u_service]) and \
+           (u_service in service_dep_graph[v.comp]):
+            nx_util.reverse_edge_direction(G, u, v)
 
 
 def fix_edge_directions_in_causal_graph(
@@ -210,7 +193,7 @@ def fix_edge_directions_in_causal_graph(
 
 def build_causal_graph_with_pcalg(
     dm: np.ndarray,
-    labels: dict[int, str],
+    nodes: mn.MetricNodes,
     init_g: nx.Graph,
     pc_citest_alpha: float,
     pc_variant: str = '',
@@ -219,6 +202,7 @@ def build_causal_graph_with_pcalg(
     """
     Build causal graph with PC algorithm.
     """
+    init_g = nx.relabel_nodes(init_g, mapping=nodes.node_to_num)
     cm = np.corrcoef(dm.T)
     ci_test = ci_test_fisher_z if pc_citest == 'fisher-z' else pc_citest
     (G, sep_set) = pcalg.estimate_skeleton(
@@ -230,7 +214,7 @@ def build_causal_graph_with_pcalg(
         method=pc_variant,
     )
     DG: nx.DiGraph = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
-    DG = nx.relabel_nodes(DG, labels)
+    DG = nx.relabel_nodes(DG, mapping=nodes.num_to_node)
     DG = find_dags(DG)
     return fix_edge_directions_in_causal_graph(DG)
 
@@ -260,16 +244,17 @@ def find_dags(G: nx.DiGraph) -> nx.DiGraph:
     for node in nodes:
         has_paths: list[bool] = []
         for root in pk.ROOT_METRIC_LABELS:
-            if UG.has_node(root) and UG.has_node(node):
-                has_paths.append(nx.has_path(UG, root, node))
+            rmn = mn.MetricNode(root)
+            if UG.has_node(rmn) and UG.has_node(node):
+                has_paths.append(nx.has_path(UG, rmn, node))
         if not any(has_paths):
             remove_nodes.append(node)
             continue
-        if node.startswith('s-'):
+        if node.is_service():
             color = "red"
-        elif node.startswith('c-'):
+        elif node.is_container():
             color = "blue"
-        elif node.startswith('m-'):
+        elif node.is_middleware():
             color = "purple"
         else:
             color = "green"
@@ -285,11 +270,11 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.D
 
     building_graph_start: float = time.time()
 
-    labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
-    init_g: nx.Graph = prepare_init_graph(labels, mappings)
+    nodes: mn.MetricNodes = mn.MetricNodes.from_dataframe(dataset)
+    init_g: nx.Graph = prepare_init_graph(nodes, mappings)
     if kwargs['pc_library'] == 'pcalg':
         g = build_causal_graph_with_pcalg(
-            dataset.to_numpy(), labels, init_g,
+            dataset.to_numpy(), nodes, init_g,
             pc_variant=kwargs['pc_variant'],
             pc_citest=kwargs['pc_citest'],
             pc_citest_alpha=kwargs['pc_citest_alpha'],

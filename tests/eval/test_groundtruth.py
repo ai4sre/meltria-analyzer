@@ -1,5 +1,7 @@
 import networkx as nx
 import pytest
+from diagnoser import metric_node as mn
+
 from eval import groundtruth
 
 
@@ -140,7 +142,9 @@ def test_check_tsdr_ground_truth_by_route():
     ids=['correct01', 'correct02', 'correct03', 'correct04'],
 )
 def test_check_causal_graph(desc, chaos_type, chaos_comp, input, expected):
-    G = nx.DiGraph(input)
+    edges = [(mn.MetricNode(u), mn.MetricNode(v)) for (u, v) in input]
+    expected_edges = [[mn.MetricNode(n) for n in path] for path in expected]
+    G = nx.DiGraph(edges)
     ok, routes = groundtruth.check_causal_graph(G, chaos_type, chaos_comp)
     assert ok
-    assert sorted(routes) == sorted(expected)
+    assert sorted([r.nodes for r in routes]) == sorted(expected_edges)
