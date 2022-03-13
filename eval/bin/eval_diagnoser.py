@@ -4,6 +4,7 @@ import logging
 import os
 from multiprocessing import cpu_count
 
+import diagnoser.metric_node as mn
 import hydra
 import meltria.loader as meltria_loader
 import neptune.new as neptune
@@ -87,7 +88,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
 
             # Check whether cause metrics exists in the causal graph
             _, found_cause_nodes = groundtruth.check_cause_metrics(
-                list(causal_graph.nodes), chaos_type, chaos_comp,
+                mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)), chaos_type, chaos_comp,
             )
 
             logger.info(f">> Checking causal graph including chaos-injected metrics of {record.chaos_case_file()}")
@@ -104,8 +105,8 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                         stats['causal_graph_nodes_num'], stats['causal_graph_edges_num'],
                         stats['causal_graph_density'], stats['causal_graph_flow_hierarchy'],
                         stats['building_graph_elapsed_sec'],
-                        ', '.join(['[' + ','.join([r.label for r in route]) + ']' for route in routes]),
-                        ','.join([n.label for n in found_cause_nodes]), grafana_dashboard_url,
+                        ', '.join([route.liststr() for route in routes]),
+                        found_cause_nodes.liststr(), grafana_dashboard_url,
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )

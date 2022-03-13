@@ -12,8 +12,8 @@ def test_build_subgraph_of_removal_edges():
         'n-gke-test-default-pool-66a015a8-9pw7_cpu_seconds_total',
         'n-gke-test-default-pool-1dda290g-n10b_cpu_seconds_total',
     ]
-    labels: dict[int, str] = {i: v for i, v in enumerate(metrics)}
-    RG: nx.Graph = diag.build_subgraph_of_removal_edges(labels, {
+    nodes: mn.MetricNodes = mn.MetricNodes({i: mn.MetricNode(v) for i, v in enumerate(metrics)})
+    RG: nx.Graph = diag.build_subgraph_of_removal_edges(nodes, {
         'nodes-containers': {
             'gke-test-default-pool-66a015a8-9pw7': ['user', 'front-end', 'orders-db'],
             'gke-test-default-pool-1dda290g-n10b': ['user-db', 'orders'],
@@ -132,7 +132,7 @@ def test_build_subgraph_of_removal_edges():
 )
 def test_fix_edge_directions_in_causal_graph(case, input, expected):
     G = nx.DiGraph()
-    paths = [(mn.MetricNode(label=u), mn.MetricNode(label=v)) for u, v in input]
+    paths = [(mn.MetricNode(u), mn.MetricNode(v)) for u, v in input]
     G.add_edges_from(paths)
     got = diag.fix_edge_directions_in_causal_graph(G)
     assert sorted([(u.label, v.label, {}) for u, v in got.edges]) == sorted(expected)

@@ -50,7 +50,7 @@ def read_data_file(tsdr_result_file: os.PathLike
         tsdr_result['metrics_meta']
 
 
-def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, Any]) -> nx.Graph:
+def build_subgraph_of_removal_edges(nodes: mn.MetricNodes, mappings: dict[str, Any]) -> nx.Graph:
     """Build a subgraph consisting of removal edges with prior knowledges.
     """
     ctnr_graph: nx.Graph = pk.CONTAINER_CALL_DIGRAPH.to_undirected()
@@ -62,7 +62,6 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
             for ctnr in [c for c in ctnrs if c != 'nsenter']:
                 node_ctnr_graph.add_edge(node, ctnr)
 
-    nodes: list[mn.MetricNode] = mn.metric_nodes_from_labels(labels)
     G: nx.Graph = nx.Graph()
     for u, v in combinations(nodes, 2):
         if u.is_container() and v.is_container():
@@ -114,13 +113,12 @@ def build_subgraph_of_removal_edges(labels: dict[int, str], mappings: dict[str, 
     return G
 
 
-def prepare_init_graph(labels: dict[int, str], mappings: dict[str, Any]) -> nx.Graph:
+def prepare_init_graph(nodes: mn.MetricNodes, mappings: dict[str, Any]) -> nx.Graph:
     """Prepare initialized causal graph."""
-    nodes: list[mn.MetricNode] = mn.metric_nodes_from_labels(labels)
     init_g = nx.Graph()
     for (u, v) in combinations(nodes, 2):
         init_g.add_edge(u, v)
-    RG: nx.Graph = build_subgraph_of_removal_edges(labels, mappings)
+    RG: nx.Graph = build_subgraph_of_removal_edges(nodes, mappings)
     init_g.remove_edges_from(RG.edges())
     return init_g
 
@@ -195,7 +193,7 @@ def fix_edge_directions_in_causal_graph(
 
 def build_causal_graph_with_pcalg(
     dm: np.ndarray,
-    labels: dict[int, str],
+    nodes: mn.MetricNodes,
     init_g: nx.Graph,
     pc_citest_alpha: float,
     pc_variant: str = '',
@@ -204,9 +202,7 @@ def build_causal_graph_with_pcalg(
     """
     Build causal graph with PC algorithm.
     """
-    node_to_ids = {n: n.id for n in init_g.nodes}
-    node_ids_to_node = {n.id: n for n in init_g.nodes}
-    init_g = nx.relabel_nodes(init_g, mapping=node_to_ids)
+    init_g = nx.relabel_nodes(init_g, mapping=nodes.node_to_num)
     cm = np.corrcoef(dm.T)
     ci_test = ci_test_fisher_z if pc_citest == 'fisher-z' else pc_citest
     (G, sep_set) = pcalg.estimate_skeleton(
@@ -218,7 +214,7 @@ def build_causal_graph_with_pcalg(
         method=pc_variant,
     )
     DG: nx.DiGraph = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
-    DG = nx.relabel_nodes(DG, mapping=node_ids_to_node)
+    DG = nx.relabel_nodes(DG, mapping=nodes.num_to_node)
     DG = find_dags(DG)
     return fix_edge_directions_in_causal_graph(DG)
 
@@ -274,11 +270,11 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.D
 
     building_graph_start: float = time.time()
 
-    labels: dict[int, str] = {i: v for i, v in enumerate(dataset.columns)}
-    init_g: nx.Graph = prepare_init_graph(labels, mappings)
+    nodes: mn.MetricNodes = mn.MetricNodes.from_dataframe(dataset)
+    init_g: nx.Graph = prepare_init_graph(nodes, mappings)
     if kwargs['pc_library'] == 'pcalg':
         g = build_causal_graph_with_pcalg(
-            dataset.to_numpy(), labels, init_g,
+            dataset.to_numpy(), nodes, init_g,
             pc_variant=kwargs['pc_variant'],
             pc_citest=kwargs['pc_citest'],
             pc_citest_alpha=kwargs['pc_citest_alpha'],
