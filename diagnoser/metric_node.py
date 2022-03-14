@@ -99,3 +99,6 @@ class MetricNodes:
 
     def liststr(self) -> str:
         return '[' + ','.join([n.label for n in self.nodes]) + ']'
+
+    def node_to_label(self) -> dict[MetricNode, str]:
+        return {n: n.label for n in self.nodes}

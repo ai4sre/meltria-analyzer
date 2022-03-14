@@ -30,6 +30,9 @@ class DatasetRecord:
     def metrics_names(self) -> list[str]:
         return list(self.data_df.columns)
 
+    def basename_of_metrics_file(self) -> str:
+        return os.path.basename(self.metrics_file)
+
 
 def load_dataset(
     metrics_files: list[str], exclude_middleware_metrics: bool = False
