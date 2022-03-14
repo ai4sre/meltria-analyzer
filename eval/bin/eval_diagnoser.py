@@ -25,7 +25,35 @@ logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
 
+def set_visual_style_to_graph(G: nx.DiGraph) -> None:
+    """Set graph style followed by The valid properties
+    https://pyvis.readthedocs.io/en/latest/tutorial.html#adding-list-of-nodes-with-properties
+    >>> ['size', 'value', 'title', 'x', 'y', 'label', 'color']
+    """
+    for node in G.nodes:
+        if node.is_root():
+            color = "red"
+            size = 25
+        elif node.is_service():
+            color = "blue"
+            size = 20
+        elif node.is_middleware():
+            color = "purple"
+            size = 10
+        elif node.is_container():
+            color = "green"
+            size = 10
+        else:
+            color = "grey"
+            size = 10
+        G.nodes[node]["color"] = color
+        G.nodes[node]["size"] = size
+        G.nodes[node]["label"] = node.label
+
+
 def log_causal_graph(run: neptune.Run, causal_graph: nx.DiGraph, record: DatasetRecord) -> None:
+    set_visual_style_to_graph(causal_graph)
+
     img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
     run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
 

@@ -250,15 +250,6 @@ def find_graphs_containing_root_node(G: nx.DiGraph) -> nx.DiGraph:
         if not any(has_paths):
             remove_nodes.append(node)
             continue
-        if node.is_service():
-            color = "red"
-        elif node.is_container():
-            color = "blue"
-        elif node.is_middleware():
-            color = "purple"
-        else:
-            color = "green"
-        G.nodes[node]["color"] = color
     G.remove_nodes_from(remove_nodes)
     return G
 
