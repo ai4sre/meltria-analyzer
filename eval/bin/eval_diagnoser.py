@@ -25,6 +25,21 @@ logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
 
+def log_causal_graph(run: neptune.Run, causal_graph: nx.DiGraph, record: DatasetRecord) -> None:
+    img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
+    run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
+
+    nwg = Network()
+    # piviz assert isinstance(n_id, str) or isinstance(n_id, int)
+    relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
+    relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
+    nwg.from_nx(relabeled_graph)
+    nwg.toggle_physics(True)
+    html_path = os.path.join(os.getcwd(), record.basename_of_metrics_file() + '.nw_graph.html')
+    nwg.write_html(html_path)
+    run[f"tests/causal_graphs_html/{record.chaos_case()}"].upload(neptune.types.File(html_path))
+
+
 def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
     dataset, mappings_by_metrics_file = meltria_loader.load_dataset(
         cfg.metrics_files,
@@ -111,19 +126,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
-
-            img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
-            run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
-
-            nwg = Network()
-            # piviz assert isinstance(n_id, str) or isinstance(n_id, int)
-            relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
-            relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
-            nwg.from_nx(relabeled_graph)
-            nwg.toggle_physics(True)
-            html_path = os.path.join(os.getcwd(), record.basename_of_metrics_file() + '.nw_graph.html')
-            nwg.write_html(html_path)
-            run[f"tests/causal_graphs_html/{record.chaos_case()}"].upload(neptune.types.File(html_path))
+            log_causal_graph(run, causal_graph, record)
 
         accuracy = accuracy_score([1] * len(y_pred), y_pred)
         scores_df = scores_df.append(
