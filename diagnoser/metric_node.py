@@ -1,6 +1,7 @@
 from enum import Enum
 from functools import total_ordering
 
+import eval.priorknowledge as pk
 import pandas as pd
 
 
@@ -60,6 +61,9 @@ class MetricNode:
 
     def is_middleware(self) -> bool:
         return self.comp_type == MetricType.MIDDLEWARE
+
+    def is_root(self) -> bool:
+        return any([self.label == rl for rl in pk.ROOT_METRIC_LABELS])
 
 
 class MetricNodes:
