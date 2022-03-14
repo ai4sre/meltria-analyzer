@@ -85,6 +85,23 @@ pandas = ">=1.1.2,<2.0.0"
 scipy = ">=1.5.2,<2.0.0"
 
 [[package]]
+name = "bokeh"
+version = "2.4.2"
+description = "Interactive plots and applications in the browser from Python"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+Jinja2 = ">=2.9"
+numpy = ">=1.11.3"
+packaging = ">=16.8"
+pillow = ">=7.1.0"
+PyYAML = ">=3.10"
+tornado = ">=5.1"
+typing-extensions = ">=3.10.0"
+
+[[package]]
 name = "boto3"
 version = "1.19.12"
 description = "The AWS SDK for Python"
@@ -1311,7 +1328,7 @@ typing-extensions = "*"
 name = "tornado"
 version = "6.1"
 description = "Tornado is a Python web framework and asynchronous networking library, originally developed at FriendFeed."
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">= 3.5"
 
@@ -1394,7 +1411,7 @@ test = ["websockets"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.10"
-content-hash = "83165cec760c45d28e8621f251f125c26c84590f377e3677426d08b35cf775c3"
+content-hash = "67848d2cc59898f17218bbdaef148fca9f1911d14277f54ae834bf089dab75e8"
 
 [metadata.files]
 antlr4-python3-runtime = [
@@ -1447,6 +1464,10 @@ backcall = [
 banpei = [
     {file = "banpei-0.1.2-py3-none-any.whl", hash = "sha256:a5a4eb9ad90d8783be3e650c0032dbfffd7fef15f87dd9487705da6cb6cab78d"},
     {file = "banpei-0.1.2.tar.gz", hash = "sha256:979699f6ae2a3377ad77b7fa79daf4c2f27a3b84f188f1d74d94de4ff59e9a74"},
+]
+bokeh = [
+    {file = "bokeh-2.4.2-py3-none-any.whl", hash = "sha256:2a842d717feeee802e668054277c09054b6f1561557a16dddaf5f7c452f2728c"},
+    {file = "bokeh-2.4.2.tar.gz", hash = "sha256:f0a4b53364ed3b7eb936c5cb1a4f4132369e394c7ae0a8ef420459410958033d"},
 ]
 boto3 = [
     {file = "boto3-1.19.12-py3-none-any.whl", hash = "sha256:b9105554477978e80fda1103ff21ecf07502080667730e45383e1d3951c87954"},
