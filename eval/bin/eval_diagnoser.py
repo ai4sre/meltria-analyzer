@@ -67,10 +67,7 @@ def log_causal_graph(run: neptune.Run, causal_graph: nx.DiGraph, record: Dataset
     nwg.toggle_physics(True)
     html_path = os.path.join(os.getcwd(), record.basename_of_metrics_file() + '.nw_graph.html')
     nwg.write_html(html_path)
-    run[f"tests/causal_graphs_html/{record.chaos_case_full()}"].upload(neptune.types.File(html_path))
-
-    img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
-    run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
+    run[f"tests/causal_graphs/{record.chaos_case_full()}"].upload(neptune.types.File(html_path))
 
 
 def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
