@@ -32,11 +32,11 @@ def set_visual_style_to_graph(G: nx.DiGraph) -> None:
     """
     for node in G.nodes:
         if node.is_root():
-            color = "red"
-            size = 25
+            color = "orange"
+            size = 20
         elif node.is_service():
             color = "blue"
-            size = 20
+            size = 15
         elif node.is_middleware():
             color = "purple"
             size = 10
@@ -56,7 +56,10 @@ def set_visual_style_to_graph(G: nx.DiGraph) -> None:
 def log_causal_graph(run: neptune.Run, causal_graph: nx.DiGraph, record: DatasetRecord) -> None:
     set_visual_style_to_graph(causal_graph)
 
-    nwg = Network(directed=True, height='100%', width='100%')
+    nwg = Network(
+        directed=True, height='1000px', width='1000px',
+        heading=record.chaos_case_file(),
+    )
     # piviz assert isinstance(n_id, str) or isinstance(n_id, int)
     relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
     relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
