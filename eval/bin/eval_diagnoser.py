@@ -49,12 +49,14 @@ def set_visual_style_to_graph(G: nx.DiGraph) -> None:
         G.nodes[node]["color"] = color
         G.nodes[node]["size"] = size
         G.nodes[node]["label"] = node.label
+    for u, v in G.edges:
+        G.edges[u, v]["color"] = "black"
 
 
 def log_causal_graph(run: neptune.Run, causal_graph: nx.DiGraph, record: DatasetRecord) -> None:
     set_visual_style_to_graph(causal_graph)
 
-    nwg = Network(directed=True)
+    nwg = Network(directed=True, height='100%', width='100%')
     # piviz assert isinstance(n_id, str) or isinstance(n_id, int)
     relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
     relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
