@@ -54,10 +54,7 @@ def set_visual_style_to_graph(G: nx.DiGraph) -> None:
 def log_causal_graph(run: neptune.Run, causal_graph: nx.DiGraph, record: DatasetRecord) -> None:
     set_visual_style_to_graph(causal_graph)
 
-    img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
-    run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
-
-    nwg = Network()
+    nwg = Network(directed=True)
     # piviz assert isinstance(n_id, str) or isinstance(n_id, int)
     relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
     relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
@@ -66,6 +63,9 @@ def log_causal_graph(run: neptune.Run, causal_graph: nx.DiGraph, record: Dataset
     html_path = os.path.join(os.getcwd(), record.basename_of_metrics_file() + '.nw_graph.html')
     nwg.write_html(html_path)
     run[f"tests/causal_graphs_html/{record.chaos_case()}"].upload(neptune.types.File(html_path))
+
+    img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
+    run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
 
 
 def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
