@@ -66,7 +66,7 @@ class MetricNode:
         return any([self.label == rl for rl in pk.ROOT_METRIC_LABELS])
 
 
-class MetricNodes:
+class MetricNodes(object):
     def __init__(self, num_to_node: dict[int, MetricNode]) -> None:
         self.nodes: list[MetricNode] = []
         self._i = 0

@@ -25,7 +25,7 @@ logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
 
-def set_visual_style_to_graph(G: nx.DiGraph) -> None:
+def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) -> None:
     """Set graph style followed by The valid properties
     https://pyvis.readthedocs.io/en/latest/tutorial.html#adding-list-of-nodes-with-properties
     >>> ['size', 'value', 'title', 'x', 'y', 'label', 'color']
@@ -52,15 +52,24 @@ def set_visual_style_to_graph(G: nx.DiGraph) -> None:
     for u, v in G.edges:
         G.edges[u, v]["color"] = "black"
 
+    for route in gt_routes:
+        node_list = list(route)
+        cause_node: mn.MetricNode = node_list[-1]
+        G.nodes[cause_node]["color"] = 'red'
+        for u, v in zip(node_list, node_list[1:]):
+            if G.has_edge(v, u):  # check v -> u
+                G.edges[v, u]["color"] = 'red'
 
-def log_causal_graph(run: neptune.Run, causal_graph: nx.DiGraph, record: DatasetRecord) -> None:
-    set_visual_style_to_graph(causal_graph)
+def log_causal_graph(
+    run: neptune.Run, causal_graph: nx.DiGraph, record: DatasetRecord, gt_routes: list[mn.MetricNodes],
+) -> None:
+    set_visual_style_to_graph(causal_graph, gt_routes)
 
     nwg = Network(
         directed=True, height='800px', width='1000px',
         heading=record.chaos_case_full(),
     )
-    # piviz assert isinstance(n_id, str) or isinstance(n_id, int)
+    # pyvis assert isinstance(n_id, str) or isinstance(n_id, int)
     relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
     relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
     nwg.from_nx(relabeled_graph)
@@ -75,7 +84,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
         cfg.metrics_files,
         cfg.exclude_middleware_metrics,
     )
-    logger.info("Dataset loading complete")
+    logger.info("Dataset loading complete.")
 
     scores_df = pd.DataFrame(
         columns=['chaos_type', 'chaos_comp', 'accuracy', 'elapsed_time'],
@@ -156,7 +165,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
-            log_causal_graph(run, causal_graph, record)
+            log_causal_graph(run, causal_graph, record, routes)
 
         accuracy = accuracy_score([1] * len(y_pred), y_pred)
         scores_df = scores_df.append(
