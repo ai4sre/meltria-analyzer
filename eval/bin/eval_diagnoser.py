@@ -16,6 +16,7 @@ from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
+from pyvis.network import Network
 from sklearn.metrics import accuracy_score
 from tsdr import tsdr
 
@@ -24,22 +25,73 @@ logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
 
+def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) -> None:
+    """Set graph style followed by The valid properties
+    https://pyvis.readthedocs.io/en/latest/tutorial.html#adding-list-of-nodes-with-properties
+    >>> ['size', 'value', 'title', 'x', 'y', 'label', 'color']
+    """
+    for node in G.nodes:
+        if node.is_root():
+            color = "orange"
+            size = 20
+        elif node.is_service():
+            color = "blue"
+            size = 15
+        elif node.is_middleware():
+            color = "purple"
+            size = 10
+        elif node.is_container():
+            color = "green"
+            size = 10
+        else:
+            color = "grey"
+            size = 10
+        G.nodes[node]["color"] = color
+        G.nodes[node]["size"] = size
+        G.nodes[node]["label"] = node.label
+    for u, v in G.edges:
+        G.edges[u, v]["color"] = "black"
+
+    for route in gt_routes:
+        node_list = list(route)
+        cause_node: mn.MetricNode = node_list[-1]
+        G.nodes[cause_node]["color"] = 'red'
+        for u, v in zip(node_list, node_list[1:]):
+            if G.has_edge(v, u):  # check v -> u
+                G.edges[v, u]["color"] = 'red'
+
+
+def log_causal_graph(
+    run: neptune.Run, causal_graph: nx.DiGraph, record: DatasetRecord, gt_routes: list[mn.MetricNodes],
+) -> None:
+    set_visual_style_to_graph(causal_graph, gt_routes)
+
+    nwg = Network(
+        directed=True, height='800px', width='1000px',
+        heading=record.chaos_case_full(),
+    )
+    # pyvis assert isinstance(n_id, str) or isinstance(n_id, int)
+    relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
+    relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
+    nwg.from_nx(relabeled_graph)
+    nwg.toggle_physics(True)
+    html_path = os.path.join(os.getcwd(), record.basename_of_metrics_file() + '.nw_graph.html')
+    nwg.write_html(html_path)
+    run[f"tests/causal_graphs/{record.chaos_case_full()}"].upload(neptune.types.File(html_path))
+
+
 def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
     dataset, mappings_by_metrics_file = meltria_loader.load_dataset(
         cfg.metrics_files,
         cfg.exclude_middleware_metrics,
     )
-    logger.info("Dataset loading complete")
+    logger.info("Dataset loading complete.")
 
-    scores_df = pd.DataFrame(
-        columns=['chaos_type', 'chaos_comp', 'accuracy', 'elapsed_time'],
-        index=['chaos_type', 'chaos_comp']
-    ).dropna()
     tests_df = pd.DataFrame(
         columns=[
-            'chaos_type', 'chaos_comp', 'metrics_file', 'num_series',
-            'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges', 'g_density', 'g_flow_hierarchy',
-            'building_graph_elapsed_sec', 'routes', 'found_cause_metrics', 'grafana_dashboard_url',
+            'chaos_type', 'chaos_comp', 'metrics_file', 'graph_ok', 'building_graph_elapsed_sec',
+            'num_series', 'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges', 'g_density',
+            'g_flow_hierarchy', 'found_routes', 'found_cause_metrics', 'grafana_dashboard_url',
         ],
         index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'],
     ).dropna()
@@ -95,38 +147,44 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             graph_ok, routes = groundtruth.check_causal_graph(causal_graph, chaos_type, chaos_comp)
             if not graph_ok:
                 logger.info(f"wrong causal graph in {record.chaos_case_file()}")
-            y_pred.append(1 if graph_ok else 0)
             graph_building_elapsed_secs.append(stats['building_graph_elapsed_sec'])
             tests_df = tests_df.append(
                 pd.Series(
                     [
-                        chaos_type, chaos_comp, metrics_file, metrics_dimension['total'][2],
+                        chaos_type, chaos_comp, metrics_file, graph_ok, stats['building_graph_elapsed_sec'],
+                        metrics_dimension['total'][2],
                         stats['init_graph_nodes_num'], stats['init_graph_edges_num'],
                         stats['causal_graph_nodes_num'], stats['causal_graph_edges_num'],
                         stats['causal_graph_density'], stats['causal_graph_flow_hierarchy'],
-                        stats['building_graph_elapsed_sec'],
                         ', '.join([route.liststr() for route in routes]),
                         found_cause_nodes.liststr(), grafana_dashboard_url,
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
+            log_causal_graph(run, causal_graph, record, routes)
 
-            img: bytes = nx.nx_agraph.to_agraph(causal_graph).draw(prog='sfdp', format='png')
-            run[f"tests/causal_graphs/{record.chaos_case()}"].log(neptune.types.File.from_content(img))
+    tests_df['accurate'] = np.where(tests_df.graph_ok, 1, 0)
+    run['scores']['tp'] = tests_df['accurate'].agg('sum')
+    run['scores']['accuracy'] = tests_df['accurate'].agg(lambda x: sum(x) / len(x))
+    run['scores/building_graph_elapsed_sec'] = tests_df['building_graph_elapsed_sec'].mean()
 
-        accuracy = accuracy_score([1] * len(y_pred), y_pred)
-        scores_df = scores_df.append(
-            pd.Series([
-                chaos_type, chaos_comp, accuracy, np.mean(graph_building_elapsed_secs),
-                ], index=scores_df.columns,
-            ), ignore_index=True,
+    def agg_score(df) -> pd.DataFrame:
+        return df.agg(
+            tp=('accurate', 'sum'),
+            accuracy=('accurate', lambda x: sum(x) / len(x)),
+            building_graph_elapsed_sec_mean=('building_graph_elapsed_sec', 'mean'),
         )
 
-    run['tests/table'].upload(neptune.types.File.as_html(tests_df))
-    logger.info(tests_df)
-    run['scores/table'].upload(neptune.types.File.as_html(scores_df))
+    run['scores/summary_by_chaos_type'].upload(neptune.types.File.as_html(
+        agg_score(tests_df.groupby(['chaos_type'])).reset_index(),
+    ))
+    run['scores/summary_by_chaos_comp'].upload(neptune.types.File.as_html(
+        agg_score(tests_df.groupby(['chaos_comp'])).reset_index(),
+    ))
+    agg_df = agg_score(tests_df.groupby(['chaos_type', 'chaos_comp'])).reset_index()
+    run['scores/summary_by_chaos_type_and_chaos_comp'].upload(neptune.types.File.as_html(agg_df))
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        logger.info(scores_df)
+        logger.info("\n"+agg_df.to_string())
 
 
 @hydra.main(config_path='../conf/diagnoser', config_name='config')

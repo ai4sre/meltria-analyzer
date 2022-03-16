@@ -215,7 +215,7 @@ def build_causal_graph_with_pcalg(
     )
     DG: nx.DiGraph = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
     DG = nx.relabel_nodes(DG, mapping=nodes.num_to_node)
-    DG = find_dags(DG)
+    DG = find_graphs_containing_root_node(DG)
     return fix_edge_directions_in_causal_graph(DG)
 
 
@@ -227,21 +227,21 @@ def build_causal_graphs_with_pgmpy(
 ) -> nx.DiGraph:
     c = estimators.PC(data=df)
     ci_test = fisher_z if pc_citest == 'fisher-z' else pc_citest
-    G = c.estimate(
+    G: nx.DiGraph = c.estimate(
         variant=pc_variant,
         ci_test=ci_test,
         significance_level=pc_citest_alpha,
         return_type='pdag',
     )
-    return find_dags(G)
+    return find_graphs_containing_root_node(G)
 
 
-def find_dags(G: nx.DiGraph) -> nx.DiGraph:
-    # Exclude nodes that have no path to root node for visualization
+def find_graphs_containing_root_node(G: nx.DiGraph) -> nx.DiGraph:
+    """Find graphs containing root metric node.
+    """
     remove_nodes = []
     UG: nx.Graph = G.to_undirected()
-    nodes: nx.classes.reportviews.NodeView = G.nodes
-    for node in nodes:
+    for node in G.nodes:
         has_paths: list[bool] = []
         for root in pk.ROOT_METRIC_LABELS:
             rmn = mn.MetricNode(root)
@@ -250,15 +250,6 @@ def find_dags(G: nx.DiGraph) -> nx.DiGraph:
         if not any(has_paths):
             remove_nodes.append(node)
             continue
-        if node.is_service():
-            color = "red"
-        elif node.is_container():
-            color = "blue"
-        elif node.is_middleware():
-            color = "purple"
-        else:
-            color = "green"
-        G.nodes[node]["color"] = color
     G.remove_nodes_from(remove_nodes)
     return G
 

@@ -24,11 +24,21 @@ class DatasetRecord:
     def chaos_case(self) -> str:
         return f"{self.chaos_comp}/{self.chaos_type}"
 
+    def chaos_case_full(self) -> str:
+        return f"{self.chaos_case()}/{self.chaos_case_num()}"
+
     def chaos_case_file(self) -> str:
         return f"{self.metrics_file} of {self.chaos_case()}"
 
+    def chaos_case_num(self) -> str:
+        # eg. '2021-12-09-argowf-chaos-hg68n-carts-db_pod-cpu-hog_4.json'
+        return self.metrics_file.rsplit('_', maxsplit=1)[1].removesuffix('.json')
+
     def metrics_names(self) -> list[str]:
         return list(self.data_df.columns)
+
+    def basename_of_metrics_file(self) -> str:
+        return os.path.basename(self.metrics_file)
 
 
 def load_dataset(
