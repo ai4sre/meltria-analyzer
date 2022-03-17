@@ -11,13 +11,16 @@ import neptune.new as neptune
 import networkx as nx
 import numpy as np
 import pandas as pd
+from bokeh import plotting
+from bokeh.embed import components
+from bokeh.resources import CDN
+from bs4 import BeautifulSoup
 from diagnoser import diag
 from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
 from pyvis.network import Network
-from sklearn.metrics import accuracy_score
 from tsdr import tsdr
 
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
@@ -61,8 +64,31 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
                 G.edges[v, u]["color"] = 'red'
 
 
+def get_html_component_of_time_series_of_graph_nodes(
+    record: DatasetRecord, nodes: list[mn.MetricNode], data_df: pd.DataFrame,
+) -> tuple[str, str]:
+    p: plotting.Figure = plotting.figure(
+        title=f"{record.chaos_case_full()}",
+        x_axis_label='interval', y_axis_label='zscore',
+        width=1000, height=600,
+    )
+    for node in nodes:
+        series: np.ndarray = data_df[node.label].to_numpy()
+        if node.is_root():
+            p.line(x=np.arange(series.size), y=series, legend_label=f"root metric: {node.label}", line_width=1)
+        else:
+            p.line(x=np.arange(series.size), y=series, legend_label=f"{node.label}", line_width=1)
+    p.add_layout(p.legend[0], 'right')
+    script, div = components(p)
+    return script, div
+
+
 def log_causal_graph(
-    run: neptune.Run, causal_graph: nx.DiGraph, record: DatasetRecord, gt_routes: list[mn.MetricNodes],
+    run: neptune.Run,
+    causal_graph: nx.DiGraph,
+    record: DatasetRecord,
+    gt_routes: list[mn.MetricNodes],
+    data_df: pd.DataFrame,
 ) -> None:
     set_visual_style_to_graph(causal_graph, gt_routes)
 
@@ -77,7 +103,25 @@ def log_causal_graph(
     nwg.toggle_physics(True)
     html_path = os.path.join(os.getcwd(), record.basename_of_metrics_file() + '.nw_graph.html')
     nwg.write_html(html_path)
-    run[f"tests/causal_graphs/{record.chaos_case_full()}"].upload(neptune.types.File(html_path))
+
+    # append time series plots to the html containing network graph
+    with open(html_path) as f:
+        soup = BeautifulSoup(f.read(), "html.parser")
+        soup.find('head').append(BeautifulSoup(CDN.render_css(), "html.parser")) # load bokehJS
+        soup.find('head').append(BeautifulSoup(CDN.render_js(), "html.parser")) # load bokehJS
+        bk_script_raw, bk_div_raw = get_html_component_of_time_series_of_graph_nodes(
+            record, list(causal_graph.nodes), data_df,
+        )
+        body = soup.find('body')
+        pyvis_div = body.find('div', id="mynetwork")
+        bk_div = BeautifulSoup(bk_div_raw, "html.parser").find('div')
+        bk_div.attrs['style'] = 'position: relative; top: 800px;'  # place bk canvas below pivis canvas
+        pyvis_div.insert_after(bk_div)
+        body.append(BeautifulSoup(bk_script_raw, "html.parser"))
+
+    run[f"tests/causal_graphs/{record.chaos_case_full()}"].upload(
+        neptune.types.File.from_content(soup.prettify(), extension='html'),
+    )
 
 
 def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
@@ -161,7 +205,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
-            log_causal_graph(run, causal_graph, record, routes)
+            log_causal_graph(run, causal_graph, record, routes, reduced_df)
 
     tests_df['accurate'] = np.where(tests_df.graph_ok, 1, 0)
     run['scores']['tp'] = tests_df['accurate'].agg('sum')
