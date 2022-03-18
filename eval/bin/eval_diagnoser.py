@@ -5,6 +5,7 @@ import os
 from multiprocessing import cpu_count
 
 import diagnoser.metric_node as mn
+import holoviews as hv
 import hydra
 import meltria.loader as meltria_loader
 import neptune.new as neptune
@@ -12,7 +13,8 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from bokeh import plotting
-from bokeh.embed import components
+from bokeh.embed import components, file_html
+from bokeh.models import HoverTool
 from bokeh.resources import CDN
 from bs4 import BeautifulSoup
 from diagnoser import diag
@@ -22,6 +24,8 @@ from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
 from pyvis.network import Network
 from tsdr import tsdr
+
+hv.extension('bokeh')
 
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
 logger = logging.getLogger(__file__)
@@ -36,16 +40,16 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
     for node in G.nodes:
         if node.is_root():
             color = "orange"
-            size = 20
+            size = 25
         elif node.is_service():
             color = "blue"
-            size = 15
+            size = 20
         elif node.is_middleware():
             color = "purple"
-            size = 10
+            size = 15
         elif node.is_container():
             color = "green"
-            size = 10
+            size = 15
         else:
             color = "grey"
             size = 10
@@ -92,35 +96,56 @@ def log_causal_graph(
 ) -> None:
     set_visual_style_to_graph(causal_graph, gt_routes)
 
-    nwg = Network(
-        directed=True, height='800px', width='1000px',
-        heading=record.chaos_case_full(),
-    )
-    # pyvis assert isinstance(n_id, str) or isinstance(n_id, int)
     relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
     relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
-    nwg.from_nx(relabeled_graph)
-    nwg.toggle_physics(True)
-    html_path = os.path.join(os.getcwd(), record.basename_of_metrics_file() + '.nw_graph.html')
-    nwg.write_html(html_path)
+    hv_graph = hv.Graph.from_networkx(relabeled_graph, nx.layout.kamada_kawai_layout).opts(
+        directed=True,
+        tools=['hover', 'box_select', 'lasso_select', 'tap'],
+        width=800, height=600,
+        node_size='size', node_color='color',
+        cmap=['red', 'orange', 'blue', 'green', 'purple', 'grey'],
+        edge_color='color', edge_cmap=['red', 'black'],
+        title=f"Causal Graph: {record.chaos_case_full()}")
+    hv_labels = hv.Labels(hv_graph.nodes, ['x', 'y'], 'label').opts(
+        text_font_size='10pt', text_color='black', bgcolor='white', yoffset=-0.06)
+    hv_graph_with_labels = (hv_graph * hv_labels)
 
     # append time series plots to the html containing network graph
-    with open(html_path) as f:
-        soup = BeautifulSoup(f.read(), "html.parser")
-        soup.find('head').append(BeautifulSoup(CDN.render_css(), "html.parser")) # load bokehJS
-        soup.find('head').append(BeautifulSoup(CDN.render_js(), "html.parser")) # load bokehJS
-        bk_script_raw, bk_div_raw = get_html_component_of_time_series_of_graph_nodes(
-            record, list(causal_graph.nodes), data_df,
-        )
-        body = soup.find('body')
-        pyvis_div = body.find('div', id="mynetwork")
-        bk_div = BeautifulSoup(bk_div_raw, "html.parser").find('div')
-        bk_div.attrs['style'] = 'position: relative; top: 800px;'  # place bk canvas below pivis canvas
-        pyvis_div.insert_after(bk_div)
-        body.append(BeautifulSoup(bk_script_raw, "html.parser"))
 
+    hv_curves = []
+    hover = HoverTool(description='Custom Tooltip', tooltips=[("(x,y)", "($x, $y)"), ('label', '@label')])
+    for node in causal_graph.nodes:
+        series = data_df[node.label]
+        df = pd.DataFrame(data={
+            'x': np.arange(series.size),
+            'y': series.to_numpy(),
+            'label': node.label,  # to show label with hovertool
+        })
+        if node.is_root():
+            c = hv.Curve(df, label=node.label, group='root').opts(tools=[hover, 'tap'])
+        else:
+            c = hv.Curve(df, label=node.label).opts(tools=[hover, 'tap'])
+        hv_curves.append(c)
+
+    ts_graph = hv.Overlay(hv_curves).opts(
+        tools=['hover', 'tap'],
+        height=400,
+        width=1000,
+        xlabel='time',
+        ylabel='zscore',
+        show_grid=True,
+        title=f'Chart of time series metrics {record.chaos_case_full()}',
+        legend_position='right',
+        legend_muted=True,
+    )
+
+    layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
+        shared_axes=False, width=1200,
+        title=f"{record.chaos_case_file()}",
+    ).cols(1)
+    html = file_html(hv.render(layout), CDN, f"{record.chaos_case_full()}")
     run[f"tests/causal_graphs/{record.chaos_case_full()}"].upload(
-        neptune.types.File.from_content(soup.prettify(), extension='html'),
+        neptune.types.File.from_content(html, extension='html'),
     )
 
 
