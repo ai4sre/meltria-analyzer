@@ -50,6 +50,9 @@ class MetricNode:
     def __str__(self) -> str:
         return self.label
 
+    def __repr__(self) -> str:
+        return self.label
+
     def is_service(self) -> bool:
         return self.comp_type == MetricType.SERVICE
 

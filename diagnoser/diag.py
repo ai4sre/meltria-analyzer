@@ -233,7 +233,24 @@ def build_causal_graphs_with_pgmpy(
         significance_level=pc_citest_alpha,
         return_type='pdag',
     )
-    return find_graphs_containing_root_node(G)
+    if enable_filtering_graph_nodes:
+        G = find_graphs_containing_root_node(G)
+    return G
+
+
+def find_connected_subgraphs(G: nx.DiGraph) -> tuple[list[nx.DiGraph], list[nx.DiGraph]]:
+    """ Find subgraphs connected components.
+    """
+    root_contained_subg: list[nx.DiGraph] = []
+    root_uncontained_subg: list[nx.DiGraph] = []
+    root_nodes = [mn.MetricNode(root) for root in pk.ROOT_METRIC_LABELS]
+    for c in nx.connected_components(G.to_undirected()):
+        subg = G.subgraph(c).copy()
+        if any([r in c for r in root_nodes]):
+            root_contained_subg.append(subg)
+        else:
+            root_uncontained_subg.append(subg)
+    return root_contained_subg, root_uncontained_subg
 
 
 def find_graphs_containing_root_node(G: nx.DiGraph) -> nx.DiGraph:

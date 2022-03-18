@@ -136,3 +136,39 @@ def test_fix_edge_directions_in_causal_graph(case, input, expected):
     G.add_edges_from(paths)
     got = diag.fix_edge_directions_in_causal_graph(G)
     assert sorted([(u.label, v.label, {}) for u, v in got.edges]) == sorted(expected)
+
+
+@pytest.mark.parametrize(
+    "input,expected",
+    [
+        (
+            [
+                ("s-user_latency", "s-front-end_latency"),
+                ("c-user_cpu_usage_seconds_total", "s-user_latency"),
+                ("c-orders_sockets", "s-orders_latency"),
+                ("c-orders-db_sockets", "c-orders_sockets"),
+            ],
+            (
+                [
+                    [
+                        ("s-user_latency", "s-front-end_latency", {}),
+                        ("c-user_cpu_usage_seconds_total", "s-user_latency", {}),
+                    ],
+                ],
+                [
+                    [
+                        ("c-orders_sockets", "s-orders_latency", {}),
+                        ("c-orders-db_sockets", "c-orders_sockets", {}),
+                    ],
+                ]
+            ),
+        ),
+    ],
+)
+def test_find_connected_subgraphs(input, expected):
+    G = nx.DiGraph()
+    G.add_edges_from([(mn.MetricNode(u), mn.MetricNode(v)) for u, v in input])
+    root_contained_subgs, root_uncontained_subgs = diag.find_connected_subgraphs(G)
+
+    assert sorted([(u.label, v.label, {}) for u, v in root_contained_subgs[0].edges]) == sorted(expected[0][0])
+    assert sorted([(u.label, v.label, {}) for u, v in root_uncontained_subgs[0].edges]) == sorted(expected[1][0])
