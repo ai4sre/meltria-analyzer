@@ -12,17 +12,14 @@ import neptune.new as neptune
 import networkx as nx
 import numpy as np
 import pandas as pd
-from bokeh import plotting
-from bokeh.embed import components, file_html
+from bokeh.embed import file_html
 from bokeh.models import HoverTool
 from bokeh.resources import CDN
-from bs4 import BeautifulSoup
 from diagnoser import diag
 from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
-from pyvis.network import Network
 from tsdr import tsdr
 
 hv.extension('bokeh')
@@ -68,37 +65,10 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
                 G.edges[v, u]["color"] = 'red'
 
 
-def get_html_component_of_time_series_of_graph_nodes(
-    record: DatasetRecord, nodes: list[mn.MetricNode], data_df: pd.DataFrame,
-) -> tuple[str, str]:
-    p: plotting.Figure = plotting.figure(
-        title=f"{record.chaos_case_full()}",
-        x_axis_label='interval', y_axis_label='zscore',
-        width=1000, height=600,
-    )
-    for node in nodes:
-        series: np.ndarray = data_df[node.label].to_numpy()
-        if node.is_root():
-            p.line(x=np.arange(series.size), y=series, legend_label=f"root metric: {node.label}", line_width=1)
-        else:
-            p.line(x=np.arange(series.size), y=series, legend_label=f"{node.label}", line_width=1)
-    p.add_layout(p.legend[0], 'right')
-    script, div = components(p)
-    return script, div
-
-
-def log_causal_graph(
-    run: neptune.Run,
-    causal_graph: nx.DiGraph,
-    record: DatasetRecord,
-    gt_routes: list[mn.MetricNodes],
-    data_df: pd.DataFrame,
-) -> None:
-    set_visual_style_to_graph(causal_graph, gt_routes)
-
-    relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
-    relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
-    hv_graph = hv.Graph.from_networkx(relabeled_graph, nx.layout.kamada_kawai_layout).opts(
+def create_figure_of_causal_graph(G: nx.DiGraph, record: DatasetRecord):
+    """ Create a figure of causal graph.
+    """
+    hv_graph = hv.Graph.from_networkx(G, nx.layout.kamada_kawai_layout).opts(
         directed=True,
         tools=['hover', 'box_select', 'lasso_select', 'tap'],
         width=800, height=600,
@@ -108,14 +78,18 @@ def log_causal_graph(
         title=f"Causal Graph: {record.chaos_case_full()}")
     hv_labels = hv.Labels(hv_graph.nodes, ['x', 'y'], 'label').opts(
         text_font_size='10pt', text_color='black', bgcolor='white', yoffset=-0.06)
-    hv_graph_with_labels = (hv_graph * hv_labels)
+    return (hv_graph * hv_labels)
 
-    # append time series plots to the html containing network graph
 
+def create_figure_of_time_series_lines(
+    series_df: pd.DataFrame,
+    nodes: list[mn.MetricNode],
+    record: DatasetRecord,
+):
     hv_curves = []
     hover = HoverTool(description='Custom Tooltip', tooltips=[("(x,y)", "($x, $y)"), ('label', '@label')])
-    for node in causal_graph.nodes:
-        series = data_df[node.label]
+    for node in nodes:
+        series = series_df[node.label]
         df = pd.DataFrame(data={
             'x': np.arange(series.size),
             'y': series.to_numpy(),
@@ -126,8 +100,7 @@ def log_causal_graph(
         else:
             c = hv.Curve(df, label=node.label).opts(tools=[hover, 'tap'])
         hv_curves.append(c)
-
-    ts_graph = hv.Overlay(hv_curves).opts(
+    return hv.Overlay(hv_curves).opts(
         tools=['hover', 'tap'],
         height=400,
         width=1000,
@@ -139,10 +112,27 @@ def log_causal_graph(
         legend_muted=True,
     )
 
+
+def log_causal_graph(
+    run: neptune.Run,
+    causal_graph: nx.DiGraph,
+    record: DatasetRecord,
+    gt_routes: list[mn.MetricNodes],
+    data_df: pd.DataFrame,
+) -> None:
+    set_visual_style_to_graph(causal_graph, gt_routes)
+
+    nodes: list[mn.MetricNode] = list(causal_graph.nodes)
+    relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(nodes).node_to_label()
+    relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
+
+    hv_graph_with_labels = create_figure_of_causal_graph(relabeled_graph, record)
+    ts_graph = create_figure_of_time_series_lines(data_df, nodes, record)
     layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
         shared_axes=False, width=1200,
         title=f"{record.chaos_case_file()}",
     ).cols(1)
+
     html = file_html(hv.render(layout), CDN, f"{record.chaos_case_full()}")
     run[f"tests/causal_graphs/{record.chaos_case_full()}"].upload(
         neptune.types.File.from_content(html, extension='html'),
