@@ -68,11 +68,7 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
                 G.edges[v, u]["color"] = 'red'
 
 
-def create_figure_of_causal_graph(
-    root_contained_graphs: list[nx.DiGraph],
-    root_uncontained_graphs: list[nx.DiGraph],
-    record: DatasetRecord,
-):
+def create_figure_of_causal_graph(graphs: list[nx.DiGraph], record: DatasetRecord):
     """ Create a figure of causal graph.
     """
     opts = dict(
@@ -84,29 +80,26 @@ def create_figure_of_causal_graph(
         edge_color='color', edge_cmap=['red', 'black'],
     )
 
-    def create_graph(G: nx.DiGraph, title: str):
-        hv_graph = hv.Graph.from_networkx(G, nx.layout.kamada_kawai_layout).opts(
-            **opts, title=title)
+    def create_graph(G: nx.DiGraph):
+        # Holoviews Graph only handle a graph whose node type is int or str.
+        relabeled_G = mn.relabel_graph_nodes_to_label(G)
+        hv_graph = hv.Graph.from_networkx(relabeled_G, nx.layout.kamada_kawai_layout).opts(
+            **opts, title=f"Causal Graph: {record.chaos_case_full()}")
         hv_labels = hv.Labels(hv_graph.nodes, ['x', 'y'], 'label').opts(
             text_font_size='10pt', text_color='black', bgcolor='white', yoffset=-0.06)
         return (hv_graph * hv_labels)
 
-    return reduce(
-        add,
-        [create_graph(g, f"Causal Graph with root: {record.chaos_case_full()}") for g in root_contained_graphs] + \
-        [create_graph(g, f"Causal Graph without root: {record.chaos_case_full()}") for g in root_uncontained_graphs]
-    )
+    return reduce(add, [create_graph(g) for g in graphs])
 
 
 def create_figure_of_time_series_lines(
     series_df: pd.DataFrame,
-    root_contained_graphs: list[nx.DiGraph],
-    root_uncontained_graphs: list[nx.DiGraph],
+    graphs: list[nx.DiGraph],
     record: DatasetRecord,
 ):
     hv_curves = []
     hover = HoverTool(description='Custom Tooltip', tooltips=[("(x,y)", "($x, $y)"), ('label', '@label')])
-    for G in root_contained_graphs + root_uncontained_graphs:
+    for G in graphs:
         for node in G.nodes:
             series = series_df[node.label]
             df = pd.DataFrame(data={
@@ -139,24 +132,21 @@ def log_causal_graph(
     gt_routes: list[mn.MetricNodes],
     data_df: pd.DataFrame,
 ) -> None:
-    for graphs in causal_subgraphs:
+    for (graphs, suffix) in ((causal_subgraphs[0], "with-root"), (causal_subgraphs[1], "without-root")):
         for g in graphs:
             set_visual_style_to_graph(g, gt_routes)
-
-    # Holoviews only handle a graph whose node type is int or str.
-    relabeled_subgraphs = tuple([mn.relabel_graph_nodes_to_label(g) for g in graphs] for graphs in causal_subgraphs)
-
-    hv_graph_with_labels = create_figure_of_causal_graph(relabeled_subgraphs[0], relabeled_subgraphs[1], record)
-    ts_graph = create_figure_of_time_series_lines(data_df, causal_subgraphs[0], causal_subgraphs[1], record)
-    layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
-        shared_axes=False, width=1200,
-        title=f"{record.chaos_case_file()}",
-    ).cols(1)
-
-    html = file_html(hv.render(layout), CDN, f"{record.chaos_case_full()}")
-    run[f"tests/causal_graphs/{record.chaos_case_full()}"].upload(
-        neptune.types.File.from_content(html, extension='html'),
-    )
+        # Holoviews Graph only handle a graph whose node type is int or str.
+        relabeled_graphs = [mn.relabel_graph_nodes_to_label(g) for g in graphs]
+        hv_graph_with_labels = create_figure_of_causal_graph(relabeled_graphs, record)
+        ts_graph = create_figure_of_time_series_lines(data_df, graphs, record)
+        root_contained_layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
+            shared_axes=False, width=1200,
+            title=f"{record.chaos_case_file()}",
+        ).cols(len(graphs))
+        html = file_html(hv.render(root_contained_layout), CDN, f"{record.chaos_case_full()}: {suffix}")
+        run[f"tests/causal_graphs/{record.chaos_case_full()}-{suffix}"].upload(
+            neptune.types.File.from_content(html, extension='html'),
+        )
 
 
 def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
