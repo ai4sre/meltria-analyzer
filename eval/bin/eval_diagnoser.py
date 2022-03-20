@@ -74,7 +74,7 @@ def create_figure_of_causal_graph(graphs: list[nx.DiGraph], record: DatasetRecor
     opts = dict(
         directed=True,
         tools=['hover', 'box_select', 'lasso_select', 'tap'],
-        width=800, height=600,
+        width=600, height=400,
         node_size='size', node_color='color',
         cmap=['red', 'orange', 'blue', 'green', 'purple', 'grey'],
         edge_color='color', edge_cmap=['red', 'black'],
@@ -97,9 +97,10 @@ def create_figure_of_time_series_lines(
     graphs: list[nx.DiGraph],
     record: DatasetRecord,
 ):
-    hv_curves = []
     hover = HoverTool(description='Custom Tooltip', tooltips=[("(x,y)", "($x, $y)"), ('label', '@label')])
+    figures = []
     for G in graphs:
+        hv_curves = []
         for node in G.nodes:
             series = series_df[node.label]
             df = pd.DataFrame(data={
@@ -112,17 +113,18 @@ def create_figure_of_time_series_lines(
             else:
                 c = hv.Curve(df, label=node.label).opts(tools=[hover, 'tap'])
             hv_curves.append(c)
-    return hv.Overlay(hv_curves).opts(
-        tools=['hover', 'tap'],
-        height=400,
-        width=1000,
-        xlabel='time',
-        ylabel='zscore',
-        show_grid=True,
-        title=f'Chart of time series metrics {record.chaos_case_full()}',
-        legend_position='right',
-        legend_muted=True,
-    )
+        figures.append(hv.Overlay(hv_curves).opts(
+            tools=['hover', 'tap'],
+            height=300,
+            width=700,
+            xlabel='time',
+            ylabel='zscore',
+            show_grid=True,
+            title=f'Chart of time series metrics {record.chaos_case_full()}',
+            legend_position='right',
+            legend_muted=True,
+        ))
+    return reduce(add, figures)
 
 
 def log_causal_graph(
@@ -136,11 +138,10 @@ def log_causal_graph(
         for g in graphs:
             set_visual_style_to_graph(g, gt_routes)
         # Holoviews Graph only handle a graph whose node type is int or str.
-        relabeled_graphs = [mn.relabel_graph_nodes_to_label(g) for g in graphs]
-        hv_graph_with_labels = create_figure_of_causal_graph(relabeled_graphs, record)
+        hv_graph_with_labels = create_figure_of_causal_graph(graphs, record)
         ts_graph = create_figure_of_time_series_lines(data_df, graphs, record)
         root_contained_layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
-            shared_axes=False, width=1200,
+            shared_axes=False, width=800,
             title=f"{record.chaos_case_file()}",
         ).cols(len(graphs))
         html = file_html(hv.render(root_contained_layout), CDN, f"{record.chaos_case_full()}: {suffix}")
@@ -230,6 +231,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
+            logger.info(f">> Logging causal graph including chaos-injected metrics of {record.chaos_case_file()}")
             log_causal_graph(run, causal_subgraphs, record, routes, reduced_df)
 
     tests_df['accurate'] = np.where(tests_df.graph_ok, 1, 0)
