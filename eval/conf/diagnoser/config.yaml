@@ -7,7 +7,7 @@ defaults:
   - tsdr/step2: default
 params:
   pc_library: 'pcalg'   # 'pcalg' or 'pgmpy'
-  pc_variant: none      # none or 'stable'
+  pc_variant: 'stable'  # none or 'stable'
   pc_citest: 'fisher-z'
   pc_citest_alpha: 0.01
 upload_figures: false  # upload graph image to Neptune
