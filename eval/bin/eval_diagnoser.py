@@ -2,7 +2,9 @@
 
 import logging
 import os
+from functools import reduce
 from multiprocessing import cpu_count
+from operator import add
 
 import diagnoser.metric_node as mn
 import holoviews as hv
@@ -59,47 +61,64 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
     for route in gt_routes:
         node_list = list(route)
         cause_node: mn.MetricNode = node_list[-1]
-        G.nodes[cause_node]["color"] = 'red'
+        if G.has_node(cause_node):
+            G.nodes[cause_node]["color"] = 'red'
         for u, v in zip(node_list, node_list[1:]):
             if G.has_edge(v, u):  # check v -> u
                 G.edges[v, u]["color"] = 'red'
 
 
-def create_figure_of_causal_graph(G: nx.DiGraph, record: DatasetRecord):
+def create_figure_of_causal_graph(
+    root_contained_graphs: list[nx.DiGraph],
+    root_uncontained_graphs: list[nx.DiGraph],
+    record: DatasetRecord,
+):
     """ Create a figure of causal graph.
     """
-    hv_graph = hv.Graph.from_networkx(G, nx.layout.kamada_kawai_layout).opts(
+    opts = dict(
         directed=True,
         tools=['hover', 'box_select', 'lasso_select', 'tap'],
         width=800, height=600,
         node_size='size', node_color='color',
         cmap=['red', 'orange', 'blue', 'green', 'purple', 'grey'],
         edge_color='color', edge_cmap=['red', 'black'],
-        title=f"Causal Graph: {record.chaos_case_full()}")
-    hv_labels = hv.Labels(hv_graph.nodes, ['x', 'y'], 'label').opts(
-        text_font_size='10pt', text_color='black', bgcolor='white', yoffset=-0.06)
-    return (hv_graph * hv_labels)
+    )
+
+    def create_graph(G: nx.DiGraph, title: str):
+        hv_graph = hv.Graph.from_networkx(G, nx.layout.kamada_kawai_layout).opts(
+            **opts, title=title)
+        hv_labels = hv.Labels(hv_graph.nodes, ['x', 'y'], 'label').opts(
+            text_font_size='10pt', text_color='black', bgcolor='white', yoffset=-0.06)
+        return (hv_graph * hv_labels)
+
+    return reduce(
+        add,
+        [create_graph(g, f"Causal Graph with root: {record.chaos_case_full()}") for g in root_contained_graphs] + \
+        [create_graph(g, f"Causal Graph without root: {record.chaos_case_full()}") for g in root_uncontained_graphs]
+    )
 
 
 def create_figure_of_time_series_lines(
     series_df: pd.DataFrame,
-    nodes: list[mn.MetricNode],
+    root_contained_graphs: list[nx.DiGraph],
+    root_uncontained_graphs: list[nx.DiGraph],
     record: DatasetRecord,
 ):
     hv_curves = []
     hover = HoverTool(description='Custom Tooltip', tooltips=[("(x,y)", "($x, $y)"), ('label', '@label')])
-    for node in nodes:
-        series = series_df[node.label]
-        df = pd.DataFrame(data={
-            'x': np.arange(series.size),
-            'y': series.to_numpy(),
-            'label': node.label,  # to show label with hovertool
-        })
-        if node.is_root():
-            c = hv.Curve(df, label=node.label, group='root').opts(tools=[hover, 'tap'])
-        else:
-            c = hv.Curve(df, label=node.label).opts(tools=[hover, 'tap'])
-        hv_curves.append(c)
+    for G in root_contained_graphs + root_uncontained_graphs:
+        for node in G.nodes:
+            series = series_df[node.label]
+            df = pd.DataFrame(data={
+                'x': np.arange(series.size),
+                'y': series.to_numpy(),
+                'label': node.label,  # to show label with hovertool
+            })
+            if node.is_root():
+                c = hv.Curve(df, label=node.label, group='root').opts(tools=[hover, 'tap'])
+            else:
+                c = hv.Curve(df, label=node.label).opts(tools=[hover, 'tap'])
+            hv_curves.append(c)
     return hv.Overlay(hv_curves).opts(
         tools=['hover', 'tap'],
         height=400,
@@ -115,19 +134,20 @@ def create_figure_of_time_series_lines(
 
 def log_causal_graph(
     run: neptune.Run,
-    causal_graph: nx.DiGraph,
+    causal_subgraphs: tuple[list[nx.DiGraph], list[nx.DiGraph]],
     record: DatasetRecord,
     gt_routes: list[mn.MetricNodes],
     data_df: pd.DataFrame,
 ) -> None:
-    set_visual_style_to_graph(causal_graph, gt_routes)
+    for graphs in causal_subgraphs:
+        for g in graphs:
+            set_visual_style_to_graph(g, gt_routes)
 
-    nodes: list[mn.MetricNode] = list(causal_graph.nodes)
-    relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(nodes).node_to_label()
-    relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
+    # Holoviews only handle a graph whose node type is int or str.
+    relabeled_subgraphs = tuple([mn.relabel_graph_nodes_to_label(g) for g in graphs] for graphs in causal_subgraphs)
 
-    hv_graph_with_labels = create_figure_of_causal_graph(relabeled_graph, record)
-    ts_graph = create_figure_of_time_series_lines(data_df, nodes, record)
+    hv_graph_with_labels = create_figure_of_causal_graph(relabeled_subgraphs[0], relabeled_subgraphs[1], record)
+    ts_graph = create_figure_of_time_series_lines(data_df, causal_subgraphs[0], causal_subgraphs[1], record)
     layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
         shared_axes=False, width=1200,
         title=f"{record.chaos_case_file()}",
@@ -184,7 +204,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             logger.info(f">> Running diagnosis of {record.chaos_case_file()} ...")
 
             try:
-                causal_graph, stats = diag.run(
+                causal_graph, causal_subgraphs, stats = diag.run(
                     reduced_df, mappings_by_metrics_file[record.metrics_file], **{
                         'pc_library': cfg.params.pc_library,
                         'pc_citest': cfg.params.pc_citest,
@@ -220,7 +240,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
-            log_causal_graph(run, causal_graph, record, routes, reduced_df)
+            log_causal_graph(run, causal_subgraphs, record, routes, reduced_df)
 
     tests_df['accurate'] = np.where(tests_df.graph_ok, 1, 0)
     run['scores']['tp'] = tests_df['accurate'].agg('sum')
