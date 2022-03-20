@@ -2,26 +2,29 @@
 
 import logging
 import os
+from functools import reduce
 from multiprocessing import cpu_count
+from operator import add
 
 import diagnoser.metric_node as mn
+import holoviews as hv
 import hydra
 import meltria.loader as meltria_loader
 import neptune.new as neptune
 import networkx as nx
 import numpy as np
 import pandas as pd
-from bokeh import plotting
-from bokeh.embed import components
+from bokeh.embed import file_html
+from bokeh.models import HoverTool
 from bokeh.resources import CDN
-from bs4 import BeautifulSoup
 from diagnoser import diag
 from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
-from pyvis.network import Network
 from tsdr import tsdr
+
+hv.extension('bokeh')
 
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
 logger = logging.getLogger(__file__)
@@ -36,16 +39,16 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
     for node in G.nodes:
         if node.is_root():
             color = "orange"
-            size = 20
+            size = 25
         elif node.is_service():
             color = "blue"
-            size = 15
+            size = 20
         elif node.is_middleware():
             color = "purple"
-            size = 10
+            size = 15
         elif node.is_container():
             color = "green"
-            size = 10
+            size = 15
         else:
             color = "grey"
             size = 10
@@ -58,70 +61,93 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
     for route in gt_routes:
         node_list = list(route)
         cause_node: mn.MetricNode = node_list[-1]
-        G.nodes[cause_node]["color"] = 'red'
+        if G.has_node(cause_node):
+            G.nodes[cause_node]["color"] = 'red'
         for u, v in zip(node_list, node_list[1:]):
             if G.has_edge(v, u):  # check v -> u
                 G.edges[v, u]["color"] = 'red'
 
 
-def get_html_component_of_time_series_of_graph_nodes(
-    record: DatasetRecord, nodes: list[mn.MetricNode], data_df: pd.DataFrame,
-) -> tuple[str, str]:
-    p: plotting.Figure = plotting.figure(
-        title=f"{record.chaos_case_full()}",
-        x_axis_label='interval', y_axis_label='zscore',
-        width=1000, height=600,
+def create_figure_of_causal_graph(graphs: list[nx.DiGraph], record: DatasetRecord):
+    """ Create a figure of causal graph.
+    """
+    opts = dict(
+        directed=True,
+        tools=['hover', 'box_select', 'lasso_select', 'tap'],
+        width=600, height=400,
+        node_size='size', node_color='color',
+        cmap=['red', 'orange', 'blue', 'green', 'purple', 'grey'],
+        edge_color='color', edge_cmap=['red', 'black'],
     )
-    for node in nodes:
-        series: np.ndarray = data_df[node.label].to_numpy()
-        if node.is_root():
-            p.line(x=np.arange(series.size), y=series, legend_label=f"root metric: {node.label}", line_width=1)
-        else:
-            p.line(x=np.arange(series.size), y=series, legend_label=f"{node.label}", line_width=1)
-    p.add_layout(p.legend[0], 'right')
-    script, div = components(p)
-    return script, div
+
+    def create_graph(G: nx.DiGraph):
+        # Holoviews Graph only handle a graph whose node type is int or str.
+        relabeled_G = mn.relabel_graph_nodes_to_label(G)
+        hv_graph = hv.Graph.from_networkx(relabeled_G, nx.layout.kamada_kawai_layout).opts(
+            **opts, title=f"Causal Graph: {record.chaos_case_full()}")
+        hv_labels = hv.Labels(hv_graph.nodes, ['x', 'y'], 'label').opts(
+            text_font_size='10pt', text_color='black', bgcolor='white', yoffset=-0.06)
+        return (hv_graph * hv_labels)
+
+    return reduce(add, [create_graph(g) for g in graphs])
+
+
+def create_figure_of_time_series_lines(
+    series_df: pd.DataFrame,
+    graphs: list[nx.DiGraph],
+    record: DatasetRecord,
+):
+    hover = HoverTool(description='Custom Tooltip', tooltips=[("(x,y)", "($x, $y)"), ('label', '@label')])
+    figures = []
+    for G in graphs:
+        hv_curves = []
+        for node in G.nodes:
+            series = series_df[node.label]
+            df = pd.DataFrame(data={
+                'x': np.arange(series.size),
+                'y': series.to_numpy(),
+                'label': node.label,  # to show label with hovertool
+            })
+            if node.is_root():
+                c = hv.Curve(df, label=node.label, group='root').opts(tools=[hover, 'tap'])
+            else:
+                c = hv.Curve(df, label=node.label).opts(tools=[hover, 'tap'])
+            hv_curves.append(c)
+        figures.append(hv.Overlay(hv_curves).opts(
+            tools=['hover', 'tap'],
+            height=300,
+            width=700,
+            xlabel='time',
+            ylabel='zscore',
+            show_grid=True,
+            title=f'Chart of time series metrics {record.chaos_case_full()}',
+            legend_position='right',
+            legend_muted=True,
+        ))
+    return reduce(add, figures)
 
 
 def log_causal_graph(
     run: neptune.Run,
-    causal_graph: nx.DiGraph,
+    causal_subgraphs: tuple[list[nx.DiGraph], list[nx.DiGraph]],
     record: DatasetRecord,
     gt_routes: list[mn.MetricNodes],
     data_df: pd.DataFrame,
 ) -> None:
-    set_visual_style_to_graph(causal_graph, gt_routes)
-
-    nwg = Network(
-        directed=True, height='800px', width='1000px',
-        heading=record.chaos_case_full(),
-    )
-    # pyvis assert isinstance(n_id, str) or isinstance(n_id, int)
-    relabeled_mapping = mn.MetricNodes.from_list_of_metric_node(list(causal_graph.nodes)).node_to_label()
-    relabeled_graph = nx.relabel_nodes(causal_graph, relabeled_mapping, copy=True)
-    nwg.from_nx(relabeled_graph)
-    nwg.toggle_physics(True)
-    html_path = os.path.join(os.getcwd(), record.basename_of_metrics_file() + '.nw_graph.html')
-    nwg.write_html(html_path)
-
-    # append time series plots to the html containing network graph
-    with open(html_path) as f:
-        soup = BeautifulSoup(f.read(), "html.parser")
-        soup.find('head').append(BeautifulSoup(CDN.render_css(), "html.parser")) # load bokehJS
-        soup.find('head').append(BeautifulSoup(CDN.render_js(), "html.parser")) # load bokehJS
-        bk_script_raw, bk_div_raw = get_html_component_of_time_series_of_graph_nodes(
-            record, list(causal_graph.nodes), data_df,
+    for (graphs, suffix) in ((causal_subgraphs[0], "with-root"), (causal_subgraphs[1], "without-root")):
+        for g in graphs:
+            set_visual_style_to_graph(g, gt_routes)
+        # Holoviews Graph only handle a graph whose node type is int or str.
+        hv_graph_with_labels = create_figure_of_causal_graph(graphs, record)
+        ts_graph = create_figure_of_time_series_lines(data_df, graphs, record)
+        root_contained_layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
+            shared_axes=False, width=800,
+            title=f"{record.chaos_case_file()}",
+        ).cols(len(graphs))
+        html = file_html(hv.render(root_contained_layout), CDN, f"{record.chaos_case_full()}: {suffix}")
+        run[f"tests/causal_graphs/{record.chaos_case_full()}-{suffix}"].upload(
+            neptune.types.File.from_content(html, extension='html'),
         )
-        body = soup.find('body')
-        pyvis_div = body.find('div', id="mynetwork")
-        bk_div = BeautifulSoup(bk_div_raw, "html.parser").find('div')
-        bk_div.attrs['style'] = 'position: relative; top: 800px;'  # place bk canvas below pivis canvas
-        pyvis_div.insert_after(bk_div)
-        body.append(BeautifulSoup(bk_script_raw, "html.parser"))
-
-    run[f"tests/causal_graphs/{record.chaos_case_full()}"].upload(
-        neptune.types.File.from_content(soup.prettify(), extension='html'),
-    )
 
 
 def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
@@ -169,7 +195,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             logger.info(f">> Running diagnosis of {record.chaos_case_file()} ...")
 
             try:
-                causal_graph, stats = diag.run(
+                causal_graph, causal_subgraphs, stats = diag.run(
                     reduced_df, mappings_by_metrics_file[record.metrics_file], **{
                         'pc_library': cfg.params.pc_library,
                         'pc_citest': cfg.params.pc_citest,
@@ -205,7 +231,8 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                     ], index=tests_df.columns,
                 ), ignore_index=True,
             )
-            log_causal_graph(run, causal_graph, record, routes, reduced_df)
+            logger.info(f">> Logging causal graph including chaos-injected metrics of {record.chaos_case_file()}")
+            log_causal_graph(run, causal_subgraphs, record, routes, reduced_df)
 
     tests_df['accurate'] = np.where(tests_df.graph_ok, 1, 0)
     run['scores']['tp'] = tests_df['accurate'].agg('sum')

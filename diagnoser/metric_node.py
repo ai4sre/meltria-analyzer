@@ -2,6 +2,7 @@ from enum import Enum
 from functools import total_ordering
 
 import eval.priorknowledge as pk
+import networkx as nx
 import pandas as pd
 
 
@@ -48,6 +49,9 @@ class MetricNode:
         return hash(self.label)
 
     def __str__(self) -> str:
+        return self.label
+
+    def __repr__(self) -> str:
         return self.label
 
     def is_service(self) -> bool:
@@ -106,3 +110,8 @@ class MetricNodes(object):
 
     def node_to_label(self) -> dict[MetricNode, str]:
         return {n: n.label for n in self.nodes}
+
+
+def relabel_graph_nodes_to_label(G: nx.DiGraph) -> nx.DiGraph:
+    mapping = MetricNodes.from_list_of_metric_node(list(G.nodes)).node_to_label()
+    return nx.relabel_nodes(G, mapping, copy=True)

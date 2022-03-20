@@ -215,7 +215,6 @@ def build_causal_graph_with_pcalg(
     )
     DG: nx.DiGraph = pcalg.estimate_cpdag(skel_graph=G, sep_set=sep_set)
     DG = nx.relabel_nodes(DG, mapping=nodes.num_to_node)
-    DG = find_graphs_containing_root_node(DG)
     return fix_edge_directions_in_causal_graph(DG)
 
 
@@ -233,10 +232,25 @@ def build_causal_graphs_with_pgmpy(
         significance_level=pc_citest_alpha,
         return_type='pdag',
     )
-    return find_graphs_containing_root_node(G)
+    return fix_edge_directions_in_causal_graph(G)
 
 
-def find_graphs_containing_root_node(G: nx.DiGraph) -> nx.DiGraph:
+def find_connected_subgraphs(G: nx.DiGraph) -> tuple[list[nx.DiGraph], list[nx.DiGraph]]:
+    """ Find subgraphs connected components.
+    """
+    root_contained_subg: list[nx.DiGraph] = []
+    root_uncontained_subg: list[nx.DiGraph] = []
+    root_nodes = [mn.MetricNode(root) for root in pk.ROOT_METRIC_LABELS]
+    for c in nx.connected_components(G.to_undirected()):
+        subg = G.subgraph(c).copy()
+        if any([r in c for r in root_nodes]):
+            root_contained_subg.append(subg)
+        else:
+            root_uncontained_subg.append(subg)
+    return root_contained_subg, root_uncontained_subg
+
+
+def remove_nodes_subgraph_uncontained_root(G: nx.DiGraph) -> nx.DiGraph:
     """Find graphs containing root metric node.
     """
     remove_nodes = []
@@ -254,7 +268,11 @@ def find_graphs_containing_root_node(G: nx.DiGraph) -> nx.DiGraph:
     return G
 
 
-def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.DiGraph, dict[str, Any]]:
+def run(
+    dataset: pd.DataFrame,
+    mappings: dict[str, Any],
+    **kwargs,
+) -> tuple[nx.DiGraph, tuple[list[nx.DiGraph], list[nx.DiGraph]], dict[str, Any]]:
     dataset = filter_by_target_metrics(dataset)
     if not any(label in dataset.columns for label in pk.ROOT_METRIC_LABELS):
         raise ValueError(f"dataset has no root metric node: {pk.ROOT_METRIC_LABELS}")
@@ -263,32 +281,36 @@ def run(dataset: pd.DataFrame, mappings: dict[str, Any], **kwargs) -> tuple[nx.D
 
     nodes: mn.MetricNodes = mn.MetricNodes.from_dataframe(dataset)
     init_g: nx.Graph = prepare_init_graph(nodes, mappings)
-    if kwargs['pc_library'] == 'pcalg':
-        g = build_causal_graph_with_pcalg(
+
+    if (pc_library := kwargs['pc_library']) == 'pcalg':
+        G = build_causal_graph_with_pcalg(
             dataset.to_numpy(), nodes, init_g,
             pc_variant=kwargs['pc_variant'],
             pc_citest=kwargs['pc_citest'],
             pc_citest_alpha=kwargs['pc_citest_alpha'],
         )
-    elif kwargs['pc_library'] == 'pgmpy':
-        g = build_causal_graphs_with_pgmpy(
+    elif pc_library == 'pgmpy':
+        G = build_causal_graphs_with_pgmpy(
             dataset,
             pc_variant=kwargs['pc_variant'],
             pc_citest=kwargs['pc_citest'],
             pc_citest_alpha=kwargs['pc_citest_alpha'],
         )
     else:
-        raise ValueError('library should be pcalg or pgmpy')
+        raise ValueError(f"pc_library should be pcalg or pgmpy ({pc_library})")
+
+    root_contained_graphs, root_uncontained_graphs = find_connected_subgraphs(G)
 
     building_graph_elapsed: float = time.time() - building_graph_start
 
+    G = remove_nodes_subgraph_uncontained_root(G)  # for stats
     stats = {
         'init_graph_nodes_num': init_g.number_of_nodes(),
         'init_graph_edges_num': init_g.number_of_edges(),
-        'causal_graph_nodes_num': g.number_of_nodes(),
-        'causal_graph_edges_num': g.number_of_edges(),
-        'causal_graph_density': nx.density(g),
-        'causal_graph_flow_hierarchy': nx.flow_hierarchy(g),
+        'causal_graph_nodes_num': G.number_of_nodes(),
+        'causal_graph_edges_num': G.number_of_edges(),
+        'causal_graph_density': nx.density(G),
+        'causal_graph_flow_hierarchy': nx.flow_hierarchy(G),
         'building_graph_elapsed_sec': building_graph_elapsed,
     }
-    return g, stats
+    return G, (root_contained_graphs, root_uncontained_graphs), stats
