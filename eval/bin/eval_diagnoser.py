@@ -140,11 +140,11 @@ def log_causal_graph(
         # Holoviews Graph only handle a graph whose node type is int or str.
         hv_graph_with_labels = create_figure_of_causal_graph(graphs, record)
         ts_graph = create_figure_of_time_series_lines(data_df, graphs, record)
-        root_contained_layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
+        layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
             shared_axes=False, width=800,
             title=f"{record.chaos_case_file()}",
         ).cols(len(graphs))
-        html = file_html(hv.render(root_contained_layout), CDN, f"{record.chaos_case_full()}: {suffix}")
+        html = file_html(hv.render(layout), CDN, f"{record.chaos_case_full()}: {suffix}")
         run[f"tests/causal_graphs/{record.chaos_case_full()}-{suffix}"].upload(
             neptune.types.File.from_content(html, extension='html'),
         )
