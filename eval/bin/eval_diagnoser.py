@@ -56,16 +56,16 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
         G.nodes[node]["size"] = size
         G.nodes[node]["label"] = node.label
     for u, v in G.edges:
-        G.edges[u, v]["color"] = "black"
+        G.edges[u, v]["line_color"] = "grey"
 
     for route in gt_routes:
         node_list = list(route)
         cause_node: mn.MetricNode = node_list[-1]
         if G.has_node(cause_node):
-            G.nodes[cause_node]["color"] = 'red'
+            G.nodes[cause_node]["line_color"] = 'red'
         for u, v in zip(node_list, node_list[1:]):
             if G.has_edge(v, u):  # check v -> u
-                G.edges[v, u]["color"] = 'red'
+                G.edges[v, u]["line_color"] = 'red'
 
 
 def create_figure_of_causal_graph(graphs: list[nx.DiGraph], record: DatasetRecord):
@@ -77,7 +77,7 @@ def create_figure_of_causal_graph(graphs: list[nx.DiGraph], record: DatasetRecor
         width=600, height=400,
         node_size='size', node_color='color',
         cmap=['red', 'orange', 'blue', 'green', 'purple', 'grey'],
-        edge_color='color', edge_cmap=['red', 'black'],
+        edge_color='line_color', edge_cmap=['red', 'grey'],
     )
 
     def create_graph(G: nx.DiGraph):
