@@ -1,22 +1,16 @@
-import argparse
 import json
-import os
 import random
-import sys
 import time
 import warnings
 from concurrent import futures
-from datetime import datetime
 from typing import Any, Callable
 
 import banpei
-import eval.priorknowledge as pk
 import numpy as np
 import pandas as pd
 import scipy.stats
 from arch.unitroot import PhillipsPerron
 from arch.utility.exceptions import InfeasibleTestException
-from eval import groundtruth
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import hamming, pdist, squareform
 from statsmodels.tsa.stattools import adfuller
@@ -650,105 +644,3 @@ def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs,
         metrics_dimension: dict[str, Any] = aggregate_dimension(data_df)
         return run_sieve(data_df, metrics_dimension, services, max_workers)
     return {}, {}, {}, {}
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("datafile", help="metrics JSON data file")
-    parser.add_argument("--method",
-                        choices=[TSIFTER_METHOD, SIEVE_METHOD],
-                        help="specify one of tsdr methods",
-                        default=TSIFTER_METHOD)
-    parser.add_argument("--max-workers",
-                        help="number of processes",
-                        type=int, default=1)
-    parser.add_argument("--plot-num",
-                        help="number of plots",
-                        type=int, default=PLOTS_NUM)
-    parser.add_argument("--metric-num",
-                        help="number of metrics (for experiment)",
-                        type=int, default=None)
-    parser.add_argument("--out", help="output path", type=str)
-    parser.add_argument("--results-dir",
-                        help="output directory",
-                        action='store_true')
-    parser.add_argument("--include-raw-data",
-                        help="include time series to results",
-                        action='store_true')
-    parser.add_argument("--tsifter-adf-alpha",
-                        type=float,
-                        default=SIGNIFICANCE_LEVEL,
-                        help='sigificance level for ADF test')
-    parser.add_argument("--tsifter-cv-threshold",
-                        type=float,
-                        default=0.05,
-                        help='CV threshold for tsifter')
-    parser.add_argument("--tsifter-clustering-threshold",
-                        type=float,
-                        default=THRESHOLD_DIST,
-                        help='distance threshold for hierarchical clustering')
-    args = parser.parse_args()
-
-    data_df, mappings, metrics_meta = read_metrics_json(args.datafile)
-    elapsedTime, reduced_df_by_step, metrics_dimension, clustering_info = run_tsdr(
-        data_df=data_df,
-        method=args.method,
-        max_workers=args.max_workers,
-        tsifter_step1_unit_root_alpha=args.tsifter_adf_alpha,
-        tsifter_step1_cv_threshold=args.tsifter_cv_threshold,
-        tsifter_step1_knn_threshold=args.tsifter_knn_threshold,
-        tsifter_step2_clustering_threshold=args.tsifter_clustering_threshold,
-    )
-
-    reduced_df = reduced_df_by_step['step2']  # final result
-
-    # Check that the results include SLO metric
-    root_metrics: list[str] = []
-    for column in list(reduced_df.columns):
-        if column in pk.ROOT_METRIC_LABELS:
-            root_metrics.append(column)
-
-    # Check that the results include cause metric
-    _, cause_metrics = groundtruth.check_cause_metrics(
-        list(reduced_df.columns),
-        metrics_meta['injected_chaos_type'],
-        metrics_meta['chaos_injected_component'],
-    )
-
-    summary = {
-        'tsdr_method': args.method,
-        'data_file': args.datafile.split("/")[-1],
-        'number_of_plots': PLOTS_NUM,
-        'label_checking_results': {
-            'root_metrics': root_metrics,
-            'cause_metrics': cause_metrics,
-        },
-        'execution_time': {
-            "reduce_series": elapsedTime['step1'],
-            "clustering": elapsedTime['step2'],
-            "total": round(elapsedTime['step1'] + elapsedTime['step2'], 2)
-        },
-        'metrics_dimension': metrics_dimension,
-        'reduced_metrics': list(reduced_df.columns),
-        'clustering_info': clustering_info,
-        'components_mappings': mappings,
-        'metrics_meta': metrics_meta,
-    }
-    if args.include_raw_data:
-        summary["reduced_metrics_raw_data"] = reduced_df.to_dict()
-
-    if args.results_dir:
-        file_name = "{}_{}.json".format(
-            TSIFTER_METHOD, datetime.now().strftime("%Y%m%d%H%M%S"))
-        result_dir = "./results/{}".format(args.datafile.split("/")[-1])
-        if not os.path.isdir(result_dir):
-            os.makedirs(result_dir)
-        with open(os.path.join(result_dir, file_name), "w") as f:
-            json.dump(summary, f, indent=4)
-
-    # print out, too.
-    if args.out is None:
-        json.dump(summary, sys.stdout)
-    else:
-        with open(args.out, mode='w') as f:
-            json.dump(summary, f)
