@@ -133,7 +133,6 @@ def log_causal_graph(
     gt_routes: list[mn.MetricNodes],
     data_df: pd.DataFrame,
 ) -> None:
-    # TODO: multi-processed
     items = (
         (causal_subgraphs[0], "with-root", (1000, 800)),
         (causal_subgraphs[1], "without-root", (600, 400)),
