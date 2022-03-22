@@ -133,10 +133,10 @@ def log_causal_graph(
     gt_routes: list[mn.MetricNodes],
     data_df: pd.DataFrame,
 ) -> None:
-    items = (
+    items: list[tuple[list[nx.DiGraph], str, tuple[int, int]]] = [
         (causal_subgraphs[0], "with-root", (1000, 800)),
         (causal_subgraphs[1], "without-root", (600, 400)),
-    )
+    ]
     with futures.ProcessPoolExecutor(max_workers=len(items)) as executor:
         future_to_suffix: dict[futures.Future, str] = {}
         for (graphs, suffix, (width, height)) in items:
