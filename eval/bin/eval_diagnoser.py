@@ -238,6 +238,8 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             logger.info(f">> Logging causal graph including chaos-injected metrics of {record.chaos_case_file()}")
             log_causal_graph(run, causal_subgraphs, record, routes, reduced_df)
 
+    run['scores/summary'].upload(neptune.types.File.as_html(tests_df))
+
     tests_df['accurate'] = np.where(tests_df.graph_ok, 1, 0)
     run['scores']['tp'] = tests_df['accurate'].agg('sum')
     run['scores']['accuracy'] = tests_df['accurate'].agg(lambda x: sum(x) / len(x))
