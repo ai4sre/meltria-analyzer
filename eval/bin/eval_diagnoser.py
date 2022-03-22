@@ -2,6 +2,7 @@
 
 import logging
 import os
+from concurrent import futures
 from functools import reduce
 from multiprocessing import cpu_count
 from operator import add
@@ -22,6 +23,7 @@ from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
+from psutil import cpu_percent
 from tsdr import tsdr
 
 hv.extension('bokeh')
@@ -29,6 +31,7 @@ hv.extension('bokeh')
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
+
 
 
 def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) -> None:
@@ -119,6 +122,10 @@ def create_figure_of_time_series_lines(
     )
 
 
+def hv_render_html(figure, record, suffix):
+    return file_html(hv.render(hv.Store.loads(figure)), CDN, f"{record.chaos_case_full()}: {suffix}")
+
+
 def log_causal_graph(
     run: neptune.Run,
     causal_subgraphs: tuple[list[nx.DiGraph], list[nx.DiGraph]],
@@ -129,25 +136,31 @@ def log_causal_graph(
     # TODO: multi-processed
     items = (
         (causal_subgraphs[0], "with-root", (1000, 800)),
-        (causal_subgraphs[1], "without-root", (600, 800)),
+        (causal_subgraphs[1], "without-root", (600, 400)),
     )
-    for (graphs, suffix, (width, height)) in items:
-        layouts = []
-        for graph in graphs:
-            set_visual_style_to_graph(graph, gt_routes)
-            nw_graph = create_figure_of_causal_graph(graph, record, (width, height))
-            ts_graph = create_figure_of_time_series_lines(data_df, graph, record, (width, height))
-            layout = hv.Layout([nw_graph, ts_graph]).opts(
-                width=width, shared_axes=False,
-            ).cols(1)
-            layouts.append(layout)
-        figure = reduce(add, layouts).opts(
-            shared_axes=False, title=f"{record.chaos_case_file()}",
-        ).cols(2)
-        html = file_html(hv.render(figure), CDN, f"{record.chaos_case_full()}: {suffix}")
-        run[f"tests/causal_graphs/{record.chaos_case_full()}-{suffix}"].upload(
-            neptune.types.File.from_content(html, extension='html'),
-        )
+    with futures.ProcessPoolExecutor(max_workers=len(items)) as executor:
+        future_to_suffix: dict[futures.Future, str] = {}
+        for (graphs, suffix, (width, height)) in items:
+            layouts = []
+            for graph in graphs:
+                set_visual_style_to_graph(graph, gt_routes)
+                nw_graph = create_figure_of_causal_graph(graph, record, (width, height))
+                ts_graph = create_figure_of_time_series_lines(data_df, graph, record, (width, height))
+                layout = hv.Layout([nw_graph, ts_graph]).opts(
+                    width=width, shared_axes=False,
+                ).cols(1)
+                layouts.append(layout)
+            figure = reduce(add, layouts).opts(
+                shared_axes=False, title=f"{record.chaos_case_file()}",
+            ).cols(2)
+            # Use hv.store dumps/loads due to https://holoviews.org/FAQ.html
+            f = executor.submit(hv_render_html, hv.Store.dumps(figure), record, suffix)
+            future_to_suffix[f] = suffix
+        for future in futures.as_completed(future_to_suffix):
+            suffix = future_to_suffix[future]
+            run[f"tests/causal_graphs/{record.chaos_case_full()}-{suffix}"].upload(
+                neptune.types.File.from_content(future.result(), extension='html'),
+            )
 
 
 def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
