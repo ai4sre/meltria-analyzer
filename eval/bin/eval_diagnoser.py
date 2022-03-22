@@ -62,19 +62,23 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
         node_list = list(route)
         cause_node: mn.MetricNode = node_list[-1]
         if G.has_node(cause_node):
-            G.nodes[cause_node]["line_color"] = 'red'
+            G.nodes[cause_node]["color"] = 'red'
         for u, v in zip(node_list, node_list[1:]):
             if G.has_edge(v, u):  # check v -> u
                 G.edges[v, u]["line_color"] = 'red'
 
 
-def create_figure_of_causal_graph(graphs: list[nx.DiGraph], record: DatasetRecord):
+def create_figure_of_causal_graph(
+    graphs: list[nx.DiGraph],
+    record: DatasetRecord,
+    width_and_height: tuple[int, int],
+):
     """ Create a figure of causal graph.
     """
     opts = dict(
         directed=True,
         tools=['hover', 'box_select', 'lasso_select', 'tap'],
-        width=600, height=400,
+        width=width_and_height[0], height=width_and_height[1],
         node_size='size', node_color='color',
         cmap=['red', 'orange', 'blue', 'green', 'purple', 'grey'],
         edge_color='line_color', edge_cmap=['red', 'grey'],
@@ -83,10 +87,10 @@ def create_figure_of_causal_graph(graphs: list[nx.DiGraph], record: DatasetRecor
     def create_graph(G: nx.DiGraph):
         # Holoviews Graph only handle a graph whose node type is int or str.
         relabeled_G = mn.relabel_graph_nodes_to_label(G)
-        hv_graph = hv.Graph.from_networkx(relabeled_G, nx.layout.kamada_kawai_layout).opts(
+        hv_graph = hv.Graph.from_networkx(relabeled_G, nx.layout.spring_layout).opts(
             **opts, title=f"Causal Graph: {record.chaos_case_full()}")
         hv_labels = hv.Labels(hv_graph.nodes, ['x', 'y'], 'label').opts(
-            text_font_size='10pt', text_color='black', bgcolor='white', yoffset=-0.06)
+            text_font_size='9pt', text_color='black', bgcolor='white', yoffset=-0.08)
         return (hv_graph * hv_labels)
 
     return reduce(add, [create_graph(g) for g in graphs])
@@ -96,6 +100,7 @@ def create_figure_of_time_series_lines(
     series_df: pd.DataFrame,
     graphs: list[nx.DiGraph],
     record: DatasetRecord,
+    width_and_height: tuple[int, int],
 ):
     hover = HoverTool(description='Custom Tooltip', tooltips=[("(x,y)", "($x, $y)"), ('label', '@label')])
     figures = []
@@ -108,21 +113,15 @@ def create_figure_of_time_series_lines(
                 'y': series.to_numpy(),
                 'label': node.label,  # to show label with hovertool
             })
-            if node.is_root():
-                c = hv.Curve(df, label=node.label, group='root').opts(tools=[hover, 'tap'])
-            else:
-                c = hv.Curve(df, label=node.label).opts(tools=[hover, 'tap'])
+            c = hv.Curve(df, label=node.label).opts(tools=[hover, 'tap'])
             hv_curves.append(c)
         figures.append(hv.Overlay(hv_curves).opts(
-            tools=['hover', 'tap'],
-            height=300,
-            width=700,
-            xlabel='time',
-            ylabel='zscore',
-            show_grid=True,
             title=f'Chart of time series metrics {record.chaos_case_full()}',
-            legend_position='right',
-            legend_muted=True,
+            tools=['hover', 'tap'],
+            width=width_and_height[0], height=width_and_height[1],
+            xlabel='time', ylabel='zscore',
+            show_grid=True,
+            show_legend=True, legend_position='right', legend_muted=True,
         ))
     return reduce(add, figures)
 
@@ -134,15 +133,19 @@ def log_causal_graph(
     gt_routes: list[mn.MetricNodes],
     data_df: pd.DataFrame,
 ) -> None:
+    # TODO: multi-processed
     for (graphs, suffix) in ((causal_subgraphs[0], "with-root"), (causal_subgraphs[1], "without-root")):
         for g in graphs:
             set_visual_style_to_graph(g, gt_routes)
+        if suffix == 'with-root':
+            width, height = (1000, 800)
+        else:
+            width, height = (600, 400)
         # Holoviews Graph only handle a graph whose node type is int or str.
-        hv_graph_with_labels = create_figure_of_causal_graph(graphs, record)
-        ts_graph = create_figure_of_time_series_lines(data_df, graphs, record)
+        hv_graph_with_labels = create_figure_of_causal_graph(graphs, record, (width, height))
+        ts_graph = create_figure_of_time_series_lines(data_df, graphs, record, (width, height))
         layout = hv.Layout([hv_graph_with_labels, ts_graph]).opts(
-            shared_axes=False, width=800,
-            title=f"{record.chaos_case_file()}",
+            width=width, shared_axes=False, title=f"{record.chaos_case_file()}",
         ).cols(len(graphs))
         html = file_html(hv.render(layout), CDN, f"{record.chaos_case_full()}: {suffix}")
         run[f"tests/causal_graphs/{record.chaos_case_full()}-{suffix}"].upload(
