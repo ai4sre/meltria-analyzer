@@ -121,6 +121,7 @@ def create_figure_of_time_series_lines(
             width=width_and_height[0], height=width_and_height[1],
             xlabel='time', ylabel='zscore',
             show_grid=True,
+            legend_limit=100,
             show_legend=True, legend_position='right', legend_muted=True,
         ))
     return reduce(add, figures)
