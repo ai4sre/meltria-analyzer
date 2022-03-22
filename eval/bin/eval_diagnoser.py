@@ -141,8 +141,13 @@ def log_causal_graph(
     with futures.ProcessPoolExecutor(max_workers=len(items)) as executor:
         future_to_suffix: dict[futures.Future, str] = {}
         for (graphs, suffix, (width, height)) in items:
+            # Merge small graphs (n <= 2) to speed up the rendering process.
+            merged_graphs: list[nx.DiGraph] = [g for g in graphs if g.number_of_nodes() <= 2]
+            unmerged_graphs: list[nx.DiGraph] = [g for g in graphs if g not in merged_graphs]
+            if len(merged_graphs) > 0:
+                unmerged_graphs.append(nx.compose_all(merged_graphs))
             layouts = []
-            for graph in graphs:
+            for graph in unmerged_graphs:
                 set_visual_style_to_graph(graph, gt_routes)
                 nw_graph = create_figure_of_causal_graph(graph, record, (width, height))
                 ts_graph = create_figure_of_time_series_lines(data_df, graph, record, (width, height))
