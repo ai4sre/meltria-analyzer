@@ -100,7 +100,6 @@ def create_figure_of_time_series_lines(
     record: DatasetRecord,
     width_and_height: tuple[int, int],
 ):
-    hover = HoverTool(description='Custom Tooltip', tooltips=[("(x,y)", "($x, $y)"), ('label', '@label')])
     hv_curves = []
     for node in G.nodes:
         series = series_df[node.label]
@@ -109,8 +108,7 @@ def create_figure_of_time_series_lines(
             'y': series.to_numpy(),
             'label': node.label,  # to show label with hovertool
         })
-        c = hv.Curve(df, label=node.label).opts(tools=[hover, 'tap'])
-        hv_curves.append(c)
+        hv_curves.append(hv.Curve(df, label=node.label).opts(tools=['hover', 'tap']))
     return hv.Overlay(hv_curves).opts(
         title=f'Chart of time series metrics {record.chaos_case_full()}',
         tools=['hover', 'tap'],
@@ -130,14 +128,13 @@ def log_causal_graph(
 ) -> None:
     # TODO: multi-processed
     for (graphs, suffix) in ((causal_subgraphs[0], "with-root"), (causal_subgraphs[1], "without-root")):
-        for g in graphs:
-            set_visual_style_to_graph(g, gt_routes)
         if suffix == 'with-root':
             width, height = (1000, 800)
         else:
             width, height = (600, 600)
         layouts = []
         for graph in graphs:
+            set_visual_style_to_graph(g, gt_routes)
             nw_graph = create_figure_of_causal_graph(graph, record, (width, height))
             ts_graph = create_figure_of_time_series_lines(data_df, graph, record, (width, height))
             layout = hv.Layout([nw_graph, ts_graph]).opts(
