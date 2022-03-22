@@ -39,16 +39,16 @@ def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) ->
     for node in G.nodes:
         if node.is_root():
             color = "orange"
-            size = 25
+            size = 20
         elif node.is_service():
             color = "blue"
-            size = 20
+            size = 15
         elif node.is_middleware():
             color = "purple"
-            size = 15
+            size = 10
         elif node.is_container():
             color = "green"
-            size = 15
+            size = 10
         else:
             color = "grey"
             size = 10
