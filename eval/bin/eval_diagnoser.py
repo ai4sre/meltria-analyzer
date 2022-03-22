@@ -127,14 +127,14 @@ def log_causal_graph(
     data_df: pd.DataFrame,
 ) -> None:
     # TODO: multi-processed
-    for (graphs, suffix) in ((causal_subgraphs[0], "with-root"), (causal_subgraphs[1], "without-root")):
-        if suffix == 'with-root':
-            width, height = (1000, 800)
-        else:
-            width, height = (600, 600)
+    items = (
+        (causal_subgraphs[0], "with-root", (1000, 800)),
+        (causal_subgraphs[1], "without-root", (600, 800)),
+    )
+    for (graphs, suffix, (width, height)) in items:
         layouts = []
         for graph in graphs:
-            set_visual_style_to_graph(g, gt_routes)
+            set_visual_style_to_graph(graph, gt_routes)
             nw_graph = create_figure_of_causal_graph(graph, record, (width, height))
             ts_graph = create_figure_of_time_series_lines(data_df, graph, record, (width, height))
             layout = hv.Layout([nw_graph, ts_graph]).opts(
