@@ -105,6 +105,9 @@ class MetricNodes(object):
     def __str__(self) -> str:
         return ','.join([n.label for n in self.nodes])
 
+    def __repr__(self) -> str:
+        return self.__str__()
+
     def liststr(self) -> str:
         return '[' + ','.join([n.label for n in self.nodes]) + ']'
 
