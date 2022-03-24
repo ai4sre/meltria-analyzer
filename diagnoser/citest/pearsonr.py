@@ -2,7 +2,7 @@ import numpy as np
 from scipy import stats
 
 
-def ci_test_pearsonar(data_matrix: np.ndarray, x: int, y: int, s: set[int], **kwargs):
+def ci_test_pearsonr(data_matrix: np.ndarray, x: int, y: int, s: set[int], **kwargs):
     assert 'corr_matrix' in kwargs
     cm: np.ndarray = kwargs['corr_matrix']
     s = list(s)
