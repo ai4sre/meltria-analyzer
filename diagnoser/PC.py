@@ -328,8 +328,6 @@ class PC(StructureEstimator):
                             significance_level=significance_level,
                             **kwargs,
                         ):
-                            if u.startswith('c-user-db') or v.startswith('c-user-db'):
-                                print(u, "-->", v)
                             separating_sets[frozenset((u, v))] = separating_set
                             graph.remove_edge(u, v)
                             break
