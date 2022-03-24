@@ -33,7 +33,6 @@ logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
 
-
 def set_visual_style_to_graph(G: nx.DiGraph, gt_routes: list[mn.MetricNodes]) -> None:
     """Set graph style followed by The valid properties
     https://pyvis.readthedocs.io/en/latest/tutorial.html#adding-list-of-nodes-with-properties
