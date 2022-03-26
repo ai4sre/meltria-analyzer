@@ -92,7 +92,7 @@ def create_figure_of_causal_graph(
     hv_graph = hv.Graph.from_networkx(relabeled_G, nx.layout.spring_layout).opts(
         **opts, title=f"Causal Graph: {record.chaos_case_full()}")
     hv_labels = hv.Labels(hv_graph.nodes, ['x', 'y'], 'label').opts(
-        text_font_size='9pt', text_color='black', bgcolor='white', yoffset=-0.08)
+        text_font_size='9pt', text_color='black', bgcolor='white', yoffset=-0.03)
     return (hv_graph * hv_labels)
 
 
