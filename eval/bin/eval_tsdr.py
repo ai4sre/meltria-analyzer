@@ -97,6 +97,7 @@ class TimeSeriesPlotter:
         self,
         record: DatasetRecord,
         non_clustered_reduced_df: pd.DataFrame,
+        anomaly_points: dict[str, np.ndarray],
     ) -> None:
         """ Upload non-clustered time series plots to neptune.ai.
         """
@@ -108,6 +109,7 @@ class TimeSeriesPlotter:
         html = self.generate_html_time_series(
             record,
             data=non_clustered_reduced_df,
+            anomaly_points=anomaly_points,
             title=f'Chart of time series metrics {record.chaos_case_full()} / [no clustered]',
         )
         self.run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case_full()}"].upload(
@@ -344,7 +346,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             rep_metrics: list[str] = list(clustering_info.keys())
             post_clustered_reduced_df = reduced_df_by_step['step2']
             non_clustered_reduced_df: pd.DataFrame = post_clustered_reduced_df.drop(columns=rep_metrics)
-            ts_plotter.log_non_clustered_plots_as_html(record, non_clustered_reduced_df)
+            ts_plotter.log_non_clustered_plots_as_html(record, non_clustered_reduced_df, anomaly_points)
             non_clustered_df = non_clustered_df.append(
                 pd.Series(
                     [
