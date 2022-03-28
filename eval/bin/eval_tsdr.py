@@ -7,18 +7,25 @@ import statistics
 from collections import defaultdict
 from multiprocessing import cpu_count
 
+import holoviews as hv
 import hydra
 import matplotlib.pyplot as plt
 import meltria.loader as meltria_loader
 import neptune.new as neptune
 import numpy as np
 import pandas as pd
+import scipy
+import scipy.stats
+from bokeh.embed import file_html
+from bokeh.resources import CDN
 from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
+
+hv.extension('bokeh')
 
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
 logger = logging.getLogger('root_experiment')
@@ -58,12 +65,30 @@ class TimeSeriesPlotter:
         if len(ground_truth_metrics) < 1:
             return
         ground_truth_metrics.sort()
-        fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
-        # reset_index removes extra index texts from the generated figure.
-        record.data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-        fig.suptitle(record.chaos_case_file())
-        self.run[f"dataset/figures/{record.chaos_case()}"].log(neptune.types.File.as_image(fig))
-        plt.close(fig=fig)
+        gtdf = record.data_df[ground_truth_metrics]
+
+        hv_curves = []
+        for column in gtdf.columns:
+            series = gtdf[column]
+            df = pd.DataFrame(data={
+                'x': np.arange(series.size),
+                'y': scipy.stats.zscore(series.to_numpy()),
+                'label': column,  # to show label with hovertool
+            })
+            hv_curves.append(hv.Curve(df, label=column).opts(tools=['hover', 'tap']))
+        fig = hv.Overlay(hv_curves).opts(
+            title=f'Chart of time series metrics {record.chaos_case_full()}',
+            tools=['hover', 'tap'],
+            width=1200, height=600,
+            xlabel='time', ylabel='zscore',
+            show_grid=True, legend_limit=100,
+            show_legend=True, legend_position='right', legend_muted=True,
+        )
+        html = file_html(hv.render(fig), CDN, record.chaos_case_full())
+
+        self.run[f"dataset/figures/{record.chaos_case_full()}"].upload(
+            neptune.types.File.from_content(html, extension='html'),
+        )
 
     def log_clustering_plots_as_image(
         self,
