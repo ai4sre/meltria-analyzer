@@ -229,7 +229,7 @@ class Tsdr:
                 results[col] = result
                 if result.has_kept:
                     reduced_cols.append(col)
-        anomaly_points: pd.DataFrame = pd.DataFrame({col: res.outliers for col, res in results.items()})
+        anomaly_points: pd.DataFrame = pd.DataFrame.from_dict({col: res.outliers for col, res in results.items()}, orient='index').T
         return useries[reduced_cols], results, anomaly_points
 
     def reduce_multivariate_series(
