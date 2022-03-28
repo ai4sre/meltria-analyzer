@@ -157,16 +157,6 @@ class TimeSeriesPlotter:
             show_legend=True, legend_position='right', legend_muted=True,
         )
 
-    @classmethod
-    def trim_axs(cls, axs, N):
-        """
-        Reduce *axs* to *N* Axes. All further Axes are removed from the figure.
-        """
-        axs = axs.flat
-        for ax in axs[N:]:
-            ax.remove()
-        return axs[:N]
-
 
 def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
     df = scores_df.groupby(indexes).agg({
