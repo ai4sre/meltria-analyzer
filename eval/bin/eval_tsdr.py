@@ -4,7 +4,9 @@ import logging
 import os
 import statistics
 from collections import defaultdict
+from concurrent import futures
 from functools import reduce
+from itertools import zip_longest
 from multiprocessing import cpu_count
 from operator import add
 
@@ -69,6 +71,7 @@ class TimeSeriesPlotter:
     def log_clustering_plots_as_html(
         self,
         clustering_info: dict[str, list[str]],
+        non_clustered_reduced_df: pd.DataFrame,
         record: DatasetRecord,
         anomaly_points: dict[str, np.ndarray],
     ) -> None:
@@ -76,10 +79,45 @@ class TimeSeriesPlotter:
         """
         if not self.enable_upload_plots:
             return
+
+        # Parallelize plotting of clustered and no-clustered metrics.
+        with futures.ProcessPoolExecutor(max_workers=2) as executor:
+            future_list: dict[futures.Future, str] = {}
+            f = executor.submit(
+                self.get_html_of_clustered_series_plots,
+                clustering_info=clustering_info,
+                record=record,
+                anomaly_points=anomaly_points,
+            )
+            future_list[f] = f"tests/clustering/time_series_plots/{record.chaos_case_full()}.clustered"
+            f = executor.submit(
+                self.get_html_of_non_clustered_series_plots,
+                non_clustered_reduced_df=non_clustered_reduced_df,
+                record=record,
+                anomaly_points=anomaly_points,
+            )
+            future_list[f] = f"tests/clustering/time_series_plots/{record.chaos_case_full()}.no_clustered"
+            for future in futures.as_completed(future_list):
+                neptune_path: str = future_list[future]
+                html: str = future.result()
+                self.run[neptune_path].upload(
+                    neptune.types.File.from_content(html, extension='html'),
+                )
+
+    @classmethod
+    def get_html_of_clustered_series_plots(
+        cls,
+        clustering_info: dict[str, list[str]],
+        record: DatasetRecord,
+        anomaly_points: dict[str, np.ndarray],
+    ) -> str:
+        """ Upload clustered time series plots to neptune.ai.
+        """
+        logger.info(f">> Uploading clustering plots of {record.chaos_case_file()} ...")
         figures: list[hv.Overlay] = []
         for rep_metric, sub_metrics in clustering_info.items():
             clustered_metrics: list[str] = [rep_metric] + sub_metrics
-            fig: hv.Overlay = self.generate_figure_time_series(
+            fig: hv.Overlay = cls.generate_figure_time_series(
                 data=record.data_df[clustered_metrics],
                 anomaly_points=anomaly_points,
                 title=f'Chart of time series metrics {record.chaos_case_full()} / rep:{rep_metric}',
@@ -87,28 +125,24 @@ class TimeSeriesPlotter:
             )
             figures.append(fig)
         final_fig = reduce(add, figures)
-        html = file_html(hv.render(final_fig), CDN, record.chaos_case_full())
-        self.run[f"tests/clustering/ts_figures/{record.chaos_case_full()}"].upload(
-            neptune.types.File.from_content(html, extension='html'),
-        )
+        return file_html(hv.render(final_fig), CDN, record.chaos_case_full())
 
-    def log_non_clustered_plots_as_html(
-        self,
+    @classmethod
+    def get_html_of_non_clustered_series_plots(
+        cls,
         record: DatasetRecord,
         non_clustered_reduced_df: pd.DataFrame,
         anomaly_points: dict[str, np.ndarray],
-    ) -> None:
+    ) -> str:
         """ Upload non-clustered time series plots to neptune.ai.
         """
-        if not self.enable_upload_plots:
-            return
         logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
         if len(non_clustered_reduced_df.columns) == 0:
             return None
 
         figures: list[hv.Overlay] = []
         for service, metrics in pk.group_metrics_by_service(list(non_clustered_reduced_df.columns)).items():
-            fig: hv.Overlay = self.generate_figure_time_series(
+            fig: hv.Overlay = cls.generate_figure_time_series(
                 data=non_clustered_reduced_df[metrics],
                 anomaly_points=anomaly_points,
                 title=f'Chart of time series metrics {record.chaos_case_full()} / {service} [no clustered]',
@@ -116,10 +150,7 @@ class TimeSeriesPlotter:
             )
             figures.append(fig)
         final_fig = reduce(add, figures)
-        html = file_html(hv.render(final_fig), CDN, record.chaos_case_full())
-        self.run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case_full()}"].upload(
-            neptune.types.File.from_content(html, extension='html'),
-        )
+        return file_html(hv.render(final_fig), CDN, record.chaos_case_full())
 
     @classmethod
     def generate_html_time_series(
@@ -335,9 +366,6 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     ), ignore_index=True,
                 )
 
-            if ts_plotter.enable_upload_plots:
-                logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
-                ts_plotter.log_clustering_plots_as_html(clustering_info, record, anomaly_points)
             for representative_metric, sub_metrics in clustering_info.items():
                 clustering_df = clustering_df.append(
                     pd.Series(
@@ -351,7 +379,6 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             rep_metrics: list[str] = list(clustering_info.keys())
             post_clustered_reduced_df = reduced_df_by_step['step2']
             non_clustered_reduced_df: pd.DataFrame = post_clustered_reduced_df.drop(columns=rep_metrics)
-            ts_plotter.log_non_clustered_plots_as_html(record, non_clustered_reduced_df, anomaly_points)
             non_clustered_df = non_clustered_df.append(
                 pd.Series(
                     [
@@ -360,6 +387,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     ], index=non_clustered_df.columns,
                 ), ignore_index=True,
             )
+
+            ts_plotter.log_clustering_plots_as_html(clustering_info, non_clustered_reduced_df, record, anomaly_points)
 
         mean_num_series_str: str = '/'.join(
             [f"{statistics.mean(num_series[s])}" for s in ['total', 'step1', 'step2']]
