@@ -41,23 +41,29 @@ class UnivariateSeriesReductionResult:
         has_kept: bool,
         anomaly_scores: np.ndarray = np.array([]),
         abn_th: float = 0.0,
+        outliers: list[tuple[int, float]] = [],
     ) -> None:
-        self._original_series = original_series
-        self._has_kept = has_kept
-        self._anomaly_scores = anomaly_scores
-        self._abn_th = abn_th
+        self._original_series: np.ndarray = original_series
+        self._has_kept: bool = has_kept
+        self._anomaly_scores: np.ndarray = anomaly_scores
+        self._abn_th: float = abn_th
+        self._outliers: np.ndarray = np.array(outliers)
 
     @property
-    def original_series(self):
+    def original_series(self) -> np.ndarray:
         return self._original_series
 
     @property
-    def has_kept(self):
+    def has_kept(self) -> bool:
         return self._has_kept
 
     @property
-    def anomaly_scores(self):
+    def anomaly_scores(self) -> np.ndarray:
         return self._anomaly_scores
+
+    @property
+    def outliers(self) -> np.ndarray:
+        return self._outliers
 
     def binary_scores(self) -> np.ndarray:
         bin_scores = np.empty(self.anomaly_scores.size, dtype=np.uint8)
@@ -131,7 +137,8 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
         raise ValueError(f"scores must contain only finite values. {scores}")
     outliers, abn_th = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
     if len(outliers) > 0:
-        return UnivariateSeriesReductionResult(series, has_kept=True, anomaly_scores=scores, abn_th=abn_th)
+        return UnivariateSeriesReductionResult(
+            series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=outliers)
     return UnivariateSeriesReductionResult(series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
 
 
@@ -151,13 +158,13 @@ class Tsdr:
         self,
         series: pd.DataFrame,
         max_workers: int,
-    ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
+    ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any], pd.DataFrame]:
         metrics_dimension: dict[str, Any] = aggregate_dimension(series)
 
         # step1
         start: float = time.time()
 
-        reduced_series1, step1_results = self.reduce_univariate_series(series, max_workers)
+        reduced_series1, step1_results, anomaly_points = self.reduce_univariate_series(series, max_workers)
 
         time_adf: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(
@@ -198,13 +205,14 @@ class Tsdr:
         metrics_dimension["total"].append(len(reduced_series2.columns))
 
         return {'step1': time_adf, 'step2': time_clustering}, \
-            {'step1': df_before_clustering, 'step2': reduced_series2}, metrics_dimension, clustering_info
+            {'step1': df_before_clustering, 'step2': reduced_series2}, \
+            metrics_dimension, clustering_info, anomaly_points
 
     def reduce_univariate_series(
         self,
         useries: pd.DataFrame,
         n_workers: int,
-    ) -> tuple[pd.DataFrame, dict[str, UnivariateSeriesReductionResult]]:
+    ) -> tuple[pd.DataFrame, dict[str, UnivariateSeriesReductionResult], pd.DataFrame]:
         results: dict[str, UnivariateSeriesReductionResult] = {}
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             future_to_col = {}
@@ -221,7 +229,8 @@ class Tsdr:
                 results[col] = result
                 if result.has_kept:
                     reduced_cols.append(col)
-        return useries[reduced_cols], results
+        anomaly_points: pd.DataFrame = pd.DataFrame({col: res.outliers for col, res in results.items()})
+        return useries[reduced_cols], results, anomaly_points
 
     def reduce_multivariate_series(
         self,
