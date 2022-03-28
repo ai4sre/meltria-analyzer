@@ -57,16 +57,7 @@ class TimeSeriesPlotter:
 
         self.logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
 
-        _, ground_truth_metrics = groundtruth.check_tsdr_ground_truth_by_route(
-            metrics=record.metrics_names(),  # pre-reduced data frame
-            chaos_type=record.chaos_type,
-            chaos_comp=record.chaos_comp,
-        )
-        if len(ground_truth_metrics) < 1:
-            return
-        ground_truth_metrics.sort()
-        gtdf = record.data_df[ground_truth_metrics]
-
+        gtdf = record.ground_truth_metrics_frame()
         hv_curves = []
         for column in gtdf.columns:
             series = gtdf[column]
