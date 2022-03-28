@@ -84,6 +84,7 @@ class TimeSeriesPlotter:
                 data=record.data_df[clustered_metrics],
                 anomaly_points=anomaly_points,
                 title=f'Chart of time series metrics {record.chaos_case_full()} / rep:{rep_metric}',
+                width_and_height=(600, 200),
             )
             figures.append(fig)
         final_fig = reduce(add, figures)
@@ -130,6 +131,7 @@ class TimeSeriesPlotter:
         record: DatasetRecord,
         data: pd.DataFrame,
         title: str,
+        width_and_height: tuple[int, int] = (1200, 600),
         anomaly_points: dict[str, np.ndarray] = {},
     ) -> hv.Overlay:
         hv_curves = []
@@ -149,7 +151,7 @@ class TimeSeriesPlotter:
         return hv.Overlay(hv_curves).opts(
             title=title,
             tools=['hover', 'tap'],
-            width=1200, height=600,
+            width=width_and_height[0], height=width_and_height[1],
             xlabel='time', ylabel='zscore',
             show_grid=True, legend_limit=100,
             show_legend=True, legend_position='right', legend_muted=True,
