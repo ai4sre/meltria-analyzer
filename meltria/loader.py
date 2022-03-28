@@ -41,14 +41,14 @@ class DatasetRecord:
     def basename_of_metrics_file(self) -> str:
         return os.path.basename(self.metrics_file)
 
-    def ground_truth_metrics_frame(self) -> pd.DataFrame:
+    def ground_truth_metrics_frame(self) -> Optional[pd.DataFrame]:
         _, ground_truth_metrics = groundtruth.check_tsdr_ground_truth_by_route(
             metrics=self.metrics_names(),  # pre-reduced data frame
             chaos_type=self.chaos_type,
             chaos_comp=self.chaos_comp,
         )
         if len(ground_truth_metrics) < 1:
-            return
+            return None
         ground_truth_metrics.sort()
         return self.data_df[ground_truth_metrics]
 

@@ -57,7 +57,8 @@ class TimeSeriesPlotter:
 
         self.logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
 
-        gtdf = record.ground_truth_metrics_frame()
+        if not (gtdf := record.ground_truth_metrics_frame()):
+            return
         hv_curves = []
         for column in gtdf.columns:
             series = gtdf[column]
@@ -297,7 +298,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 })
                 reducer = tsdr.Tsdr(tsdr.ar_based_ad_model, **tsdr_param)
 
-            elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info = reducer.run(
+            elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info, anomaly_points = reducer.run(
                 series=data_df,
                 max_workers=cpu_count(),
             )
@@ -314,7 +315,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             )
 
             for step, df in reduced_df_by_step.items():
-                ok, found_metrics = check_tsdr_ground_truth_by_route(
+                ok, found_metrics = groundtruth.check_tsdr_ground_truth_by_route(
                     metrics=list(df.columns),
                     chaos_type=chaos_type,
                     chaos_comp=chaos_comp,
