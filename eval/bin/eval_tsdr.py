@@ -80,7 +80,6 @@ class TimeSeriesPlotter:
         for rep_metric, sub_metrics in clustering_info.items():
             clustered_metrics: list[str] = [rep_metric] + sub_metrics
             fig: hv.Overlay = self.generate_figure_time_series(
-                record,
                 data=record.data_df[clustered_metrics],
                 anomaly_points=anomaly_points,
                 title=f'Chart of time series metrics {record.chaos_case_full()} / rep:{rep_metric}',
@@ -124,13 +123,12 @@ class TimeSeriesPlotter:
         title: str,
         anomaly_points: dict[str, np.ndarray] = {},
     ) -> str:
-        fig = cls.generate_figure_time_series(record, data, title, anomaly_points)
+        fig = cls.generate_figure_time_series(data, title=title, anomaly_points=anomaly_points)
         return file_html(hv.render(fig), CDN, record.chaos_case_full())
 
     @classmethod
     def generate_figure_time_series(
         cls,
-        record: DatasetRecord,
         data: pd.DataFrame,
         title: str,
         width_and_height: tuple[int, int] = (1200, 600),
