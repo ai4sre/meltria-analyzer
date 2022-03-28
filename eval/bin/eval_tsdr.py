@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import logging
-import math
 import os
 import statistics
 from collections import defaultdict
@@ -11,7 +10,6 @@ from operator import add
 
 import holoviews as hv
 import hydra
-import matplotlib.pyplot as plt
 import meltria.loader as meltria_loader
 import neptune.new as neptune
 import numpy as np
@@ -28,6 +26,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
 
 hv.extension('bokeh')
+
 
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
 logger = logging.getLogger('root_experiment')
