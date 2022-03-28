@@ -8,6 +8,7 @@ from functools import reduce
 from multiprocessing import cpu_count
 from operator import add
 
+import eval.priorknowledge as pk
 import holoviews as hv
 import hydra
 import meltria.loader as meltria_loader
@@ -82,7 +83,7 @@ class TimeSeriesPlotter:
                 data=record.data_df[clustered_metrics],
                 anomaly_points=anomaly_points,
                 title=f'Chart of time series metrics {record.chaos_case_full()} / rep:{rep_metric}',
-                width_and_height=(600, 200),
+                width_and_height=(800, 400),
             )
             figures.append(fig)
         final_fig = reduce(add, figures)
@@ -104,12 +105,18 @@ class TimeSeriesPlotter:
         logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
         if len(non_clustered_reduced_df.columns) == 0:
             return None
-        html = self.generate_html_time_series(
-            record,
-            data=non_clustered_reduced_df,
-            anomaly_points=anomaly_points,
-            title=f'Chart of time series metrics {record.chaos_case_full()} / [no clustered]',
-        )
+
+        figures: list[hv.Overlay] = []
+        for service, metrics in pk.group_metrics_by_service(list(non_clustered_reduced_df.columns)).items():
+            fig: hv.Overlay = self.generate_figure_time_series(
+                data=non_clustered_reduced_df[metrics],
+                anomaly_points=anomaly_points,
+                title=f'Chart of time series metrics {record.chaos_case_full()} / {service} [no clustered]',
+                width_and_height=(800, 400),
+            )
+            figures.append(fig)
+        final_fig = reduce(add, figures)
+        html = file_html(hv.render(final_fig), CDN, record.chaos_case_full())
         self.run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case_full()}"].upload(
             neptune.types.File.from_content(html, extension='html'),
         )
@@ -152,6 +159,7 @@ class TimeSeriesPlotter:
             tools=['hover', 'tap'],
             width=width_and_height[0], height=width_and_height[1],
             xlabel='time', ylabel='zscore',
+            fontsize={'legend': 8},
             show_grid=True, legend_limit=100,
             show_legend=True, legend_position='right', legend_muted=True,
         )
