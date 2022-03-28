@@ -1,24 +1,35 @@
 #!/usr/bin/env python3
 
 import logging
-import math
 import os
 import statistics
 from collections import defaultdict
+from concurrent import futures
+from functools import reduce
+from itertools import zip_longest
 from multiprocessing import cpu_count
+from operator import add
 
+import eval.priorknowledge as pk
+import holoviews as hv
 import hydra
-import matplotlib.pyplot as plt
 import meltria.loader as meltria_loader
 import neptune.new as neptune
 import numpy as np
 import pandas as pd
+import scipy
+import scipy.stats
+from bokeh.embed import file_html
+from bokeh.resources import CDN
 from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
+
+hv.extension('bokeh')
+
 
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
 logger = logging.getLogger('root_experiment')
@@ -43,97 +54,146 @@ class TimeSeriesPlotter:
         self.enable_upload_plots = enable_upload_plots
         self.logger = logger
 
-    def log_plots_as_image(self, record: DatasetRecord) -> None:
-        """ Upload found_metrics plot images to neptune.ai. """
+    def log_plots_as_html(self, record: DatasetRecord) -> None:
+        """ Upload found_metrics plot images to neptune.ai.
+        """
         if not self.enable_upload_plots:
             return
-
         self.logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
-
-        _, ground_truth_metrics = groundtruth.check_tsdr_ground_truth_by_route(
-            metrics=record.metrics_names(),  # pre-reduced data frame
-            chaos_type=record.chaos_type,
-            chaos_comp=record.chaos_comp,
-        )
-        if len(ground_truth_metrics) < 1:
+        if (gtdf := record.ground_truth_metrics_frame()) is None:
             return
-        ground_truth_metrics.sort()
-        fig, axes = plt.subplots(nrows=len(ground_truth_metrics), ncols=1)
-        # reset_index removes extra index texts from the generated figure.
-        record.data_df[ground_truth_metrics].reset_index().plot(subplots=True, figsize=(6, 6), sharex=False, ax=axes)
-        fig.suptitle(record.chaos_case_file())
-        self.run[f"dataset/figures/{record.chaos_case()}"].log(neptune.types.File.as_image(fig))
-        plt.close(fig=fig)
-
-    def log_clustering_plots_as_image(
-        self,
-        rep_metric: str,
-        sub_metrics: list[str],
-        metrics_df: pd.DataFrame,
-        record: DatasetRecord,
-    ) -> None:
-        """ Upload clustered time series plots to neptune.ai """
-
-        if not self.enable_upload_plots:
-            return
-
-        clustered_metrics: list[str] = [rep_metric] + sub_metrics
-        fig, axes = plt.subplots(
-            nrows=len(clustered_metrics),
-            ncols=1,
-            figsize=(6, len(clustered_metrics) * 1.5),
+        html = self.generate_html_time_series(
+            record, gtdf, title=f'Chart of time series metrics {record.chaos_case_full()}')
+        self.run[f"dataset/figures/{record.chaos_case_full()}"].upload(
+            neptune.types.File.from_content(html, extension='html'),
         )
-        # reset_index removes extra index texts from the generated figure.
-        metrics_df[clustered_metrics].reset_index(drop=True).plot(
-            subplots=True, sharex=False, ax=axes,
-        )
-        fig.suptitle(f"{record.chaos_case_file()}  rep:{rep_metric}")
-        self.run[f"tests/clustering/ts_figures/{record.chaos_case()}"].log(
-            neptune.types.File.as_image(fig))
-        plt.close(fig=fig)
 
-    def log_non_clustered_plots_as_image(
+    def log_clustering_plots_as_html(
         self,
-        record: DatasetRecord,
+        clustering_info: dict[str, list[str]],
         non_clustered_reduced_df: pd.DataFrame,
+        record: DatasetRecord,
+        anomaly_points: dict[str, np.ndarray],
     ) -> None:
-        """ Upload non-clustered time series plots to neptune.ai """
-
+        """ Upload clustered time series plots to neptune.ai.
+        """
         if not self.enable_upload_plots:
             return
 
-        logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
-
-        num_non_clustered_plots = len(non_clustered_reduced_df.columns)
-        if num_non_clustered_plots == 0:
-            return None
-        fig, axes = plt.subplots(
-            nrows=math.ceil(num_non_clustered_plots/3),
-            ncols=3,
-            figsize=(6*3, num_non_clustered_plots * 0.8),
-            squeeze=False,  # always return 2D-array axes
-        )
-        # Match the numbers axes and non-clustered columns
-        axes = self.trim_axs(axes, num_non_clustered_plots)
-        # reset_index removes extra index texts from the generated figure.
-        non_clustered_reduced_df.reset_index(drop=True).plot(
-            subplots=True, figsize=(6, 6), sharex=False, sharey=False, ax=axes,
-        )
-        fig.suptitle(f"{record.chaos_case_file()} - non-clustered metrics")
-        self.run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case()}"].log(
-            neptune.types.File.as_image(fig)
-        )
-        plt.close(fig=fig)
+        # Parallelize plotting of clustered and no-clustered metrics.
+        with futures.ProcessPoolExecutor(max_workers=2) as executor:
+            future_list: dict[futures.Future, str] = {}
+            f = executor.submit(
+                self.get_html_of_clustered_series_plots,
+                clustering_info=clustering_info,
+                record=record,
+                anomaly_points=anomaly_points,
+            )
+            future_list[f] = f"tests/clustering/time_series_plots/{record.chaos_case_full()}.clustered"
+            f = executor.submit(
+                self.get_html_of_non_clustered_series_plots,
+                non_clustered_reduced_df=non_clustered_reduced_df,
+                record=record,
+                anomaly_points=anomaly_points,
+            )
+            future_list[f] = f"tests/clustering/time_series_plots/{record.chaos_case_full()}.no_clustered"
+            for future in futures.as_completed(future_list):
+                neptune_path: str = future_list[future]
+                html: str = future.result()
+                self.run[neptune_path].upload(
+                    neptune.types.File.from_content(html, extension='html'),
+                )
 
     @classmethod
-    def trim_axs(cls, axs, N):
+    def get_html_of_clustered_series_plots(
+        cls,
+        clustering_info: dict[str, list[str]],
+        record: DatasetRecord,
+        anomaly_points: dict[str, np.ndarray],
+    ) -> str:
+        """ Upload clustered time series plots to neptune.ai.
         """
-        Reduce *axs* to *N* Axes. All further Axes are removed from the figure.
+        logger.info(f">> Uploading clustering plots of {record.chaos_case_file()} ...")
+        figures: list[hv.Overlay] = []
+        for rep_metric, sub_metrics in clustering_info.items():
+            clustered_metrics: list[str] = [rep_metric] + sub_metrics
+            fig: hv.Overlay = cls.generate_figure_time_series(
+                data=record.data_df[clustered_metrics],
+                anomaly_points=anomaly_points,
+                title=f'Chart of time series metrics {record.chaos_case_full()} / rep:{rep_metric}',
+                width_and_height=(800, 400),
+            )
+            figures.append(fig)
+        final_fig = reduce(add, figures)
+        return file_html(hv.render(final_fig), CDN, record.chaos_case_full())
+
+    @classmethod
+    def get_html_of_non_clustered_series_plots(
+        cls,
+        record: DatasetRecord,
+        non_clustered_reduced_df: pd.DataFrame,
+        anomaly_points: dict[str, np.ndarray],
+    ) -> str:
+        """ Upload non-clustered time series plots to neptune.ai.
         """
-        axs = axs.flat
-        for ax in axs[N:]:
-            ax.remove()
-        return axs[:N]
+        logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
+        if len(non_clustered_reduced_df.columns) == 0:
+            return None
+
+        figures: list[hv.Overlay] = []
+        for service, metrics in pk.group_metrics_by_service(list(non_clustered_reduced_df.columns)).items():
+            fig: hv.Overlay = cls.generate_figure_time_series(
+                data=non_clustered_reduced_df[metrics],
+                anomaly_points=anomaly_points,
+                title=f'Chart of time series metrics {record.chaos_case_full()} / {service} [no clustered]',
+                width_and_height=(800, 400),
+            )
+            figures.append(fig)
+        final_fig = reduce(add, figures)
+        return file_html(hv.render(final_fig), CDN, record.chaos_case_full())
+
+    @classmethod
+    def generate_html_time_series(
+        cls,
+        record: DatasetRecord,
+        data: pd.DataFrame,
+        title: str,
+        anomaly_points: dict[str, np.ndarray] = {},
+    ) -> str:
+        fig = cls.generate_figure_time_series(data, title=title, anomaly_points=anomaly_points)
+        return file_html(hv.render(fig), CDN, record.chaos_case_full())
+
+    @classmethod
+    def generate_figure_time_series(
+        cls,
+        data: pd.DataFrame,
+        title: str,
+        width_and_height: tuple[int, int] = (1200, 600),
+        anomaly_points: dict[str, np.ndarray] = {},
+    ) -> hv.Overlay:
+        hv_curves = []
+        for column in data.columns:
+            vals: np.ndarray = scipy.stats.zscore(data[column].to_numpy())
+            df = pd.DataFrame(data={
+                'x': np.arange(vals.size),
+                'y': vals,
+                'label': column,  # to show label with hovertool
+            })
+            line = hv.Curve(df, label=column).opts(tools=['hover', 'tap'])
+            if (points := anomaly_points.get(column)) is None:
+                hv_curves.append(line)
+            else:
+                ap = np.array([(p[0], vals[p[0]]) for p in points])
+                hv_curves.append(line * hv.Points(ap).opts(color='red', size=8, marker='x'))
+        return hv.Overlay(hv_curves).opts(
+            title=title,
+            tools=['hover', 'tap'],
+            width=width_and_height[0], height=width_and_height[1],
+            xlabel='time', ylabel='zscore',
+            fontsize={'legend': 8},
+            show_grid=True, legend_limit=100,
+            show_legend=True, legend_position='right', legend_muted=True,
+        )
 
 
 def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
@@ -236,11 +296,10 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
 
-            ts_plotter.log_plots_as_image(record)
+            ts_plotter.log_plots_as_html(record)
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
-            reducer: tsdr.Tsdr
             tsdr_param = {
                 'tsifter_step2_clustering_threshold': cfg.step2.dist_threshold,
                 'tsifter_step2_clustered_series_type': cfg.step2.clustered_series_type,
@@ -268,8 +327,10 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     'tsifter_step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
                 })
                 reducer = tsdr.Tsdr(tsdr.ar_based_ad_model, **tsdr_param)
+            else:
+                raise ValueError(f'Invalid name of step1 mode: {cfg.step1.model_name}')
 
-            elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info = reducer.run(
+            elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info, anomaly_points = reducer.run(
                 series=data_df,
                 max_workers=cpu_count(),
             )
@@ -286,7 +347,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             )
 
             for step, df in reduced_df_by_step.items():
-                ok, found_metrics = check_tsdr_ground_truth_by_route(
+                ok, found_metrics = groundtruth.check_tsdr_ground_truth_by_route(
                     metrics=list(df.columns),
                     chaos_type=chaos_type,
                     chaos_comp=chaos_comp,
@@ -305,13 +366,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     ), ignore_index=True,
                 )
 
-            if ts_plotter.enable_upload_plots:
-                logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
-            pre_clustered_reduced_df = reduced_df_by_step['step1']
             for representative_metric, sub_metrics in clustering_info.items():
-                ts_plotter.log_clustering_plots_as_image(
-                    representative_metric, sub_metrics, pre_clustered_reduced_df, record,
-                )
                 clustering_df = clustering_df.append(
                     pd.Series(
                         [
@@ -324,7 +379,6 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             rep_metrics: list[str] = list(clustering_info.keys())
             post_clustered_reduced_df = reduced_df_by_step['step2']
             non_clustered_reduced_df: pd.DataFrame = post_clustered_reduced_df.drop(columns=rep_metrics)
-            ts_plotter.log_non_clustered_plots_as_image(record, non_clustered_reduced_df)
             non_clustered_df = non_clustered_df.append(
                 pd.Series(
                     [
@@ -333,6 +387,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     ], index=non_clustered_df.columns,
                 ), ignore_index=True,
             )
+
+            ts_plotter.log_clustering_plots_as_html(clustering_info, non_clustered_reduced_df, record, anomaly_points)
 
         mean_num_series_str: str = '/'.join(
             [f"{statistics.mean(num_series[s])}" for s in ['total', 'step1', 'step2']]

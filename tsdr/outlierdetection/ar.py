@@ -16,7 +16,7 @@ class AROutlierDetector:
         regression: str = 'c',
         autolag: bool = True,
         ic: str = 'aic',
-        lag: int = -1,
+        lag: int = 0,
         dynamic_prediction: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, AutoRegResultsWrapper]:
         """
@@ -40,11 +40,9 @@ class AROutlierDetector:
             maxlag = int(x.size * 0.2) if self.maxlag == 0 else self.maxlag
             sel = ar_select_order(x, maxlag=maxlag, trend=regression, ic=ic, old_names=False)
             model_fit = sel.model.fit()
-            if model_fit.ar_lags is None or len(model_fit.ar_lags) > 0:
+            if model_fit.ar_lags is not None and len(model_fit.ar_lags) > 0:
                 r = model_fit.ar_lags[-1]
         else:
-            if r == -1:
-                raise ValueError('it should be set lag')
             model = AutoReg(endog=x, lags=lag, trend=regression, old_names=False)
             model_fit = model.fit()
 
