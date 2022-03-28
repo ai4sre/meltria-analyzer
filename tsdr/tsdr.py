@@ -47,7 +47,7 @@ class UnivariateSeriesReductionResult:
         self._has_kept: bool = has_kept
         self._anomaly_scores: np.ndarray = anomaly_scores
         self._abn_th: float = abn_th
-        self._outliers: np.ndarray = np.array(outliers)
+        self._outliers: np.ndarray = np.array(outliers, dtype=object)  # mix int and float
 
     @property
     def original_series(self) -> np.ndarray:
@@ -158,7 +158,7 @@ class Tsdr:
         self,
         series: pd.DataFrame,
         max_workers: int,
-    ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any], pd.DataFrame]:
+    ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any], dict[str, np.ndarray]]:
         metrics_dimension: dict[str, Any] = aggregate_dimension(series)
 
         # step1
@@ -212,7 +212,7 @@ class Tsdr:
         self,
         useries: pd.DataFrame,
         n_workers: int,
-    ) -> tuple[pd.DataFrame, dict[str, UnivariateSeriesReductionResult], pd.DataFrame]:
+    ) -> tuple[pd.DataFrame, dict[str, UnivariateSeriesReductionResult], dict[str, np.ndarray]]:
         results: dict[str, UnivariateSeriesReductionResult] = {}
         with futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             future_to_col = {}
@@ -229,7 +229,7 @@ class Tsdr:
                 results[col] = result
                 if result.has_kept:
                     reduced_cols.append(col)
-        anomaly_points: pd.DataFrame = pd.DataFrame.from_dict({col: res.outliers for col, res in results.items()}, orient='index').T
+        anomaly_points = {col: res.outliers for col, res in results.items()}
         return useries[reduced_cols], results, anomaly_points
 
     def reduce_multivariate_series(
