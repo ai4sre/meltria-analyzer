@@ -35,11 +35,6 @@ TARGET_DATA = {"containers": "all",
 
 
 class UnivariateSeriesReductionResult:
-    _original_series: np.ndarray
-    _has_kept: bool
-    _anomaly_scores: np.ndarray
-    _abn_th: float
-
     def __init__(
         self,
         original_series: np.ndarray,
@@ -141,8 +136,6 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
 
 
 class Tsdr:
-    params: dict[str, Any]
-
     def __init__(
         self,
         univariate_series_func: Callable[[np.ndarray, Any], UnivariateSeriesReductionResult],
