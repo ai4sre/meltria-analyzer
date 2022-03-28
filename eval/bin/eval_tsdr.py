@@ -51,32 +51,15 @@ class TimeSeriesPlotter:
         self.logger = logger
 
     def log_plots_as_html(self, record: DatasetRecord) -> None:
-        """ Upload found_metrics plot images to neptune.ai. """
+        """ Upload found_metrics plot images to neptune.ai.
+        """
         if not self.enable_upload_plots:
             return
-
         self.logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
-
         if not (gtdf := record.ground_truth_metrics_frame()):
             return
-        hv_curves = []
-        for column in gtdf.columns:
-            series = gtdf[column]
-            df = pd.DataFrame(data={
-                'x': np.arange(series.size),
-                'y': scipy.stats.zscore(series.to_numpy()),
-                'label': column,  # to show label with hovertool
-            })
-            hv_curves.append(hv.Curve(df, label=column).opts(tools=['hover', 'tap']))
-        fig = hv.Overlay(hv_curves).opts(
-            title=f'Chart of time series metrics {record.chaos_case_full()}',
-            tools=['hover', 'tap'],
-            width=1200, height=600,
-            xlabel='time', ylabel='zscore',
-            show_grid=True, legend_limit=100,
-            show_legend=True, legend_position='right', legend_muted=True,
-        )
-        html = file_html(hv.render(fig), CDN, record.chaos_case_full())
+        html = self.generate_html_time_series(
+            record, gtdf, title=f'Chart of time series metrics {record.chaos_case_full()}')
         self.run[f"dataset/figures/{record.chaos_case_full()}"].upload(
             neptune.types.File.from_content(html, extension='html'),
         )
@@ -88,31 +71,16 @@ class TimeSeriesPlotter:
         metrics_df: pd.DataFrame,
         record: DatasetRecord,
     ) -> None:
-        """ Upload clustered time series plots to neptune.ai """
-
+        """ Upload clustered time series plots to neptune.ai.
+        """
         if not self.enable_upload_plots:
             return
-
         clustered_metrics: list[str] = [rep_metric] + sub_metrics
-        cmdf = record.data_df[clustered_metrics]
-        hv_curves = []
-        for column in cmdf.columns:
-            series = cmdf[column]
-            df = pd.DataFrame(data={
-                'x': np.arange(series.size),
-                'y': scipy.stats.zscore(series.to_numpy()),
-                'label': column,  # to show label with hovertool
-            })
-            hv_curves.append(hv.Curve(df, label=column).opts(tools=['hover', 'tap']))
-        fig = hv.Overlay(hv_curves).opts(
+        html = self.generate_html_time_series(
+            record,
+            data=record.data_df[clustered_metrics],
             title=f'Chart of time series metrics {record.chaos_case_full()} / rep:{rep_metric}',
-            tools=['hover', 'tap'],
-            width=1200, height=600,
-            xlabel='time', ylabel='zscore',
-            show_grid=True, legend_limit=100,
-            show_legend=True, legend_position='right', legend_muted=True,
         )
-        html = file_html(hv.render(fig), CDN, record.chaos_case_full())
         self.run[f"dataset/figures/{record.chaos_case_full()}"].upload(
             neptune.types.File.from_content(html, extension='html'),
         )
@@ -122,19 +90,27 @@ class TimeSeriesPlotter:
         record: DatasetRecord,
         non_clustered_reduced_df: pd.DataFrame,
     ) -> None:
-        """ Upload non-clustered time series plots to neptune.ai """
-
+        """ Upload non-clustered time series plots to neptune.ai.
+        """
         if not self.enable_upload_plots:
             return
-
         logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
-
         if len(non_clustered_reduced_df.columns) == 0:
             return None
+        html = self.generate_html_time_series(
+            record,
+            data=non_clustered_reduced_df,
+            title=f'Chart of time series metrics {record.chaos_case_full()} / [no clustered]',
+        )
+        self.run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case_full()}"].upload(
+            neptune.types.File.from_content(html, extension='html'),
+        )
 
+    @classmethod
+    def generate_html_time_series(cls, record: DatasetRecord, data: pd.DataFrame, title: str):
         hv_curves = []
-        for column in non_clustered_reduced_df.columns:
-            series = non_clustered_reduced_df[column]
+        for column in data.columns:
+            series = data[column]
             df = pd.DataFrame(data={
                 'x': np.arange(series.size),
                 'y': scipy.stats.zscore(series.to_numpy()),
@@ -142,17 +118,14 @@ class TimeSeriesPlotter:
             })
             hv_curves.append(hv.Curve(df, label=column).opts(tools=['hover', 'tap']))
         fig = hv.Overlay(hv_curves).opts(
-            title=f'Chart of time series metrics {record.chaos_case_full()} / [no clustered]',
+            title=title,
             tools=['hover', 'tap'],
             width=1200, height=600,
             xlabel='time', ylabel='zscore',
             show_grid=True, legend_limit=100,
             show_legend=True, legend_position='right', legend_muted=True,
         )
-        html = file_html(hv.render(fig), CDN, record.chaos_case_full())
-        self.run[f"tests/clustering/non_clustered_metrics_ts_figures/{record.chaos_case_full()}"].upload(
-            neptune.types.File.from_content(html, extension='html'),
-        )
+        return file_html(hv.render(fig), CDN, record.chaos_case_full())
 
     @classmethod
     def trim_axs(cls, axs, N):
