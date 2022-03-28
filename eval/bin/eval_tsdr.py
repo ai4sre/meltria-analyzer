@@ -56,7 +56,7 @@ class TimeSeriesPlotter:
         if not self.enable_upload_plots:
             return
         self.logger.info(f">> Uploading plot figures of {record.chaos_case_file()} ...")
-        if not (gtdf := record.ground_truth_metrics_frame()):
+        if (gtdf := record.ground_truth_metrics_frame()) is None:
             return
         html = self.generate_html_time_series(
             record, gtdf, title=f'Chart of time series metrics {record.chaos_case_full()}')
@@ -68,8 +68,8 @@ class TimeSeriesPlotter:
         self,
         rep_metric: str,
         sub_metrics: list[str],
-        metrics_df: pd.DataFrame,
         record: DatasetRecord,
+        anomaly_points: dict[str, np.ndarray],
     ) -> None:
         """ Upload clustered time series plots to neptune.ai.
         """
@@ -79,9 +79,10 @@ class TimeSeriesPlotter:
         html = self.generate_html_time_series(
             record,
             data=record.data_df[clustered_metrics],
+            anomaly_points=anomaly_points,
             title=f'Chart of time series metrics {record.chaos_case_full()} / rep:{rep_metric}',
         )
-        self.run[f"dataset/figures/{record.chaos_case_full()}"].upload(
+        self.run[f"tests/clustering/ts_figures/{record.chaos_case_full()}"].upload(
             neptune.types.File.from_content(html, extension='html'),
         )
 
@@ -107,16 +108,27 @@ class TimeSeriesPlotter:
         )
 
     @classmethod
-    def generate_html_time_series(cls, record: DatasetRecord, data: pd.DataFrame, title: str):
+    def generate_html_time_series(
+        cls,
+        record: DatasetRecord,
+        data: pd.DataFrame,
+        title: str,
+        anomaly_points: dict[str, np.ndarray] = {},
+    ) -> str:
         hv_curves = []
         for column in data.columns:
-            series = data[column]
+            vals: np.ndarray = scipy.stats.zscore(data[column].to_numpy())
             df = pd.DataFrame(data={
-                'x': np.arange(series.size),
-                'y': scipy.stats.zscore(series.to_numpy()),
+                'x': np.arange(vals.size),
+                'y': vals,
                 'label': column,  # to show label with hovertool
             })
-            hv_curves.append(hv.Curve(df, label=column).opts(tools=['hover', 'tap']))
+            line = hv.Curve(df, label=column).opts(tools=['hover', 'tap'])
+            if (points := anomaly_points.get(column)) is None:
+                hv_curves.append(line)
+            else:
+                ap = np.array([(p[0], vals[p[0]]) for p in points])
+                hv_curves.append(line * hv.Points(ap).opts(color='red', size=8, marker='x'))
         fig = hv.Overlay(hv_curves).opts(
             title=title,
             tools=['hover', 'tap'],
@@ -242,7 +254,6 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
-            reducer: tsdr.Tsdr
             tsdr_param = {
                 'tsifter_step2_clustering_threshold': cfg.step2.dist_threshold,
                 'tsifter_step2_clustered_series_type': cfg.step2.clustered_series_type,
@@ -270,6 +281,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     'tsifter_step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
                 })
                 reducer = tsdr.Tsdr(tsdr.ar_based_ad_model, **tsdr_param)
+            else:
+                raise ValueError(f'Invalid name of step1 mode: {cfg.step1.model_name}')
 
             elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info, anomaly_points = reducer.run(
                 series=data_df,
@@ -312,7 +325,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             pre_clustered_reduced_df = reduced_df_by_step['step1']
             for representative_metric, sub_metrics in clustering_info.items():
                 ts_plotter.log_clustering_plots_as_html(
-                    representative_metric, sub_metrics, pre_clustered_reduced_df, record,
+                    representative_metric, sub_metrics, record, anomaly_points,
                 )
                 clustering_df = clustering_df.append(
                     pd.Series(
