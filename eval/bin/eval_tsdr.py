@@ -5,7 +5,9 @@ import math
 import os
 import statistics
 from collections import defaultdict
+from functools import reduce
 from multiprocessing import cpu_count
+from operator import add
 
 import holoviews as hv
 import hydra
@@ -66,8 +68,7 @@ class TimeSeriesPlotter:
 
     def log_clustering_plots_as_html(
         self,
-        rep_metric: str,
-        sub_metrics: list[str],
+        clustering_info: dict[str, list[str]],
         record: DatasetRecord,
         anomaly_points: dict[str, np.ndarray],
     ) -> None:
@@ -75,13 +76,18 @@ class TimeSeriesPlotter:
         """
         if not self.enable_upload_plots:
             return
-        clustered_metrics: list[str] = [rep_metric] + sub_metrics
-        html = self.generate_html_time_series(
-            record,
-            data=record.data_df[clustered_metrics],
-            anomaly_points=anomaly_points,
-            title=f'Chart of time series metrics {record.chaos_case_full()} / rep:{rep_metric}',
-        )
+        figures: list[hv.Overlay] = []
+        for rep_metric, sub_metrics in clustering_info.items():
+            clustered_metrics: list[str] = [rep_metric] + sub_metrics
+            fig: hv.Overlay = self.generate_figure_time_series(
+                record,
+                data=record.data_df[clustered_metrics],
+                anomaly_points=anomaly_points,
+                title=f'Chart of time series metrics {record.chaos_case_full()} / rep:{rep_metric}',
+            )
+            figures.append(fig)
+        final_fig = reduce(add, figures)
+        html = file_html(hv.render(final_fig), CDN, record.chaos_case_full())
         self.run[f"tests/clustering/ts_figures/{record.chaos_case_full()}"].upload(
             neptune.types.File.from_content(html, extension='html'),
         )
@@ -115,6 +121,17 @@ class TimeSeriesPlotter:
         title: str,
         anomaly_points: dict[str, np.ndarray] = {},
     ) -> str:
+        fig = cls.generate_figure_time_series(record, data, title, anomaly_points)
+        return file_html(hv.render(fig), CDN, record.chaos_case_full())
+
+    @classmethod
+    def generate_figure_time_series(
+        cls,
+        record: DatasetRecord,
+        data: pd.DataFrame,
+        title: str,
+        anomaly_points: dict[str, np.ndarray] = {},
+    ) -> hv.Overlay:
         hv_curves = []
         for column in data.columns:
             vals: np.ndarray = scipy.stats.zscore(data[column].to_numpy())
@@ -129,7 +146,7 @@ class TimeSeriesPlotter:
             else:
                 ap = np.array([(p[0], vals[p[0]]) for p in points])
                 hv_curves.append(line * hv.Points(ap).opts(color='red', size=8, marker='x'))
-        fig = hv.Overlay(hv_curves).opts(
+        return hv.Overlay(hv_curves).opts(
             title=title,
             tools=['hover', 'tap'],
             width=1200, height=600,
@@ -137,7 +154,6 @@ class TimeSeriesPlotter:
             show_grid=True, legend_limit=100,
             show_legend=True, legend_position='right', legend_muted=True,
         )
-        return file_html(hv.render(fig), CDN, record.chaos_case_full())
 
     @classmethod
     def trim_axs(cls, axs, N):
@@ -322,11 +338,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
             if ts_plotter.enable_upload_plots:
                 logger.info(f">> Uploading clustered plots of {record.chaos_case_file()} ...")
-            pre_clustered_reduced_df = reduced_df_by_step['step1']
+                ts_plotter.log_clustering_plots_as_html(clustering_info, record, anomaly_points)
             for representative_metric, sub_metrics in clustering_info.items():
-                ts_plotter.log_clustering_plots_as_html(
-                    representative_metric, sub_metrics, record, anomaly_points,
-                )
                 clustering_df = clustering_df.append(
                     pd.Series(
                         [
