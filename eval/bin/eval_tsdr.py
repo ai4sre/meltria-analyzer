@@ -322,6 +322,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             elif cfg.step1.model_name == 'ar_based_ad':
                 tsdr_param.update({
                     'tsifter_step1_ar_regression': cfg.step1.ar_regression,
+                    'tsifter_step1_ar_lag': cfg.step1.ar_lag,
                     'tsifter_step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
                     'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
                     'tsifter_step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
@@ -452,6 +453,7 @@ def main(cfg: DictConfig) -> None:
             'step1_model_name': cfg.step1.model_name,
             'step1_cv_threshold': cfg.step1.cv_threshold,
             'step1_ar_regression': cfg.step1.ar_regression,
+            'step1_ar_lag': cfg.step1.ar_lag,
             'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
             'step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
         })

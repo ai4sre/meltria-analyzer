@@ -127,11 +127,14 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
         return UnivariateSeriesReductionResult(series, has_kept=False)
 
     ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 0.01)
-    ar = AROutlierDetector()
+    ar_lag: int = kwargs.get('tsifter_step1_ar_lag', 0)
+    ar = AROutlierDetector(maxlag=ar_lag)
     scores: np.ndarray = ar.score(
         x=series,
         regression=kwargs.get('tsifter_step1_ar_regression', 'n'),
-        dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False)
+        lag=ar_lag,
+        autolag=True if ar_lag == 0 else False,
+        dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False),
     )[0]
     if not np.all(np.isfinite(scores)):
         raise ValueError(f"scores must contain only finite values. {scores}")
