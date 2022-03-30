@@ -8,6 +8,7 @@ from typing import Any, Callable
 import banpei
 import numpy as np
 import pandas as pd
+import scipy.ndimage as ndimg
 import scipy.stats
 from arch.unitroot import PhillipsPerron
 from arch.utility.exceptions import InfeasibleTestException
@@ -130,6 +131,8 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
     if (smoother := kwargs.get('tsifter_step1_smoother')) is not None:
         if smoother == 'binner':
             series = smooth_with_binner(orig_series, **kwargs)
+        elif smoother == 'moving_average':
+            series = smooth_with_ma(orig_series, **kwargs)
         else:
             raise ValueError(f"Invalid smoother: '{smoother}'")
     else:
@@ -152,6 +155,11 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
         return UnivariateSeriesReductionResult(
             orig_series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=outliers)
     return UnivariateSeriesReductionResult(orig_series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
+
+
+def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
+    w: int = kwargs.get('tsifter_step1_ma_window_size', 2)
+    return ndimg.uniform_filter1d(input=x, size=w, mode='constant', origin=-(w//2))[:-(w-1)]
 
 
 def smooth_with_binner(x: np.ndarray, **kwargs: Any) -> np.ndarray:

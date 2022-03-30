@@ -6,7 +6,6 @@ import statistics
 from collections import defaultdict
 from concurrent import futures
 from functools import reduce
-from itertools import zip_longest
 from multiprocessing import cpu_count
 from operator import add
 
@@ -322,6 +321,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             elif cfg.step1.model_name == 'ar_based_ad':
                 tsdr_param.update({
                     'tsifter_step1_smoother': cfg.step1.smoother,
+                    'tsifter_step1_smoother_ma_window_size': cfg.step1.smoother_ma_window_size,
                     'tsifter_step1_smoother_binner_window_size': cfg.step1.smoother_binner_window_size,
                     'tsifter_step1_ar_regression': cfg.step1.ar_regression,
                     'tsifter_step1_ar_lag': cfg.step1.ar_lag,
@@ -459,6 +459,7 @@ def main(cfg: DictConfig) -> None:
             'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
             'step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
             'step1_smoother': cfg.step1.smoother,
+            'step1_smoother_ma_window_size': cfg.step1.smoother_ma_window_size,
             'step1_smoother_binner_window_size': cfg.step1.smoother_binner_window_size,
         })
     run['parameters'] = params
