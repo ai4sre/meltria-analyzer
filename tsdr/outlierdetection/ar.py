@@ -55,8 +55,9 @@ class AROutlierDetector:
             scores[r + i] = (xi - pred) ** 2 / sig2
         return scores, preds, model_fit
 
+    @classmethod
     def detect_by_fitting_dist(
-        self,
+        cls,
         scores: np.ndarray,
         threshold: float,
     ) -> tuple[list[tuple[int, float]], float]:

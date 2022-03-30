@@ -152,7 +152,7 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
     )[0]
     if not np.all(np.isfinite(scores)):
         raise ValueError(f"scores must contain only finite values. {scores}")
-    outliers, abn_th = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
+    outliers, abn_th = AROutlierDetector.detect_by_fitting_dist(scores, threshold=ar_threshold)
     if len(outliers) > 0:
         return UnivariateSeriesReductionResult(
             orig_series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=outliers)
