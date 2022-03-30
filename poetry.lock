@@ -517,6 +517,14 @@ qa = ["flake8 (==3.8.3)", "mypy (==0.782)"]
 testing = ["Django (<3.1)", "colorama", "docopt", "pytest (<6.0.0)"]
 
 [[package]]
+name = "jenkspy"
+version = "0.2.0"
+description = "Compute Natural Breaks (Jenks algorythm)"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "jinja2"
 version = "3.0.2"
 description = "A very fast and expressive template engine."
@@ -1665,7 +1673,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.10"
-content-hash = "df440cfab1bd270381a287880591c7280fd753ca8f55f46be5c622cf531d1327"
+content-hash = "b5107b90610fa9d707d9a857465601eaa2165f514a48bd3498b726fcd32d4d28"
 
 [metadata.files]
 antlr4-python3-runtime = [
@@ -1999,6 +2007,19 @@ ipython = [
 jedi = [
     {file = "jedi-0.18.0-py2.py3-none-any.whl", hash = "sha256:18456d83f65f400ab0c2d3319e48520420ef43b23a086fdc05dff34132f0fb93"},
     {file = "jedi-0.18.0.tar.gz", hash = "sha256:92550a404bad8afed881a137ec9a461fed49eca661414be45059329614ed0707"},
+]
+jenkspy = [
+    {file = "jenkspy-0.2.0-cp34-cp34m-win32.whl", hash = "sha256:1fbc00b251e4f1a67be4b95446b9312c68533829644c7cfaa39d0e68f8a6afe1"},
+    {file = "jenkspy-0.2.0-cp34-cp34m-win_amd64.whl", hash = "sha256:18e9c076bbb460e6be79b24aaa4600c3f57aa0970d09c434366bba1832c0420a"},
+    {file = "jenkspy-0.2.0-cp35-cp35m-win32.whl", hash = "sha256:fe6d9de027029c818b116b0d43304423df40b13f19347bc2bd73cda24760206c"},
+    {file = "jenkspy-0.2.0-cp35-cp35m-win_amd64.whl", hash = "sha256:a0c22da8c101ea672b6911d8eb03dc4b8d8df45ab6740f14b90e1680fcf58f6e"},
+    {file = "jenkspy-0.2.0-cp36-cp36m-win32.whl", hash = "sha256:fcc35b415a0babf9a1288bf62157426f2812557484859d479a79fcfb8e26e698"},
+    {file = "jenkspy-0.2.0-cp36-cp36m-win_amd64.whl", hash = "sha256:44d4e4ba134280c74697d7343a1a5fad25f8ae3ee6fe6ee1fd752049a13d2803"},
+    {file = "jenkspy-0.2.0-cp37-cp37m-win32.whl", hash = "sha256:5d0b4b1646f7533b04567a99d9d6a829282212731d1df81ace639bde22613fd9"},
+    {file = "jenkspy-0.2.0-cp37-cp37m-win_amd64.whl", hash = "sha256:f185e1168bd53a365b92628303987d91e1de640a10a93d2f589e36b59bc4f48d"},
+    {file = "jenkspy-0.2.0-cp38-cp38-win32.whl", hash = "sha256:2c5b5b0cfbd097f7ef84a5e60be0dc3f917996626d546a09ae8e42f129373387"},
+    {file = "jenkspy-0.2.0-cp38-cp38-win_amd64.whl", hash = "sha256:bc8dacd518141808222ee103404f68c340b75b5ffd727bbaca84b9e49f6e2068"},
+    {file = "jenkspy-0.2.0.tar.gz", hash = "sha256:d14d70b3b8e353f5736a31c2ef048c9869c34f0452542866c1362d1cd924bbc1"},
 ]
 jinja2 = [
     {file = "Jinja2-3.0.2-py3-none-any.whl", hash = "sha256:8569982d3f0889eed11dd620c706d39b60c36d6d25843961f33f77fb6bc6b20c"},

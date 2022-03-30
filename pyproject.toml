@@ -32,6 +32,7 @@ holoviews = "^1.14.8"
 panel = "^0.12.6"
 tigramite = "^5.0.1"
 tsmoothie = "^1.0.4"
+jenkspy = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.9.2"
