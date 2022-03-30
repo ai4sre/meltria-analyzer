@@ -321,6 +321,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 reducer = tsdr.Tsdr(tsdr.unit_root_based_model, **tsdr_param)
             elif cfg.step1.model_name == 'ar_based_ad':
                 tsdr_param.update({
+                    'tsifter_step1_smoother': cfg.step1.smoother,
+                    'tsifter_step1_smoother_binner_window_size': cfg.step1.smoother_binner_window_size,
                     'tsifter_step1_ar_regression': cfg.step1.ar_regression,
                     'tsifter_step1_ar_lag': cfg.step1.ar_lag,
                     'tsifter_step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
@@ -456,6 +458,8 @@ def main(cfg: DictConfig) -> None:
             'step1_ar_lag': cfg.step1.ar_lag,
             'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
             'step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
+            'step1_smoother': cfg.step1.smoother,
+            'step1_smoother_binner_window_size': cfg.step1.smoother_binner_window_size,
         })
     run['parameters'] = params
     run.wait()  # sync parameters for 'async' neptune mode

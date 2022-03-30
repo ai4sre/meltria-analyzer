@@ -14,6 +14,7 @@ from arch.utility.exceptions import InfeasibleTestException
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import hamming, pdist, squareform
 from statsmodels.tsa.stattools import adfuller
+from tsmoothie.smoother import BinnerSmoother
 
 from tsdr.clustering.kshape import kshape
 from tsdr.clustering.metricsnamecluster import cluster_words
@@ -121,10 +122,18 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
-def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
     cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
-    if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
-        return UnivariateSeriesReductionResult(series, has_kept=False)
+    if not has_variation(np.diff(orig_series), cv_threshold) or not has_variation(orig_series, cv_threshold):
+        return UnivariateSeriesReductionResult(orig_series, has_kept=False)
+
+    if (smoother := kwargs.get('tsifter_step1_smoother')) is not None:
+        if smoother == 'binner':
+            series = smooth_with_binner(orig_series, **kwargs)
+        else:
+            raise ValueError(f"Invalid smoother: '{smoother}'")
+    else:
+        series = orig_series
 
     ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 0.01)
     ar_lag: int = kwargs.get('tsifter_step1_ar_lag', 0)
@@ -141,8 +150,17 @@ def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRedu
     outliers, abn_th = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
     if len(outliers) > 0:
         return UnivariateSeriesReductionResult(
-            series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=outliers)
-    return UnivariateSeriesReductionResult(series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
+            orig_series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=outliers)
+    return UnivariateSeriesReductionResult(orig_series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
+
+
+def smooth_with_binner(x: np.ndarray, **kwargs: Any) -> np.ndarray:
+    """ Smooth time series with binner method.
+    """
+    w: int = kwargs.get('tsifter_step1_smoother_binner_window_size', 2)
+    smoother = BinnerSmoother(n_knots=int(x.size/w), copy=True)
+    smoother.smooth(x)
+    return smoother.smooth_data[0]
 
 
 class Tsdr:
