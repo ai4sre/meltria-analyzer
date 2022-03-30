@@ -159,6 +159,17 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
     return UnivariateSeriesReductionResult(orig_series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
 
 
+def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
+    if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
+        return UnivariateSeriesReductionResult(series, has_kept=False)
+
+    outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_hotteling_threshold', 0.01))
+    if len(outliers) > 1:
+        return UnivariateSeriesReductionResult(series, has_kept=True, outliers=outliers)
+    return UnivariateSeriesReductionResult(series, has_kept=False)
+
+
 def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
     w: int = kwargs.get('tsifter_step1_ma_window_size', 2)
     return ndimg.uniform_filter1d(input=x, size=w, mode='constant', origin=-(w//2))[:-(w-1)]

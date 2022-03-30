@@ -7,6 +7,7 @@ from collections import defaultdict
 from concurrent import futures
 from functools import reduce
 from multiprocessing import cpu_count
+from multiprocessing.sharedctypes import Value
 from operator import add
 
 import eval.priorknowledge as pk
@@ -330,6 +331,12 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     'tsifter_step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
                 })
                 reducer = tsdr.Tsdr(tsdr.ar_based_ad_model, **tsdr_param)
+            elif cfg.step1.model_name == 'hotteling_t2':
+                tsdr_param.update({
+                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
+                    'tsifter_step1_hotteling_threshold': cfg.step1.hotteling_threshold,
+                })
+                reducer = tsdr.Tsdr(tsdr.hotteling_t2_model, **tsdr_param)
             else:
                 raise ValueError(f'Invalid name of step1 mode: {cfg.step1.model_name}')
 
@@ -462,6 +469,14 @@ def main(cfg: DictConfig) -> None:
             'step1_smoother_ma_window_size': cfg.step1.smoother_ma_window_size,
             'step1_smoother_binner_window_size': cfg.step1.smoother_binner_window_size,
         })
+    elif cfg.step1.model_name == 'hotteling_t2':
+        params.update({
+            'step1_model_name': cfg.step1.model_name,
+            'step1_cv_threshold': cfg.step1.cv_threshold,
+            'step1_hotteling_threshold': cfg.step1.hotteling_threshold,
+        })
+    else:
+        raise ValueError(f'Unknown model name: {cfg.step1.model_name}')
     run['parameters'] = params
     run.wait()  # sync parameters for 'async' neptune mode
 
