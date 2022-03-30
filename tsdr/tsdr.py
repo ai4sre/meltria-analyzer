@@ -129,7 +129,9 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
         return UnivariateSeriesReductionResult(orig_series, has_kept=False)
 
     if (smoother := kwargs.get('tsifter_step1_smoother')) is not None:
-        if smoother == 'binner':
+        if smoother == 'none':
+            series = orig_series
+        elif smoother == 'binner':
             series = smooth_with_binner(orig_series, **kwargs)
         elif smoother == 'moving_average':
             series = smooth_with_ma(orig_series, **kwargs)
