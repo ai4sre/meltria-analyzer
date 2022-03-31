@@ -6,6 +6,7 @@ from concurrent import futures
 from typing import Any, Callable
 
 import banpei
+import jenkspy
 import numpy as np
 import pandas as pd
 import scipy.ndimage as ndimg
@@ -167,6 +168,53 @@ def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRed
     outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_hotteling_threshold', 0.01))
     if len(outliers) > 1:
         return UnivariateSeriesReductionResult(series, has_kept=True, outliers=outliers)
+    return UnivariateSeriesReductionResult(series, has_kept=False)
+
+
+def breaks_jkpy(ts, nb_class=2):
+    breaks = jenkspy.jenks_breaks(ts, nb_class=nb_class)
+    breaks_jkp = []
+    for v in breaks:
+        idx = np.argwhere(ts == v)
+        breaks_jkp.append((idx[0][0], v))
+    breaks_jkp.sort()
+    return breaks_jkp
+
+
+def jenkspy_and_ar_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
+    if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
+        return UnivariateSeriesReductionResult(series, has_kept=False)
+
+    ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 0.01)
+    ar_lag: int = kwargs.get('tsifter_step1_ar_lag', 0)
+    ar = AROutlierDetector(maxlag=ar_lag)
+
+    changepts: list[tuple[int, float]] = []
+    bkps = breaks_jkpy(series)
+    for i, (idx, y) in enumerate(bkps):
+        if idx < 2 or idx >= (series.size - 1):
+            continue
+        next = bkps[i+1][0] if i < (len(bkps)-1) else (len(series)-1)
+        Y_learn, Y_actual = series[:idx], series[idx+1:next]
+
+        scores: np.ndarray = ar.score(
+            x=Y_learn,
+            actuals=Y_actual,
+            regression=kwargs.get('tsifter_step1_ar_regression', 'n'),
+            lag=ar_lag,
+            autolag=True if ar_lag == 0 else False,
+            dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False),
+        )[0]
+
+        outs, abn_th = AROutlierDetector.detect_by_fitting_dist(scores, threshold=ar_threshold)
+        if len(outs) > 0:
+            changepts.append((idx, y))
+
+    if len(changepts) > 0:
+        return UnivariateSeriesReductionResult(
+            series, has_kept=True, anomaly_scores=scores, outliers=changepts,
+        )
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 

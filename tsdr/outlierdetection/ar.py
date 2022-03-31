@@ -13,6 +13,7 @@ class AROutlierDetector:
     def score(
         self,
         x: np.ndarray,
+        actuals: np.ndarray = None,
         regression: str = 'c',
         autolag: bool = True,
         ic: str = 'aic',
@@ -49,10 +50,18 @@ class AROutlierDetector:
         sig2 = model_fit.sigma2
         if sig2 == 0:
             return [], [], model_fit
-        preds: np.ndarray = model_fit.get_prediction(dynamic=dynamic_prediction).predicted_mean
-        scores: np.ndarray = np.zeros(x.size, dtype=np.float32)
-        for i, (xi, pred) in enumerate(zip(x[r:], preds[r:])):
-            scores[r + i] = (xi - pred) ** 2 / sig2
+        if actuals is None:
+            preds: np.ndarray = model_fit.get_prediction(dynamic=dynamic_prediction).predicted_mean
+        else:
+            preds: np.ndarray = model_fit.get_prediction(end=len(actuals)-1, dynamic=dynamic_prediction).predicted_mean
+        if actuals is None:
+            scores: np.ndarray = np.zeros(x.size, dtype=np.float32)
+            for i, (xi, pred) in enumerate(zip(x[r:], preds[r:])):
+                scores[r + i] = (xi - pred) ** 2 / sig2
+        else:
+            scores: np.ndarray = np.zeros(actuals.size, dtype=np.float32)
+            for i, (xi, pred) in enumerate(zip(actuals, preds[r:])):
+                scores[r + i] = (xi - pred) ** 2 / sig2
         return scores, preds, model_fit
 
     @classmethod

@@ -337,6 +337,15 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     'tsifter_step1_hotteling_threshold': cfg.step1.hotteling_threshold,
                 })
                 reducer = tsdr.Tsdr(tsdr.hotteling_t2_model, **tsdr_param)
+            elif cfg.step1.model_name == 'jenkspy_and_ar':
+                tsdr_param.update({
+                    'tsifter_step1_ar_regression': cfg.step1.ar_regression,
+                    'tsifter_step1_ar_lag': cfg.step1.ar_lag,
+                    'tsifter_step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
+                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
+                    'tsifter_step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
+                })
+                reducer = tsdr.Tsdr(tsdr.jenkspy_and_ar_model, **tsdr_param)
             else:
                 raise ValueError(f'Invalid name of step1 mode: {cfg.step1.model_name}')
 
@@ -474,6 +483,16 @@ def main(cfg: DictConfig) -> None:
             'step1_model_name': cfg.step1.model_name,
             'step1_cv_threshold': cfg.step1.cv_threshold,
             'step1_hotteling_threshold': cfg.step1.hotteling_threshold,
+        })
+    elif cfg.step1.model_name == 'jenkspy_and_ar':
+        params.update({
+            'step1_model_name': cfg.step1.model_name,
+            'step1_cv_threshold': cfg.step1.cv_threshold,
+            'step1_ar_regression': cfg.step1.ar_regression,
+            'step1_ar_lag': cfg.step1.ar_lag,
+            'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
+            'step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
+            'step1_smoother': cfg.step1.smoother,
         })
     else:
         raise ValueError(f'Unknown model name: {cfg.step1.model_name}')
