@@ -8,12 +8,14 @@ from typing import Any, Callable
 import banpei
 import numpy as np
 import pandas as pd
+import scipy.ndimage as ndimg
 import scipy.stats
 from arch.unitroot import PhillipsPerron
 from arch.utility.exceptions import InfeasibleTestException
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import hamming, pdist, squareform
 from statsmodels.tsa.stattools import adfuller
+from tsmoothie.smoother import BinnerSmoother
 
 from tsdr.clustering.kshape import kshape
 from tsdr.clustering.metricsnamecluster import cluster_words
@@ -121,25 +123,65 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
-def ar_based_ad_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
+    if not has_variation(np.diff(orig_series), cv_threshold) or not has_variation(orig_series, cv_threshold):
+        return UnivariateSeriesReductionResult(orig_series, has_kept=False)
+
+    if (smoother := kwargs.get('tsifter_step1_smoother')) is not None:
+        if smoother == 'none':
+            series = orig_series
+        elif smoother == 'binner':
+            series = smooth_with_binner(orig_series, **kwargs)
+        elif smoother == 'moving_average':
+            series = smooth_with_ma(orig_series, **kwargs)
+        else:
+            raise ValueError(f"Invalid smoother: '{smoother}'")
+    else:
+        series = orig_series
+
+    ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 0.01)
+    ar_lag: int = kwargs.get('tsifter_step1_ar_lag', 0)
+    ar = AROutlierDetector(maxlag=ar_lag)
+    scores: np.ndarray = ar.score(
+        x=series,
+        regression=kwargs.get('tsifter_step1_ar_regression', 'n'),
+        lag=ar_lag,
+        autolag=True if ar_lag == 0 else False,
+        dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False),
+    )[0]
+    if not np.all(np.isfinite(scores)):
+        raise ValueError(f"scores must contain only finite values. {scores}")
+    outliers, abn_th = AROutlierDetector.detect_by_fitting_dist(scores, threshold=ar_threshold)
+    if len(outliers) > 0:
+        return UnivariateSeriesReductionResult(
+            orig_series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=outliers)
+    return UnivariateSeriesReductionResult(orig_series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
+
+
+def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
     cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
     if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
         return UnivariateSeriesReductionResult(series, has_kept=False)
 
-    ar_threshold: float = kwargs.get('tsifter_step1_ar_anomaly_score_threshold', 0.01)
-    ar = AROutlierDetector()
-    scores: np.ndarray = ar.score(
-        x=series,
-        regression=kwargs.get('tsifter_step1_ar_regression', 'n'),
-        dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False)
-    )[0]
-    if not np.all(np.isfinite(scores)):
-        raise ValueError(f"scores must contain only finite values. {scores}")
-    outliers, abn_th = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
-    if len(outliers) > 0:
-        return UnivariateSeriesReductionResult(
-            series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=outliers)
-    return UnivariateSeriesReductionResult(series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
+    outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_hotteling_threshold', 0.01))
+    if len(outliers) > 1:
+        return UnivariateSeriesReductionResult(series, has_kept=True, outliers=outliers)
+    return UnivariateSeriesReductionResult(series, has_kept=False)
+
+
+def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
+    w: int = kwargs.get('tsifter_step1_ma_window_size', 2)
+    return ndimg.uniform_filter1d(input=x, size=w, mode='constant', origin=-(w//2))[:-(w-1)]
+
+
+def smooth_with_binner(x: np.ndarray, **kwargs: Any) -> np.ndarray:
+    """ Smooth time series with binner method.
+    """
+    w: int = kwargs.get('tsifter_step1_smoother_binner_window_size', 2)
+    smoother = BinnerSmoother(n_knots=int(x.size/w), copy=True)
+    smoother.smooth(x)
+    return smoother.smooth_data[0]
 
 
 class Tsdr:
