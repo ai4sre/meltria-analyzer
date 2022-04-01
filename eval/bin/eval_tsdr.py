@@ -307,7 +307,12 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 'tsifter_step2_clustering_choice_method': cfg.step2.clustering_choice_method,
                 'tsifter_step2_clustering_linkage_method': cfg.step2.clustering_linkage_method,
             }
-            if cfg.step1.model_name == 'unit_root_test':
+            if cfg.step1.model_name == 'cv':
+                tsdr_param.update({
+                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
+                })
+                reducer = tsdr.Tsdr(tsdr.cv_model, **tsdr_param)
+            elif cfg.step1.model_name == 'unit_root_test':
                 tsdr_param.update({
                     'tsifter_step1_pre_cv': cfg.step1.pre_cv,
                     'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
@@ -453,7 +458,12 @@ def main(cfg: DictConfig) -> None:
         'step2_clustering_choice_method': cfg.step2.clustering_choice_method,
         'step2_clustering_linkage_method': cfg.step2.clustering_linkage_method,
     }
-    if cfg.step1.model_name == 'unit_root_test':
+    if cfg.step1.model_name == 'cv':
+        params.update({
+            'step1_model_name': cfg.step1.model_name,
+            'step1_cv_threshold': cfg.step1.cv_threshold,
+        })
+    elif cfg.step1.model_name == 'unit_root_test':
         params.update({
             'step1_model_name': cfg.step1.model_name,
             'step1_take_log': cfg.step1.take_log,

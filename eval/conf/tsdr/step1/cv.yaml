@@ -1,0 +1,2 @@
+model_name: 'cv'
+cv_threshold: 0.05
