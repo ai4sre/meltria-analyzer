@@ -1,0 +1,3 @@
+model_name: sst
+cv_threshold: 0.05
+sst_threshold: 0.5

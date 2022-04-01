@@ -173,6 +173,21 @@ def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRed
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
+def sst_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    if detect_with_cv(series, **kwargs):
+        return UnivariateSeriesReductionResult(series, has_kept=False)
+
+    sst = banpei.SST(w=len(series)//2)
+    change_scores: np.ndarray = sst.detect(scipy.stats.zscore(series), is_lanczos=True)
+    change_pts: list[tuple[int, float]] = []
+    for i, score in enumerate(change_scores):
+        if score >= kwargs.get('tsifter_step1_sst_threshold'):
+            change_pts.append((i, score))
+    if len(change_pts) > 0:
+        return UnivariateSeriesReductionResult(series, has_kept=True, anomaly_scores=change_scores, outliers=change_pts)
+    return UnivariateSeriesReductionResult(series, has_kept=False, anomaly_scores=change_scores)
+
+
 def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
     w: int = kwargs.get('tsifter_step1_ma_window_size', 2)
     return ndimg.uniform_filter1d(input=x, size=w, mode='constant', origin=-(w//2))[:-(w-1)]
