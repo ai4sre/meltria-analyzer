@@ -79,6 +79,10 @@ def detect_with_cv(series: np.ndarray, **kwargs: Any) -> bool:
     return not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold)
 
 
+def cv_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    return UnivariateSeriesReductionResult(series, has_kept=(not detect_with_cv(series, **kwargs)))
+
+
 def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
     regression: str = kwargs.get('tsifter_step1_unit_root_regression', 'c')
     maxlag: int = kwargs.get('tsifter_step1_unit_root_max_lags', None)
