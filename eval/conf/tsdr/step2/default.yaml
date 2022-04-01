@@ -1,4 +1,4 @@
-dist_threshold: 0.2  # should be <1.0 if 'sbd' is specified
+dist_threshold: 0.1  # should be <1.0 if 'sbd' is specified
 clustered_series_type: 'raw' # 'raw', 'anomaly_score' or 'binary_anomaly_score'
 clustering_dist_type: 'sbd' # 'sbd' or 'hamming'
 clustering_choice_method: 'medoid'  # 'medoid' or 'maxsum'
