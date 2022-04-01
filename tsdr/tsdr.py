@@ -85,7 +85,7 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
     autolag = kwargs.get('tsifter_step1_unit_root_autolag', None)
 
     if kwargs.get('tsifter_step1_pre_cv', False):
-        if detect_with_cv(series):
+        if detect_with_cv(series, **kwargs):
             return UnivariateSeriesReductionResult(series, has_kept=False)
 
     def log_or_nothing(x: np.ndarray) -> np.ndarray:
@@ -128,7 +128,7 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
 
 
 def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    if detect_with_cv(orig_series):
+    if detect_with_cv(orig_series, **kwargs):
         return UnivariateSeriesReductionResult(orig_series, has_kept=False)
 
     if (smoother := kwargs.get('tsifter_step1_smoother')) is not None:
