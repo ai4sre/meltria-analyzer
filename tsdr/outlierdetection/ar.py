@@ -46,13 +46,18 @@ class AROutlierDetector:
             model = AutoReg(endog=x, lags=lag, trend=regression, old_names=False)
             model_fit = model.fit()
 
-        sig2 = model_fit.sigma2
+        pred_results = model_fit.get_prediction(dynamic=dynamic_prediction)
+        preds = pred_results.predicted_mean
+        # remove the plots for the lag. And read through the first value because the prediction line is shifted by 1 plot for some reason.
+        preds = preds[r+1:]
+        var = pred_results.var_pred_mean
+        sig2 = var[r]
         if sig2 == 0:
             return np.empty([]), np.empty([]), model_fit
-        preds: np.ndarray = model_fit.get_prediction(dynamic=dynamic_prediction).predicted_mean
+
         scores: np.ndarray = np.zeros(x.size, dtype=np.float32)
-        for i, (xi, pred) in enumerate(zip(x[r:], preds[r:])):
-            scores[r + i] = (xi - pred) ** 2 / sig2
+        for i, (xi, pred) in enumerate(zip(x[r:], preds)):
+            scores[i] = (xi - pred) ** 2 / sig2
         return scores, preds, model_fit
 
     @classmethod
