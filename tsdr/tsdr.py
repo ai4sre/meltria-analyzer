@@ -74,15 +74,19 @@ class UnivariateSeriesReductionResult:
         return bin_scores
 
 
+def detect_with_cv(series: np.ndarray, **kwargs: Any) -> bool:
+    cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
+    return not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold)
+
+
 def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
     regression: str = kwargs.get('tsifter_step1_unit_root_regression', 'c')
     maxlag: int = kwargs.get('tsifter_step1_unit_root_max_lags', None)
     autolag = kwargs.get('tsifter_step1_unit_root_autolag', None)
 
     if kwargs.get('tsifter_step1_pre_cv', False):
-        cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
-        if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
-            return UnivariateSeriesReductionResult(series, has_kept=True)
+        if detect_with_cv(series):
+            return UnivariateSeriesReductionResult(series, has_kept=False)
 
     def log_or_nothing(x: np.ndarray) -> np.ndarray:
         if kwargs.get('tsifter_step1_take_log', False):
@@ -124,8 +128,7 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
 
 
 def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
-    if not has_variation(np.diff(orig_series), cv_threshold) or not has_variation(orig_series, cv_threshold):
+    if detect_with_cv(orig_series):
         return UnivariateSeriesReductionResult(orig_series, has_kept=False)
 
     if (smoother := kwargs.get('tsifter_step1_smoother')) is not None:
@@ -148,6 +151,7 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
         regression=kwargs.get('tsifter_step1_ar_regression', 'n'),
         lag=ar_lag,
         autolag=True if ar_lag == 0 else False,
+        ic=kwargs.get('tsifter_step1_ar_ic', 'bic'),
         dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False),
     )[0]
     if not np.all(np.isfinite(scores)):
@@ -160,8 +164,7 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
 
 
 def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
-    if not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold):
+    if detect_with_cv(series):
         return UnivariateSeriesReductionResult(series, has_kept=False)
 
     outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_hotteling_threshold', 0.01))
