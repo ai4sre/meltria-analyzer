@@ -2,6 +2,7 @@ model_name: ar_based_ad
 ar_regression: n
 ar_anomaly_score_threshold: 0.01
 ar_lag: 0  # set autolag if ar_lag is 0
+ar_ic: 'bic'  # 'aic' or 'bic'
 ar_dynamic_prediction: false
 cv_threshold: 0.05
 smoother: 'none'  # none, 'moving_average', 'binner'

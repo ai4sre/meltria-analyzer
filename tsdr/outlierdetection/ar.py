@@ -15,7 +15,7 @@ class AROutlierDetector:
         x: np.ndarray,
         regression: str = 'c',
         autolag: bool = True,
-        ic: str = 'aic',
+        ic: str = 'bic',
         lag: int = 0,
         dynamic_prediction: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, AutoRegResultsWrapper]:
@@ -57,7 +57,7 @@ class AROutlierDetector:
 
         scores: np.ndarray = np.zeros(x.size, dtype=np.float32)
         for i, (xi, pred) in enumerate(zip(x[r:], preds)):
-            scores[i] = (xi - pred) ** 2 / sig2
+            scores[r+i] = (xi - pred) ** 2 / sig2
         return scores, preds, model_fit
 
     @classmethod

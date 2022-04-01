@@ -151,6 +151,7 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
         regression=kwargs.get('tsifter_step1_ar_regression', 'n'),
         lag=ar_lag,
         autolag=True if ar_lag == 0 else False,
+        ic=kwargs.get('tsifter_step1_ar_ic', 'bic'),
         dynamic_prediction=kwargs.get('tsifter_step1_ar_dynamic_prediction', False),
     )[0]
     if not np.all(np.isfinite(scores)):
