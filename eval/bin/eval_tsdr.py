@@ -338,6 +338,12 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     'tsifter_step1_hotteling_threshold': cfg.step1.hotteling_threshold,
                 })
                 reducer = tsdr.Tsdr(tsdr.hotteling_t2_model, **tsdr_param)
+            elif cfg.step1.model_name == 'sst':
+                tsdr_param.update({
+                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
+                    'tsifter_step1_sst_threshold': cfg.step1.sst_threshold,
+                })
+                reducer = tsdr.Tsdr(tsdr.sst_model, **tsdr_param)
             else:
                 raise ValueError(f'Invalid name of step1 mode: {cfg.step1.model_name}')
 
@@ -476,6 +482,11 @@ def main(cfg: DictConfig) -> None:
             'step1_model_name': cfg.step1.model_name,
             'step1_cv_threshold': cfg.step1.cv_threshold,
             'step1_hotteling_threshold': cfg.step1.hotteling_threshold,
+        })
+    elif cfg.step1.model_name == 'sst':
+        params.update({
+            'step1_cv_threshold': cfg.step1.cv_threshold,
+            'step1_sst_threshold': cfg.step1.sst_threshold,
         })
     else:
         raise ValueError(f'Unknown model name: {cfg.step1.model_name}')

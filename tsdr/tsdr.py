@@ -85,7 +85,7 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
     autolag = kwargs.get('tsifter_step1_unit_root_autolag', None)
 
     if kwargs.get('tsifter_step1_pre_cv', False):
-        if detect_with_cv(series):
+        if detect_with_cv(series, **kwargs):
             return UnivariateSeriesReductionResult(series, has_kept=False)
 
     def log_or_nothing(x: np.ndarray) -> np.ndarray:
@@ -128,7 +128,7 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
 
 
 def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    if detect_with_cv(orig_series):
+    if detect_with_cv(orig_series, **kwargs):
         return UnivariateSeriesReductionResult(orig_series, has_kept=False)
 
     if (smoother := kwargs.get('tsifter_step1_smoother')) is not None:
@@ -171,6 +171,21 @@ def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRed
     if len(outliers) > 1:
         return UnivariateSeriesReductionResult(series, has_kept=True, outliers=outliers)
     return UnivariateSeriesReductionResult(series, has_kept=False)
+
+
+def sst_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    if detect_with_cv(series, **kwargs):
+        return UnivariateSeriesReductionResult(series, has_kept=False)
+
+    sst = banpei.SST(w=len(series)//2)
+    change_scores: np.ndarray = sst.detect(scipy.stats.zscore(series), is_lanczos=True)
+    change_pts: list[tuple[int, float]] = []
+    for i, score in enumerate(change_scores):
+        if score >= kwargs.get('tsifter_step1_sst_threshold'):
+            change_pts.append((i, score))
+    if len(change_pts) > 0:
+        return UnivariateSeriesReductionResult(series, has_kept=True, anomaly_scores=change_scores, outliers=change_pts)
+    return UnivariateSeriesReductionResult(series, has_kept=False, anomaly_scores=change_scores)
 
 
 def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
