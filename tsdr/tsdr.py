@@ -132,8 +132,9 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
 
 
 def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    if detect_with_cv(orig_series, **kwargs):
-        return UnivariateSeriesReductionResult(orig_series, has_kept=False)
+    if kwargs.get('tsifter_step1_pre_cv', False):
+        if detect_with_cv(orig_series, **kwargs):
+            return UnivariateSeriesReductionResult(orig_series, has_kept=False)
 
     if (smoother := kwargs.get('tsifter_step1_smoother')) is not None:
         if smoother == 'none':
@@ -168,8 +169,9 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
 
 
 def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    if detect_with_cv(series):
-        return UnivariateSeriesReductionResult(series, has_kept=False)
+    if kwargs.get('tsifter_step1_pre_cv', False):
+        if detect_with_cv(series, **kwargs):
+            return UnivariateSeriesReductionResult(series, has_kept=False)
 
     outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_hotteling_threshold', 0.01))
     if len(outliers) > 1:
@@ -178,8 +180,9 @@ def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRed
 
 
 def sst_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    if detect_with_cv(series, **kwargs):
-        return UnivariateSeriesReductionResult(series, has_kept=False)
+    if kwargs.get('tsifter_step1_pre_cv', False):
+        if detect_with_cv(series, **kwargs):
+            return UnivariateSeriesReductionResult(series, has_kept=False)
 
     sst = banpei.SST(w=len(series)//2)
     change_scores: np.ndarray = sst.detect(scipy.stats.zscore(series), is_lanczos=True)
