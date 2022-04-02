@@ -5,60 +5,47 @@ from statsmodels.tsa.ar_model import (AutoReg, AutoRegResultsWrapper,
 
 
 class AROutlierDetector:
-    maxlag: int
+    def __init__(self, samples: np.ndarray, maxlag: int = 0):
+        self._samples = samples
+        self._maxlag = int(self._samples.size * 0.2) if maxlag == 0 else maxlag
+        self._model: AutoRegResultsWrapper = None
+        self._lag = 0
 
-    def __init__(self, maxlag: int = 0):
-        self.maxlag = maxlag
-
-    def score(
+    def fit(
         self,
-        x: np.ndarray,
-        regression: str = 'c',
-        autolag: bool = True,
-        ic: str = 'bic',
+        regression: str = 'n',
         lag: int = 0,
-        dynamic_prediction: bool = False,
-    ) -> tuple[np.ndarray, np.ndarray, AutoRegResultsWrapper]:
-        """
-        Estimate the anomaly scores for the datapoints in x.
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-            numpy.ndarray
-                Anomaly scores
-            numpy.ndarray
-                Predicted values
-            AutoRegResults
-                Learned Model
-        """
-
-        r: int = lag
+        ic: str = 'bic',
+    ) -> None:
+        autolag: bool = lag == 0
         if autolag:
-            maxlag = int(x.size * 0.2) if self.maxlag == 0 else self.maxlag
-            sel = ar_select_order(x, maxlag=maxlag, trend=regression, ic=ic, old_names=False)
+            sel = ar_select_order(self._samples, maxlag=self._maxlag, trend=regression, ic=ic)
             model_fit = sel.model.fit()
+            self._model = model_fit
             if model_fit.ar_lags is not None and len(model_fit.ar_lags) > 0:
-                r = model_fit.ar_lags[-1]
+                self._lag = model_fit.ar_lags[-1]
         else:
-            model = AutoReg(endog=x, lags=lag, trend=regression, old_names=False)
-            model_fit = model.fit()
+            self._lag = lag
+            model = AutoReg(endog=self._samples, lags=lag, trend=regression)
+            self._model = model.fit()
 
-        pred_results = model_fit.get_prediction(dynamic=dynamic_prediction)
+    def predict(self, dynamic: bool = False) -> tuple[np.ndarray, float]:
+        pred_results = self._model.get_prediction(dynamic=dynamic)
         preds = pred_results.predicted_mean
         # remove the plots for the lag. And read through the first value because the prediction line is shifted by 1 plot for some reason.
-        preds = preds[r+1:]
+        preds = preds[self._lag+1:]
         var = pred_results.var_pred_mean
-        sig2 = var[r]
+        sig2: float = var[self._lag]
         if sig2 == 0:
-            return np.empty([]), np.empty([]), model_fit
+            return np.empty([]), 0
+        return preds, sig2
 
-        scores: np.ndarray = np.zeros(x.size, dtype=np.float32)
-        for i, (xi, pred) in enumerate(zip(x[r:], preds)):
-            scores[r+i] = (xi - pred) ** 2 / sig2
-        return scores, preds, model_fit
+    def anomaly_scores(self, **kwargs) -> np.ndarray:
+        preds, sig2 = self.predict(**kwargs)
+        scores: np.ndarray = np.zeros(self._samples.size, dtype=np.float32)
+        for i, (xi, pred) in enumerate(zip(self._samples[self._lag:], preds)):
+            scores[self._lag+i] = (xi - pred) ** 2 / sig2
+        return scores
 
     @classmethod
     def detect_by_fitting_dist(
