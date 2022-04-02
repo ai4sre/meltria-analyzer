@@ -155,7 +155,7 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
         lag=kwargs['tsifter_step1_ar_lag'],
         ic=kwargs['tsifter_step1_ar_ic'],
     )
-    scores: np.ndarray = ar.anomaly_scores(dynamic=kwargs['tsifter_step1_ar_dynamic_prediction'])
+    scores: np.ndarray = ar.anomaly_scores_in_sample()
     if not np.all(np.isfinite(scores)):
         raise ValueError(f"scores must contain only finite values. {scores}")
     outliers, abn_th = AROutlierDetector.detect_by_fitting_dist(scores, threshold=ar_threshold)
