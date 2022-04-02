@@ -9,6 +9,7 @@ import banpei
 import numpy as np
 import pandas as pd
 import scipy.ndimage as ndimg
+import scipy.signal
 import scipy.stats
 from arch.unitroot import PhillipsPerron
 from arch.utility.exceptions import InfeasibleTestException
@@ -190,6 +191,51 @@ def sst_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionRes
     if len(change_pts) > 0:
         return UnivariateSeriesReductionResult(series, has_kept=True, anomaly_scores=change_scores, outliers=change_pts)
     return UnivariateSeriesReductionResult(series, has_kept=False, anomaly_scores=change_scores)
+
+
+def discover_changepoint_start_time(scores: np.ndarray, topk: int) -> list[tuple[int, float]]:
+    diff_scores = []
+    maxidxs = scipy.signal.argrelmax(scores)[0]
+    minidxs = scipy.signal.argrelmin(scores)[0]
+    for maxid in maxidxs:
+        last_minid, last_min_val = -1, -1.0
+        for minid in minidxs:
+            if minid < maxid:
+                last_minid = minid
+        if last_minid == -1.0:
+            last_min_val = 0.0
+        if last_minid != -1:
+            last_min_val = scores[last_minid]
+        max_val = scores[maxid]
+        diff_scores.append((last_minid, max_val - last_min_val))
+    return sorted(diff_scores, key=lambda t: t[1], reverse=True)[:topk]
+
+
+def differencial_of_anomaly_score_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    if kwargs.get('tsifter_step1_pre_cv', False):
+        if detect_with_cv(series, **kwargs):
+            return UnivariateSeriesReductionResult(series, has_kept=False)
+
+    train_series, test_series = np.split(series, 2)
+
+    # Phase 1
+    ar_threshold: float = kwargs['tsifter_step1_ar_anomaly_score_threshold']
+    ar = AROutlierDetector(train_series)
+    ar.fit(
+        regression=kwargs['tsifter_step1_ar_regression'],
+        lag=kwargs['tsifter_step1_ar_lag'],
+        ic=kwargs['tsifter_step1_ar_ic'],
+    )
+    scores = ar.anomaly_scores_out_of_sample(test_series)
+    outliers, abn_th = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
+    scores = np.append(np.array([np.NaN]*train_series.size, copy=False), scores)
+    if len(outliers) == 0:
+        return UnivariateSeriesReductionResult(
+            series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
+
+    changepoints = discover_changepoint_start_time(scores, kwargs['tsifter_step1_changepoint_topk'])
+    return UnivariateSeriesReductionResult(
+        series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=changepoints)
 
 
 def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:

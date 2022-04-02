@@ -1,0 +1,8 @@
+model_name: differencial_of_anomaly_score
+pre_cv: false
+cv_threshold: 0.05
+ar_regression: n
+ar_anomaly_score_threshold: 0.001
+ar_lag: 0  # set autolag if ar_lag is 0
+ar_ic: 'bic'  # 'aic' or 'bic'
+changepoint_topk: 1

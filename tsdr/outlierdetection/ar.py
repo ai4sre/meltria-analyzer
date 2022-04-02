@@ -43,7 +43,7 @@ class AROutlierDetector:
         return preds, sig2
 
     def predict_out_of_sample(self, test_sample_size: int, dynamic: bool = False) -> tuple[np.ndarray, float]:
-        preds = self._fit_model.forecast(steps=(test_sample_size+1))
+        preds = self._fit_model.forecast(steps=test_sample_size)
         sig2: float = self._fit_model.sigma2  # var[self._lag]
         if sig2 == 0:
             return np.empty([]), 0
@@ -59,6 +59,8 @@ class AROutlierDetector:
     def anomaly_scores_out_of_sample(self, test_samples: np.ndarray, dynamic=False) -> np.ndarray:
         preds, sig2 = self.predict_out_of_sample(test_samples.size, dynamic)
         scores: np.ndarray = np.zeros(test_samples.size, dtype=np.float32)
+        if preds.size <= 1:
+            return scores
         for i, (xi, pred) in enumerate(zip(test_samples, preds)):
             scores[i] = (xi - pred) ** 2 / sig2
         return scores
