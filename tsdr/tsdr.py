@@ -194,20 +194,25 @@ def sst_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionRes
 
 
 def discover_changepoint_start_time(scores: np.ndarray, topk: int) -> list[tuple[int, float]]:
-    diff_scores = []
     maxidxs = scipy.signal.argrelmax(scores)[0]
     minidxs = scipy.signal.argrelmin(scores)[0]
+    if len(maxidxs) == 0:
+        return []
+    if len(minidxs) == 0:
+        minidxs = np.array([0])
+
+    # determine whether maidxs include the last scores index (the newest value)
+    lookback_idx: int = max(maxidxs[-1], minidxs[-1])
+    if any([scores[i-1] <= scores[i] for i in range(scores.size-1, lookback_idx, -1)]):
+        maxidxs = np.append(maxidxs, scores.size-1)
+
+    diff_scores: list[tuple[int, float]] = []
     for maxid in maxidxs:
-        last_minid, last_min_val = -1, -1.0
+        last_minid = 0
         for minid in minidxs:
             if minid < maxid:
                 last_minid = minid
-        if last_minid == -1.0:
-            last_min_val = 0.0
-        if last_minid != -1:
-            last_min_val = scores[last_minid]
-        max_val = scores[maxid]
-        diff_scores.append((last_minid, max_val - last_min_val))
+        diff_scores.append((last_minid, scores[maxid] - scores[last_minid]))
     return sorted(diff_scores, key=lambda t: t[1], reverse=True)[:topk]
 
 
@@ -228,12 +233,13 @@ def differencial_of_anomaly_score_model(series: np.ndarray, **kwargs: Any) -> Un
     )
     scores = ar.anomaly_scores_out_of_sample(test_series)
     outliers, abn_th = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
-    scores = np.append(np.array([np.NaN]*train_series.size, copy=False), scores)
     if len(outliers) == 0:
+        scores = np.append(np.array([np.NaN]*train_series.size, copy=False), scores)
         return UnivariateSeriesReductionResult(
             series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
 
     changepoints = discover_changepoint_start_time(scores, kwargs['tsifter_step1_changepoint_topk'])
+    changepoints = [(p[0]+train_series.size, p[1]) for p in changepoints]
     return UnivariateSeriesReductionResult(
         series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=changepoints)
 
