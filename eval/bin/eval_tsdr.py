@@ -349,7 +349,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 tsdr_param.update({
                     'tsifter_step1_pre_cv': cfg.step1.pre_cv,
                     'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
-                    'tsifter_step1_sst_threshold': cfg.step1.sst_threshold,
+                    'tsifter_step1_hotteling_threshold': cfg.step1.hotteling_threshold,
                 })
                 reducer = tsdr.Tsdr(tsdr.sst_model, **tsdr_param)
             elif cfg.step1.model_name == 'differencial_of_anomaly_score':
