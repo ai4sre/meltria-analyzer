@@ -326,6 +326,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 reducer = tsdr.Tsdr(tsdr.unit_root_based_model, **tsdr_param)
             elif cfg.step1.model_name == 'ar_based_ad':
                 tsdr_param.update({
+                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
                     'tsifter_step1_smoother': cfg.step1.smoother,
                     'tsifter_step1_smoother_ma_window_size': cfg.step1.smoother_ma_window_size,
                     'tsifter_step1_smoother_binner_window_size': cfg.step1.smoother_binner_window_size,
@@ -339,16 +340,29 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 reducer = tsdr.Tsdr(tsdr.ar_based_ad_model, **tsdr_param)
             elif cfg.step1.model_name == 'hotteling_t2':
                 tsdr_param.update({
+                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
                     'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
                     'tsifter_step1_hotteling_threshold': cfg.step1.hotteling_threshold,
                 })
                 reducer = tsdr.Tsdr(tsdr.hotteling_t2_model, **tsdr_param)
             elif cfg.step1.model_name == 'sst':
                 tsdr_param.update({
+                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
                     'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
-                    'tsifter_step1_sst_threshold': cfg.step1.sst_threshold,
+                    'tsifter_step1_hotteling_threshold': cfg.step1.hotteling_threshold,
                 })
                 reducer = tsdr.Tsdr(tsdr.sst_model, **tsdr_param)
+            elif cfg.step1.model_name == 'differencial_of_anomaly_score':
+                tsdr_param.update({
+                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
+                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
+                    'tsifter_step1_ar_regression': cfg.step1.ar_regression,
+                    'tsifter_step1_ar_lag': cfg.step1.ar_lag,
+                    'tsifter_step1_ar_ic': cfg.step1.ar_ic,
+                    'tsifter_step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
+                    'tsifter_step1_changepoint_topk': cfg.step1.changepoint_topk,
+                })
+                reducer = tsdr.Tsdr(tsdr.differencial_of_anomaly_score_model, **tsdr_param)
             else:
                 raise ValueError(f'Invalid name of step1 mode: {cfg.step1.model_name}')
 
@@ -477,6 +491,7 @@ def main(cfg: DictConfig) -> None:
     elif cfg.step1.model_name == 'ar_based_ad':
         params.update({
             'step1_model_name': cfg.step1.model_name,
+            'step1_pre_cv': cfg.step1.pre_cv,
             'step1_cv_threshold': cfg.step1.cv_threshold,
             'step1_ar_regression': cfg.step1.ar_regression,
             'step1_ar_lag': cfg.step1.ar_lag,
@@ -490,13 +505,26 @@ def main(cfg: DictConfig) -> None:
     elif cfg.step1.model_name == 'hotteling_t2':
         params.update({
             'step1_model_name': cfg.step1.model_name,
+            'step1_pre_cv': cfg.step1.pre_cv,
             'step1_cv_threshold': cfg.step1.cv_threshold,
             'step1_hotteling_threshold': cfg.step1.hotteling_threshold,
         })
     elif cfg.step1.model_name == 'sst':
         params.update({
+            'step1_pre_cv': cfg.step1.pre_cv,
             'step1_cv_threshold': cfg.step1.cv_threshold,
             'step1_sst_threshold': cfg.step1.sst_threshold,
+        })
+    elif cfg.step1.model_name == 'differencial_of_anomaly_score':
+        params.update({
+            'step1_model_name': cfg.step1.model_name,
+            'step1_pre_cv': cfg.step1.pre_cv,
+            'step1_cv_threshold': cfg.step1.cv_threshold,
+            'step1_ar_regression': cfg.step1.ar_regression,
+            'step1_ar_lag': cfg.step1.ar_lag,
+            'step1_ar_ic': cfg.step1.ar_ic,
+            'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
+            'step1_changepoint_topk': cfg.step1.changepoint_topk,
         })
     else:
         raise ValueError(f'Unknown model name: {cfg.step1.model_name}')

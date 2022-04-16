@@ -1,3 +1,4 @@
 model_name: hotteling_t2
+pre_cv: true
 hotteling_threshold: 0.01
 cv_threshold: 0.05
