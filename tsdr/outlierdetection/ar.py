@@ -49,6 +49,31 @@ class AROutlierDetector:
             return np.empty([]), 0
         return preds, sig2
 
+    def predict_both_of_sample(self, test_samples_size: int, dynamic: bool = False) -> tuple[np.ndarray, float]:
+        pred_results: PredictionResults = self._fit_model.get_prediction(
+            start=0,
+            end=self._samples.size+test_samples_size+1,
+            dynamic=dynamic,
+        )
+        preds = pred_results.predicted_mean
+        # remove the plots for the lag. And read through the first value because the prediction line is shifted by 1 plot for some reason.
+        preds = preds[self._lag+1:]
+        var = pred_results.var_pred_mean
+        sig2: float = var[self._lag]
+        if sig2 == 0:
+            return np.empty([]), 0
+        return preds, sig2
+
+    def anomaly_scores_both_of_sample(self, test_samples: np.ndarray, dynamic: bool = False) -> tuple[np.ndarray,np.ndarray]:
+        preds, sig2 = self.predict_both_of_sample(test_samples.size, dynamic)
+        scores: np.ndarray = np.zeros(self._samples.size + test_samples.size, dtype=np.float32)
+        if preds.size <= 1:
+            return scores, preds
+        actuals: np.ndarray = np.concatenate([self._samples, test_samples])[self._lag:]
+        for i, (xi, pred) in enumerate(zip(actuals, preds)):
+            scores[i] = (xi - pred) ** 2 / sig2
+        return scores, preds
+
     def anomaly_scores_in_sample(self) -> np.ndarray:
         preds, sig2 = self.predict_in_sample()
         scores: np.ndarray = np.zeros(self._samples.size, dtype=np.float32)
@@ -71,9 +96,46 @@ class AROutlierDetector:
         scores: np.ndarray,
         threshold: float,
     ) -> tuple[list[tuple[int, float]], float]:
-        abn_th = chi2.interval(1-threshold, 1)[1]
+        # mean, var = scores.mean(), scores.var()
+        # m_mo = 2*mean**2 / (var - mean**2)
+        # s_mo = (var - mean**2) / 2*mean
+        # if m_mo < 1:
+        #     m_mo = 1
+        # if s_mo < 1:
+        #     s_mo = 1
+        abn_th = chi2.interval(alpha=1-threshold, df=1, scale=1)[1]
         anomalies: list[tuple[int, float]] = []
         for i, a in enumerate(scores):
             if a > abn_th:
                 anomalies.append((i, a))
         return anomalies, abn_th
+
+    @classmethod
+    def detect_by_fitting_gaussian(
+        cls,
+        scores: np.ndarray,
+        sigma: int = 2,
+    ) -> list[tuple[int, float]]:
+        mean = scores.mean()
+        lower, upper = mean - sigma * scores.std(), scores.mean() + sigma * scores.std()
+        anomalies: list[tuple[int, float]] = []
+        for (i, v) in enumerate(scores):
+            if v <= lower or v >= upper:
+                anomalies.append((i, v))
+        return anomalies
+
+    @classmethod
+    def detect_by_mse_gaussian(
+        cls,
+        scores: np.ndarray,
+        sigma: int = 2,
+    ) -> list[tuple[int, float]]:
+        mses = np.array([np.sum(scores[:i]) / i for i, score in enumerate(scores, start=1)])
+        mse_mean = mses.mean()
+        mse_std = mses.std()
+        lower, upper = mse_mean - sigma * mse_std, mse_mean + sigma * mse_std
+        anomalies: list[tuple[int, float]] = []
+        for (i, v) in enumerate(mses):
+            if v <= lower or v >= upper:
+                anomalies.append((i, v))
+        return anomalies

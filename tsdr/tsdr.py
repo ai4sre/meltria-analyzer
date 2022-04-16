@@ -172,7 +172,7 @@ def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesRed
             return UnivariateSeriesReductionResult(series, has_kept=False)
 
     outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_hotteling_threshold', 0.01))
-    if len(outliers) > 1:
+    if len(outliers) > 0:
         return UnivariateSeriesReductionResult(series, has_kept=True, outliers=outliers)
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
@@ -232,16 +232,22 @@ def differencial_of_anomaly_score_model(series: np.ndarray, **kwargs: Any) -> Un
         ic=kwargs['tsifter_step1_ar_ic'],
     )
     scores = ar.anomaly_scores_out_of_sample(test_series)
-    outliers, abn_th = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
-    if len(outliers) == 0:
-        scores = np.append(np.array([np.NaN]*train_series.size, copy=False), scores)
+    if not np.all(np.isfinite(scores)):
+        raise ValueError(f"scores must contain only finite values. {scores}")
+    if np.mean(scores) < 4.0:
         return UnivariateSeriesReductionResult(
-            series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
+            series, has_kept=False, anomaly_scores=scores)
+
+    # outliers, abn_th = ar.detect_by_fitting_dist(scores, threshold=ar_threshold)
+    # if len(outliers) == 0:
+    #     scores = np.append(np.array([np.NaN]*train_series.size, copy=False), scores)
+    #     return UnivariateSeriesReductionResult(
+    #         series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
 
     changepoints = discover_changepoint_start_time(scores, kwargs['tsifter_step1_changepoint_topk'])
     changepoints = [(p[0]+train_series.size, p[1]) for p in changepoints]
     return UnivariateSeriesReductionResult(
-        series, has_kept=True, anomaly_scores=scores, abn_th=abn_th, outliers=changepoints)
+        series, has_kept=True, anomaly_scores=scores, outliers=changepoints)
 
 
 def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
@@ -345,6 +351,30 @@ class Tsdr:
                 results[col] = result
                 if result.has_kept:
                     reduced_cols.append(col)
+
+        # mses = {col: np.log1p(np.sum(res.anomaly_scores) / res.anomaly_scores.size) for col, res in results.items()}
+        # mses_map = {i: (k, v) for i, (k, v) in enumerate(mses.items())}
+        # # mse_outliers = banpei.Hotelling().detect(list(mses.values()), 0.05)
+        # # if len(mse_outliers) > 1:
+        # #     for (i, v) in mse_outliers:
+        # #         col = mses_map[i][0]
+        # #         mses.pop(col)
+        # #         print('deleted', col, mses_map[i][1])
+
+        # mse_vals = list(mses.values())
+        # print(np.histogram(~np.isnan(list(mse_vals)), bins='auto'))
+
+        # mse_mean = np.mean(mse_vals)
+        # mse_std = np.std(mse_vals)
+        # sigma = 1
+        # lower, upper = mse_mean - sigma * mse_std, mse_mean + sigma * mse_std
+        # for (col, mse) in mses.items():
+        #     if lower < mse and mse < upper:
+        #         results.pop(col)
+        #         reduced_cols.remove(col)
+        #     else:
+        #         print(mse, col, upper, lower)
+
         anomaly_points = {col: res.outliers for col, res in results.items()}
         return useries[reduced_cols], results, anomaly_points
 
