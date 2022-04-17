@@ -462,72 +462,19 @@ def main(cfg: DictConfig) -> None:
     )
     npt_handler = NeptuneHandler(run=run)
     logger.addHandler(npt_handler)
+
     run['dataset/id'] = cfg.dataset_id
     run['dataset/num_metrics_files'] = len(cfg.metrics_files)
     params = {
         'exclude_middleware_metrics': cfg.exclude_middleware_metrics,
-        'step2_dist_threshold': cfg.step2.dist_threshold,
-        'step2_clustered_series_type': cfg.step2.clustered_series_type,
-        'step2_clustering_dist_type': cfg.step2.clustering_dist_type,
-        'step2_clustering_choice_method': cfg.step2.clustering_choice_method,
-        'step2_clustering_linkage_method': cfg.step2.clustering_linkage_method,
     }
-    if cfg.step1.model_name == 'cv':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-        })
-    elif cfg.step1.model_name == 'unit_root_test':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_take_log': cfg.step1.take_log,
-            'step1_unit_root_model': cfg.step1.unit_root_model,
-            'step1_alpha': cfg.step1.unit_root_alpha,
-            'step1_regression': cfg.step1.unit_root_regression,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_post_od_model': cfg.step1.post_od_model,
-            'step1_post_od_threshold': cfg.step1.post_od_threshold,
-        })
-    elif cfg.step1.model_name == 'ar_based_ad':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_pre_cv': cfg.step1.pre_cv,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_ar_regression': cfg.step1.ar_regression,
-            'step1_ar_lag': cfg.step1.ar_lag,
-            'step1_ar_ic': cfg.step1.ar_ic,
-            'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
-            'step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
-            'step1_smoother': cfg.step1.smoother,
-            'step1_smoother_ma_window_size': cfg.step1.smoother_ma_window_size,
-            'step1_smoother_binner_window_size': cfg.step1.smoother_binner_window_size,
-        })
-    elif cfg.step1.model_name == 'hotteling_t2':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_pre_cv': cfg.step1.pre_cv,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_hotteling_threshold': cfg.step1.hotteling_threshold,
-        })
-    elif cfg.step1.model_name == 'sst':
-        params.update({
-            'step1_pre_cv': cfg.step1.pre_cv,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_sst_threshold': cfg.step1.sst_threshold,
-        })
-    elif cfg.step1.model_name == 'differencial_of_anomaly_score':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_pre_cv': cfg.step1.pre_cv,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_ar_regression': cfg.step1.ar_regression,
-            'step1_ar_lag': cfg.step1.ar_lag,
-            'step1_ar_ic': cfg.step1.ar_ic,
-            'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
-            'step1_changepoint_topk': cfg.step1.changepoint_topk,
-        })
-    else:
-        raise ValueError(f'Unknown model name: {cfg.step1.model_name}')
+
+    # Hydra parameters are passed to the Neptune.ai run object.
+    pycfg_step1 = OmegaConf.to_container(cfg.step1, resolve=True)
+    params.update({f'step1_{k}': v for k, v in pycfg_step1.items()})
+    pycfg_step2 = OmegaConf.to_container(cfg.step2, resolve=True)
+    params.update({f'step2_{k}': v for k, v in pycfg_step2.items()})
+
     run['parameters'] = params
     run.wait()  # sync parameters for 'async' neptune mode
 
