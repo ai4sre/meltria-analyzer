@@ -76,7 +76,7 @@ class UnivariateSeriesReductionResult:
 
 
 def detect_with_cv(series: np.ndarray, **kwargs: Any) -> bool:
-    cv_threshold = kwargs.get('tsifter_step1_cv_threshold', 0.01)
+    cv_threshold = kwargs.get('step1_cv_threshold', 0.01)
     return not has_variation(np.diff(series), cv_threshold) or not has_variation(series, cv_threshold)
 
 
@@ -85,24 +85,24 @@ def cv_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResu
 
 
 def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    regression: str = kwargs.get('tsifter_step1_unit_root_regression', 'c')
-    maxlag: int = kwargs.get('tsifter_step1_unit_root_max_lags', None)
-    autolag = kwargs.get('tsifter_step1_unit_root_autolag', None)
+    regression: str = kwargs.get('step1_unit_root_regression', 'c')
+    maxlag: int = kwargs.get('step1_unit_root_max_lags', None)
+    autolag = kwargs.get('step1_unit_root_autolag', None)
 
-    if kwargs.get('tsifter_step1_pre_cv', False):
+    if kwargs.get('step1_pre_cv', False):
         if detect_with_cv(series, **kwargs):
             return UnivariateSeriesReductionResult(series, has_kept=False)
 
     def log_or_nothing(x: np.ndarray) -> np.ndarray:
-        if kwargs.get('tsifter_step1_take_log', False):
+        if kwargs.get('step1_take_log', False):
             return np.log1p(x)
         return x
 
     pvalue: float = 0.0
     ar_lag: int = 0
-    if kwargs['tsifter_step1_unit_root_model'] == 'adf':
+    if kwargs['step1_unit_root_model'] == 'adf':
         pvalue, ar_lag = adfuller(x=log_or_nothing(series), regression=regression, maxlag=maxlag, autolag=autolag)[1::2]
-    elif kwargs['tsifter_step1_unit_root_model'] == 'pp':
+    elif kwargs['step1_unit_root_model'] == 'pp':
         try:
             pp = PhillipsPerron(log_or_nothing(series), trend=regression, lags=maxlag)
             pvalue = pp.pvalue
@@ -113,18 +113,18 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
         except InfeasibleTestException as e:
             warnings.warn(str(e))
             return UnivariateSeriesReductionResult(series, has_kept=False)
-    if pvalue >= kwargs.get('tsifter_step1_unit_root_alpha', 0.01):
+    if pvalue >= kwargs.get('step1_unit_root_alpha', 0.01):
         return UnivariateSeriesReductionResult(series, has_kept=True)
     else:
         # Post outlier detection
-        odmodel: str = kwargs.get('tsifter_step1_post_od_model', 'knn')
+        odmodel: str = kwargs.get('step1_post_od_model', 'knn')
         if odmodel == 'knn':
             knn = KNNOutlierDetector(w=ar_lag, k=1)   # k=1
             x = scipy.stats.zscore(log_or_nothing(series))
-            if knn.has_anomaly(x, kwargs.get('tsifter_step1_post_od_threshold', 3.0)):
+            if knn.has_anomaly(x, kwargs.get('step1_post_od_threshold', 3.0)):
                 return UnivariateSeriesReductionResult(series, has_kept=True)
         elif odmodel == 'hotelling':
-            outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_post_od_threshold', 0.01))
+            outliers = banpei.Hotelling().detect(series, kwargs.get('step1_post_od_threshold', 0.01))
             if len(outliers) > 1:
                 return UnivariateSeriesReductionResult(series, has_kept=True)
         else:
@@ -133,11 +133,11 @@ def unit_root_based_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeries
 
 
 def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    if kwargs.get('tsifter_step1_pre_cv', False):
+    if kwargs.get('step1_pre_cv', False):
         if detect_with_cv(orig_series, **kwargs):
             return UnivariateSeriesReductionResult(orig_series, has_kept=False)
 
-    if (smoother := kwargs.get('tsifter_step1_smoother')) is not None:
+    if (smoother := kwargs.get('step1_smoother')) is not None:
         if smoother == 'none':
             series = orig_series
         elif smoother == 'binner':
@@ -149,12 +149,12 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
     else:
         series = orig_series
 
-    ar_threshold: float = kwargs['tsifter_step1_ar_anomaly_score_threshold']
+    ar_threshold: float = kwargs['step1_ar_anomaly_score_threshold']
     ar = AROutlierDetector(series, maxlag=0)
     ar.fit(
-        regression=kwargs['tsifter_step1_ar_regression'],
-        lag=kwargs['tsifter_step1_ar_lag'],
-        ic=kwargs['tsifter_step1_ar_ic'],
+        regression=kwargs['step1_ar_regression'],
+        lag=kwargs['step1_ar_lag'],
+        ic=kwargs['step1_ar_ic'],
     )
     scores: np.ndarray = ar.anomaly_scores_in_sample()
     if not np.all(np.isfinite(scores)):
@@ -167,18 +167,18 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
 
 
 def hotteling_t2_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    if kwargs.get('tsifter_step1_pre_cv', False):
+    if kwargs.get('step1_pre_cv', False):
         if detect_with_cv(series, **kwargs):
             return UnivariateSeriesReductionResult(series, has_kept=False)
 
-    outliers = banpei.Hotelling().detect(series, kwargs.get('tsifter_step1_hotteling_threshold', 0.01))
+    outliers = banpei.Hotelling().detect(series, kwargs.get('step1_hotteling_threshold', 0.01))
     if len(outliers) > 0:
         return UnivariateSeriesReductionResult(series, has_kept=True, outliers=outliers)
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
 def sst_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    if kwargs.get('tsifter_step1_pre_cv', False):
+    if kwargs.get('step1_pre_cv', False):
         if detect_with_cv(series, **kwargs):
             return UnivariateSeriesReductionResult(series, has_kept=False)
 
@@ -186,7 +186,7 @@ def sst_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionRes
     change_scores: np.ndarray = sst.detect(scipy.stats.zscore(series), is_lanczos=True)
     change_pts: list[tuple[int, float]] = []
     for i, score in enumerate(change_scores):
-        if score >= kwargs.get('tsifter_step1_sst_threshold'):
+        if score >= kwargs.get('step1_sst_threshold'):
             change_pts.append((i, score))
     if len(change_pts) > 0:
         return UnivariateSeriesReductionResult(series, has_kept=True, anomaly_scores=change_scores, outliers=change_pts)
@@ -217,19 +217,19 @@ def discover_changepoint_start_time(scores: np.ndarray, topk: int) -> list[tuple
 
 
 def differencial_of_anomaly_score_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    if kwargs.get('tsifter_step1_pre_cv', False):
+    if kwargs.get('step1_pre_cv', False):
         if detect_with_cv(series, **kwargs):
             return UnivariateSeriesReductionResult(series, has_kept=False)
 
     train_series, test_series = np.split(series, 2)
 
     # Phase 1
-    ar_threshold: float = kwargs['tsifter_step1_ar_anomaly_score_threshold']
+    ar_threshold: float = kwargs['step1_ar_anomaly_score_threshold']
     ar = AROutlierDetector(train_series)
     ar.fit(
-        regression=kwargs['tsifter_step1_ar_regression'],
-        lag=kwargs['tsifter_step1_ar_lag'],
-        ic=kwargs['tsifter_step1_ar_ic'],
+        regression=kwargs['step1_ar_regression'],
+        lag=kwargs['step1_ar_lag'],
+        ic=kwargs['step1_ar_ic'],
     )
     scores = ar.anomaly_scores_out_of_sample(test_series)
     if not np.all(np.isfinite(scores)):
@@ -244,21 +244,21 @@ def differencial_of_anomaly_score_model(series: np.ndarray, **kwargs: Any) -> Un
     #     return UnivariateSeriesReductionResult(
     #         series, has_kept=False, anomaly_scores=scores, abn_th=abn_th)
 
-    changepoints = discover_changepoint_start_time(scores, kwargs['tsifter_step1_changepoint_topk'])
+    changepoints = discover_changepoint_start_time(scores, kwargs['step1_changepoint_topk'])
     changepoints = [(p[0]+train_series.size, p[1]) for p in changepoints]
     return UnivariateSeriesReductionResult(
         series, has_kept=True, anomaly_scores=scores, outliers=changepoints)
 
 
 def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
-    w: int = kwargs.get('tsifter_step1_ma_window_size', 2)
+    w: int = kwargs.get('step1_ma_window_size', 2)
     return ndimg.uniform_filter1d(input=x, size=w, mode='constant', origin=-(w//2))[:-(w-1)]
 
 
 def smooth_with_binner(x: np.ndarray, **kwargs: Any) -> np.ndarray:
     """ Smooth time series with binner method.
     """
-    w: int = kwargs.get('tsifter_step1_smoother_binner_window_size', 2)
+    w: int = kwargs.get('step1_smoother_binner_window_size', 2)
     smoother = BinnerSmoother(n_knots=int(x.size/w), copy=True)
     smoother.smooth(x)
     return smoother.smooth_data[0]
@@ -295,7 +295,7 @@ class Tsdr:
 
         # step2
         df_before_clustering: pd.DataFrame
-        series_type = self.params['tsifter_step2_clustered_series_type']
+        series_type = self.params['step2_clustered_series_type']
         if series_type == 'raw':
             df_before_clustering = reduced_series1.apply(scipy.stats.zscore)
         elif series_type in ['anomaly_score', 'binary_anomaly_score']:
@@ -308,7 +308,7 @@ class Tsdr:
                         tmp_dict_to_df[name] = res.binary_scores()
             df_before_clustering = pd.DataFrame(tmp_dict_to_df)
         else:
-            raise ValueError(f'tsifter_step2_clustered_series_type is invalid {series_type}')
+            raise ValueError(f'step2_clustered_series_type is invalid {series_type}')
 
         containers_of_service: dict[str, set[str]] = get_container_names_of_service(series)
 
@@ -316,10 +316,10 @@ class Tsdr:
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
             df_before_clustering.copy(), containers_of_service, max_workers,
-            self.params['tsifter_step2_clustering_dist_type'],
-            self.params['tsifter_step2_clustering_threshold'],
-            self.params['tsifter_step2_clustering_choice_method'],
-            self.params['tsifter_step2_clustering_linkage_method'],
+            self.params['step2_clustering_dist_type'],
+            self.params['step2_clustering_threshold'],
+            self.params['step2_clustering_choice_method'],
+            self.params['step2_clustering_linkage_method'],
         )
 
         time_clustering: float = round(time.time() - start, 2)
