@@ -300,72 +300,9 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
-            tsdr_param = {
-                'tsifter_step2_clustering_threshold': cfg.step2.dist_threshold,
-                'tsifter_step2_clustered_series_type': cfg.step2.clustered_series_type,
-                'tsifter_step2_clustering_dist_type': cfg.step2.clustering_dist_type,
-                'tsifter_step2_clustering_choice_method': cfg.step2.clustering_choice_method,
-                'tsifter_step2_clustering_linkage_method': cfg.step2.clustering_linkage_method,
-            }
-            if cfg.step1.model_name == 'cv':
-                tsdr_param.update({
-                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
-                })
-                reducer = tsdr.Tsdr(tsdr.cv_model, **tsdr_param)
-            elif cfg.step1.model_name == 'unit_root_test':
-                tsdr_param.update({
-                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
-                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
-                    'tsifter_step1_take_log': cfg.step1.take_log,
-                    'tsifter_step1_unit_root_model': cfg.step1.unit_root_model,
-                    'tsifter_step1_unit_root_alpha': cfg.step1.unit_root_alpha,
-                    'tsifter_step1_unit_root_regression': cfg.step1.unit_root_regression,
-                    'tsifter_step1_post_od_model': cfg.step1.post_od_model,
-                    'tsifter_step1_post_od_threshold': cfg.step1.post_od_threshold,
-                })
-                reducer = tsdr.Tsdr(tsdr.unit_root_based_model, **tsdr_param)
-            elif cfg.step1.model_name == 'ar_based_ad':
-                tsdr_param.update({
-                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
-                    'tsifter_step1_smoother': cfg.step1.smoother,
-                    'tsifter_step1_smoother_ma_window_size': cfg.step1.smoother_ma_window_size,
-                    'tsifter_step1_smoother_binner_window_size': cfg.step1.smoother_binner_window_size,
-                    'tsifter_step1_ar_regression': cfg.step1.ar_regression,
-                    'tsifter_step1_ar_lag': cfg.step1.ar_lag,
-                    'tsifter_step1_ar_ic': cfg.step1.ar_ic,
-                    'tsifter_step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
-                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
-                    'tsifter_step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
-                })
-                reducer = tsdr.Tsdr(tsdr.ar_based_ad_model, **tsdr_param)
-            elif cfg.step1.model_name == 'hotteling_t2':
-                tsdr_param.update({
-                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
-                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
-                    'tsifter_step1_hotteling_threshold': cfg.step1.hotteling_threshold,
-                })
-                reducer = tsdr.Tsdr(tsdr.hotteling_t2_model, **tsdr_param)
-            elif cfg.step1.model_name == 'sst':
-                tsdr_param.update({
-                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
-                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
-                    'tsifter_step1_hotteling_threshold': cfg.step1.hotteling_threshold,
-                })
-                reducer = tsdr.Tsdr(tsdr.sst_model, **tsdr_param)
-            elif cfg.step1.model_name == 'differencial_of_anomaly_score':
-                tsdr_param.update({
-                    'tsifter_step1_pre_cv': cfg.step1.pre_cv,
-                    'tsifter_step1_cv_threshold': cfg.step1.cv_threshold,
-                    'tsifter_step1_ar_regression': cfg.step1.ar_regression,
-                    'tsifter_step1_ar_lag': cfg.step1.ar_lag,
-                    'tsifter_step1_ar_ic': cfg.step1.ar_ic,
-                    'tsifter_step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
-                    'tsifter_step1_changepoint_topk': cfg.step1.changepoint_topk,
-                })
-                reducer = tsdr.Tsdr(tsdr.differencial_of_anomaly_score_model, **tsdr_param)
-            else:
-                raise ValueError(f'Invalid name of step1 mode: {cfg.step1.model_name}')
-
+            tsdr_param = {f'step1_{k}': v for k, v in OmegaConf.to_container(cfg.step1, resolve=True).items()}
+            tsdr_param.update({f'step2_{k}': v for k, v in OmegaConf.to_container(cfg.step2, resolve=True).items()})
+            reducer = tsdr.Tsdr(cfg.step1.model_name, **tsdr_param)
             elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info, anomaly_points = reducer.run(
                 series=data_df,
                 max_workers=cpu_count(),
@@ -462,72 +399,19 @@ def main(cfg: DictConfig) -> None:
     )
     npt_handler = NeptuneHandler(run=run)
     logger.addHandler(npt_handler)
+
     run['dataset/id'] = cfg.dataset_id
     run['dataset/num_metrics_files'] = len(cfg.metrics_files)
     params = {
         'exclude_middleware_metrics': cfg.exclude_middleware_metrics,
-        'step2_dist_threshold': cfg.step2.dist_threshold,
-        'step2_clustered_series_type': cfg.step2.clustered_series_type,
-        'step2_clustering_dist_type': cfg.step2.clustering_dist_type,
-        'step2_clustering_choice_method': cfg.step2.clustering_choice_method,
-        'step2_clustering_linkage_method': cfg.step2.clustering_linkage_method,
     }
-    if cfg.step1.model_name == 'cv':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-        })
-    elif cfg.step1.model_name == 'unit_root_test':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_take_log': cfg.step1.take_log,
-            'step1_unit_root_model': cfg.step1.unit_root_model,
-            'step1_alpha': cfg.step1.unit_root_alpha,
-            'step1_regression': cfg.step1.unit_root_regression,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_post_od_model': cfg.step1.post_od_model,
-            'step1_post_od_threshold': cfg.step1.post_od_threshold,
-        })
-    elif cfg.step1.model_name == 'ar_based_ad':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_pre_cv': cfg.step1.pre_cv,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_ar_regression': cfg.step1.ar_regression,
-            'step1_ar_lag': cfg.step1.ar_lag,
-            'step1_ar_ic': cfg.step1.ar_ic,
-            'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
-            'step1_ar_dynamic_prediction': cfg.step1.ar_dynamic_prediction,
-            'step1_smoother': cfg.step1.smoother,
-            'step1_smoother_ma_window_size': cfg.step1.smoother_ma_window_size,
-            'step1_smoother_binner_window_size': cfg.step1.smoother_binner_window_size,
-        })
-    elif cfg.step1.model_name == 'hotteling_t2':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_pre_cv': cfg.step1.pre_cv,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_hotteling_threshold': cfg.step1.hotteling_threshold,
-        })
-    elif cfg.step1.model_name == 'sst':
-        params.update({
-            'step1_pre_cv': cfg.step1.pre_cv,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_sst_threshold': cfg.step1.sst_threshold,
-        })
-    elif cfg.step1.model_name == 'differencial_of_anomaly_score':
-        params.update({
-            'step1_model_name': cfg.step1.model_name,
-            'step1_pre_cv': cfg.step1.pre_cv,
-            'step1_cv_threshold': cfg.step1.cv_threshold,
-            'step1_ar_regression': cfg.step1.ar_regression,
-            'step1_ar_lag': cfg.step1.ar_lag,
-            'step1_ar_ic': cfg.step1.ar_ic,
-            'step1_ar_anomaly_score_threshold': cfg.step1.ar_anomaly_score_threshold,
-            'step1_changepoint_topk': cfg.step1.changepoint_topk,
-        })
-    else:
-        raise ValueError(f'Unknown model name: {cfg.step1.model_name}')
+
+    # Hydra parameters are passed to the Neptune.ai run object
+    pycfg_step1 = OmegaConf.to_container(cfg.step1, resolve=True)
+    params.update({f'step1_{k}': v for k, v in pycfg_step1.items()})
+    pycfg_step2 = OmegaConf.to_container(cfg.step2, resolve=True)
+    params.update({f'step2_{k}': v for k, v in pycfg_step2.items()})
+
     run['parameters'] = params
     run.wait()  # sync parameters for 'async' neptune mode
 

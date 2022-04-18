@@ -190,17 +190,9 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
-            reducer = tsdr.Tsdr(tsdr.ar_based_ad_model, **{
-                'tsifter_step1_ar_regression': cfg.tsdr.step1.ar_regression,
-                'tsifter_step1_ar_anomaly_score_threshold': cfg.tsdr.step1.ar_anomaly_score_threshold,
-                'tsifter_step1_cv_threshold': cfg.tsdr.step1.cv_threshold,
-                'tsifter_step1_ar_dynamic_prediction': cfg.tsdr.step1.ar_dynamic_prediction,
-                'tsifter_step2_clustering_threshold': cfg.tsdr.step2.dist_threshold,
-                'tsifter_step2_clustered_series_type': cfg.tsdr.step2.clustered_series_type,
-                'tsifter_step2_clustering_dist_type': cfg.tsdr.step2.clustering_dist_type,
-                'tsifter_step2_clustering_choice_method': cfg.tsdr.step2.clustering_choice_method,
-                'tsifter_step2_clustering_linkage_method': cfg.tsdr.step2.clustering_linkage_method,
-            })
+            tsdr_param = {f'step1_{k}': v for k, v in OmegaConf.to_container(cfg.step1, resolve=True).items()}
+            tsdr_param.update({f'step2_{k}': v for k, v in OmegaConf.to_container(cfg.step2, resolve=True).items()})
+            reducer = tsdr.Tsdr(cfg.step1.model_name, **tsdr_param)
             _, reduced_df_by_step, metrics_dimension, _ = reducer.run(
                 series=data_df,
                 max_workers=cpu_count(),
