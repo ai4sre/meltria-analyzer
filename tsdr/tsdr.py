@@ -3,7 +3,7 @@ import random
 import time
 import warnings
 from concurrent import futures
-from typing import Any, Callable
+from typing import Any, Callable, Union
 
 import banpei
 import numpy as np
@@ -267,11 +267,29 @@ def smooth_with_binner(x: np.ndarray, **kwargs: Any) -> np.ndarray:
 class Tsdr:
     def __init__(
         self,
-        univariate_series_func: Callable[[np.ndarray, Any], UnivariateSeriesReductionResult],
+        univariate_series_func_or_name: Union[Callable[[np.ndarray, Any], UnivariateSeriesReductionResult], str],
         **kwargs
     ) -> None:
-        setattr(self, 'univariate_series_func', univariate_series_func)
         self.params = kwargs
+        if callable(univariate_series_func_or_name):
+            setattr(self, 'univariate_series_func', univariate_series_func_or_name)
+        elif type(univariate_series_func_or_name) == str:
+            if univariate_series_func_or_name == 'cv':
+                setattr(self, 'univariate_series_func', cv_model)
+            elif univariate_series_func_or_name == 'unit_root_test':
+                setattr(self, 'univariate_series_func', unit_root_based_model)
+            elif univariate_series_func_or_name == 'ar_based_ad':
+                setattr(self, 'univariate_series_func', ar_based_ad_model)
+            elif univariate_series_func_or_name == 'hotteling_t2':
+                setattr(self, 'univariate_series_func', hotteling_t2_model)
+            elif univariate_series_func_or_name == 'sst':
+                setattr(self, 'univariate_series_func', sst_model)
+            elif univariate_series_func_or_name == 'differencial_of_anomaly_score':
+                setattr(self, 'univariate_series_func', differencial_of_anomaly_score_model)
+            else:
+                raise ValueError(f'Invalid name of step1 mode: {univariate_series_func_or_name}')
+        else:
+            raise TypeError(f'Invalid type of step1 mode: {type(univariate_series_func_or_name)}')
 
     def univariate_series_func(self, series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
         return ar_based_ad_model(series, **kwargs)
@@ -317,7 +335,7 @@ class Tsdr:
         reduced_series2, clustering_info = self.reduce_multivariate_series(
             df_before_clustering.copy(), containers_of_service, max_workers,
             self.params['step2_clustering_dist_type'],
-            self.params['step2_clustering_threshold'],
+            self.params['step2_clustering_dist_threshold'],
             self.params['step2_clustering_choice_method'],
             self.params['step2_clustering_linkage_method'],
         )
