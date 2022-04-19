@@ -1,4 +1,5 @@
 import random
+import warnings
 
 import numpy as np
 import sklearn.mixture
@@ -13,7 +14,11 @@ class FluxInferAD(object):
 
         while True:
             reshaped_x = x_.reshape(-1, 1)
-            labels = sklearn.mixture.GaussianMixture(n_components=2).fit(reshaped_x).predict(reshaped_x)
+            with warnings.catch_warnings():
+                # Supress sklearn's warning about covariance matrix being singular
+                # 'ConvergenceWarning: Number of distinct clusters (1) found smaller than n_clusters (2). Possibly due to duplicate points in X.'
+                warnings.simplefilter("ignore")
+                labels = sklearn.mixture.GaussianMixture(n_components=2).fit(reshaped_x).predict(reshaped_x)
 
             # Calculate segmentation boundaries.
             seg_bounds: np.ndarray = np.argwhere(np.abs(np.diff(labels)) == 1).flatten() + 1
