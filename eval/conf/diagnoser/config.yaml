@@ -4,7 +4,7 @@ exclude_middleware_metrics: true
 defaults:
   - _self_
   - tsdr/step1: ar_based_ad
-  - tsdr/step2: default
+  - tsdr/step2: hierarchy
 params:
   pc_library: 'pcalg'   # 'pcalg' or 'pgmpy'
   pc_variant: 'stable'  # none or 'stable'
