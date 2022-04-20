@@ -124,6 +124,8 @@ class TimeSeriesPlotter:
                 width_and_height=(800, 400),
             )
             figures.append(fig)
+        if len(figures) == 0:
+            return ''
         final_fig = reduce(add, figures)
         return file_html(hv.render(final_fig), CDN, record.chaos_case_full())
 

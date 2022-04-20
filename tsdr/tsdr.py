@@ -18,6 +18,7 @@ from scipy.spatial.distance import hamming, pdist, squareform
 from statsmodels.tsa.stattools import adfuller
 from tsmoothie.smoother import BinnerSmoother
 
+from tsdr.clustering import dbscan
 from tsdr.clustering.kshape import kshape
 from tsdr.clustering.metricsnamecluster import cluster_words
 from tsdr.clustering.sbd import sbd, silhouette_score
@@ -322,7 +323,7 @@ class Tsdr:
 
         # step2
         df_before_clustering: pd.DataFrame
-        series_type = self.params['step2_clustered_series_type']
+        series_type = self.params['step2_clustering_series_type']
         if series_type == 'raw':
             df_before_clustering = reduced_series1.apply(scipy.stats.zscore)
         elif series_type in ['anomaly_score', 'binary_anomaly_score']:
@@ -343,10 +344,6 @@ class Tsdr:
 
         reduced_series2, clustering_info = self.reduce_multivariate_series(
             df_before_clustering.copy(), containers_of_service, max_workers,
-            self.params['step2_clustering_dist_type'],
-            self.params['step2_clustering_dist_threshold'],
-            self.params['step2_clustering_choice_method'],
-            self.params['step2_clustering_linkage_method'],
         )
 
         time_clustering: float = round(time.time() - start, 2)
@@ -410,33 +407,43 @@ class Tsdr:
         series: pd.DataFrame,
         containers_of_service: dict[str, set[str]],
         n_workers: int,
-        dist_type: str,
-        dist_threshold: float,
-        choice_method: str,
-        linkage_method: str,
     ) -> tuple[pd.DataFrame, dict[str, Any]]:
         def make_clusters(
             df: pd.DataFrame,
-            dist_threshold: float,
-            choice_method: str,
-            linkage_method: str,
+            **kwargs: Any,
         ) -> futures.Future:
+            method_name = kwargs['step2_clustering_method_name']
+            choice_method = kwargs['step2_clustering_choice_method']
+
             future: futures.Future
-            if dist_type == 'sbd':
+
+            if method_name == 'hierarchy':
+                dist_type = kwargs['step2_hierarchy_dist_type']
+                dist_threshold = kwargs['step2_hierarchy_dist_threshold']
+                linkage_method = kwargs['step2_hierarchy_linkage_method']
+
+                if dist_type == 'sbd':
+                    future = executor.submit(
+                        hierarchical_clustering,
+                        df, sbd, dist_threshold, choice_method, linkage_method,
+                    )
+                elif dist_type == 'hamming':
+                    if dist_threshold >= 1.0:
+                        # make the distance threshold intuitive
+                        dist_threshold /= series.shape[0]
+                    future = executor.submit(
+                        hierarchical_clustering,
+                        df, hamming, dist_threshold, choice_method, linkage_method,
+                    )
+                else:
+                    raise ValueError('dist_func must be "sbd" or "hamming"')
+            elif method_name == 'dbscan':
                 future = executor.submit(
-                    hierarchical_clustering,
-                    df, sbd, dist_threshold, choice_method, linkage_method,
-                )
-            elif dist_type == 'hamming':
-                if dist_threshold >= 1.0:
-                    # make the distance threshold intuitive
-                    dist_threshold /= series.shape[0]
-                future = executor.submit(
-                    hierarchical_clustering,
-                    df, hamming, dist_threshold, choice_method, linkage_method,
+                    dbscan_clustering,
+                    df, kwargs['step2_dbscan_dist_type'], kwargs['step2_dbscan_min_pts'], choice_method,
                 )
             else:
-                raise ValueError('dist_func must be "sbd" or "hamming"')
+                raise ValueError('method_name must be "hierarchy" or "dbscan"')
             return future
 
         clustering_info: dict[str, Any] = {}
@@ -447,7 +454,7 @@ class Tsdr:
                 service_metrics_df = series.loc[:, series.columns.str.startswith(f"s-{service}_")]
                 if len(service_metrics_df.columns) > 1:
                     future_list.append(
-                        make_clusters(service_metrics_df, dist_threshold, choice_method, linkage_method),
+                        make_clusters(service_metrics_df, **self.params),
                     )
                 for container in containers:
                     # perform clustering in each type of metric
@@ -457,7 +464,7 @@ class Tsdr:
                     if len(container_metrics_df.columns) <= 1:
                         continue
                     future_list.append(
-                        make_clusters(container_metrics_df, dist_threshold, choice_method, linkage_method),
+                        make_clusters(container_metrics_df, **self.params),
                     )
             for future in futures.as_completed(future_list):
                 c_info, remove_list = future.result()
@@ -500,7 +507,30 @@ def hierarchical_clustering(
     dist_matrix: np.ndarray = squareform(dist)
     z: np.ndarray = linkage(dist, method=linkage_method, metric=dist_func)
     labels: np.ndarray = fcluster(z, t=dist_threshold, criterion="distance")
-    cluster_dict: dict[str, list[int]] = {}
+    cluster_dict: dict[int, list[int]] = {}
+    for i, v in enumerate(labels):
+        if v in cluster_dict:
+            cluster_dict[v].append(i)
+        else:
+            cluster_dict[v] = [i]
+
+    if choice_method == 'medoid':
+        return choose_metric_with_medoid(target_df.columns, cluster_dict, dist_matrix)
+    elif choice_method == 'maxsum':
+        return choose_metric_with_maxsum(target_df, cluster_dict)
+    else:
+        raise ValueError('choice_method is required.')
+
+
+def dbscan_clustering(
+    target_df: pd.DataFrame,
+    dist_func: str,
+    min_pts: int,
+    choice_method: str = 'medoid',
+) -> tuple[dict[str, Any], list[str]]:
+    labels, dist_matrix = dbscan.learn_clusters(target_df.values.T, dist_func, min_pts)
+
+    cluster_dict: dict[int, list[int]] = {}
     for i, v in enumerate(labels):
         if v in cluster_dict:
             cluster_dict[v].append(i)
@@ -517,7 +547,7 @@ def hierarchical_clustering(
 
 def choose_metric_with_medoid(
     columns: pd.Index,
-    cluster_dict: dict[str, list[int]],
+    cluster_dict: dict[int, list[int]],
     dist_matrix: np.ndarray,
 ) -> tuple[dict[str, Any], list[str]]:
     clustering_info, remove_list = {}, []
@@ -553,7 +583,7 @@ def choose_metric_with_medoid(
 
 def choose_metric_with_maxsum(
     data_df: pd.DataFrame,
-    cluster_dict: dict[str, list[int]],
+    cluster_dict: dict[int, list[int]],
 ) -> tuple[dict[str, Any], list[str]]:
     """ Choose metrics which has max of sum of datapoints in each metrics in each cluster. """
     clustering_info, remove_list = {}, []

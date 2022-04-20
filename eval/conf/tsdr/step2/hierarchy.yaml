@@ -1,0 +1,6 @@
+clustering_method_name: 'hierarchy'
+clustering_series_type: 'raw' # 'raw', 'anomaly_score' or 'binary_anomaly_score'
+clustering_choice_method: 'medoid'  # 'medoid' or 'maxsum'
+hierarchy_dist_threshold: 0.02  # should be <1.0 if 'sbd' is specified
+hierarchy_dist_type: 'sbd' # 'sbd' or 'hamming'
+hierarchy_linkage_method: 'single'  # 'single','complete','average','weighted', 'centroid', 'median', 'ward'

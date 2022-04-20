@@ -1,5 +1,0 @@
-clustering_dist_threshold: 0.02  # should be <1.0 if 'sbd' is specified
-clustered_series_type: 'raw' # 'raw', 'anomaly_score' or 'binary_anomaly_score'
-clustering_dist_type: 'sbd' # 'sbd' or 'hamming'
-clustering_choice_method: 'medoid'  # 'medoid' or 'maxsum'
-clustering_linkage_method: 'single'  # 'single','complete','average','weighted', 'centroid', 'median', 'ward'
