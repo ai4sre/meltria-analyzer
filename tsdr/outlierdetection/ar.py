@@ -31,8 +31,8 @@ class AROutlierDetector:
             self._model = AutoReg(endog=self._samples, lags=lag, trend=regression)
             self._fit_model = self._model.fit()
 
-    def predict_in_sample(self) -> tuple[np.ndarray, float]:
-        pred_results: PredictionResults = self._fit_model.get_prediction()
+    def predict_in_sample(self, dynamic=False) -> tuple[np.ndarray, float]:
+        pred_results: PredictionResults = self._fit_model.get_prediction(dynamic=dynamic)
         preds = pred_results.predicted_mean
         # remove the plots for the lag. And read through the first value because the prediction line is shifted by 1 plot for some reason.
         preds = preds[self._lag+1:]
@@ -89,6 +89,11 @@ class AROutlierDetector:
         for i, (xi, pred) in enumerate(zip(test_samples, preds)):
             scores[i] = (xi - pred) ** 2 / sig2
         return scores
+
+    def sse_in_sample(self, dynamic=False) -> float:
+        preds = self.predict_in_sample(dynamic)[0]
+        actuals = self._samples[self._lag:-1]
+        return np.sum((actuals - preds) ** 2)
 
     @classmethod
     def detect_by_fitting_dist(
