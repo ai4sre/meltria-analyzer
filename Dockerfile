@@ -1,4 +1,4 @@
-FROM python:3.9-slim as builder
+FROM python:3.10-slim as builder
 
 WORKDIR /usr/src/app
 
@@ -6,7 +6,7 @@ RUN pip install poetry
 COPY pyproject.toml poetry.lock ./
 RUN poetry export -f requirements.txt > requirements.txt
 
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
   PYTHONUNBUFFERED=1 \

@@ -139,17 +139,15 @@ def ar_based_ad_model(orig_series: np.ndarray, **kwargs: Any) -> UnivariateSerie
         if detect_with_cv(orig_series, **kwargs):
             return UnivariateSeriesReductionResult(orig_series, has_kept=False)
 
-    if (smoother := kwargs.get('step1_smoother')) is not None:
-        if smoother == 'none':
+    match smoother := kwargs.get('step1_smoother'):
+        case 'none':
             series = orig_series
-        elif smoother == 'binner':
+        case 'binner':
             series = smooth_with_binner(orig_series, **kwargs)
-        elif smoother == 'moving_average':
+        case 'moving_average':
             series = smooth_with_ma(orig_series, **kwargs)
-        else:
+        case _:
             raise ValueError(f"Invalid smoother: '{smoother}'")
-    else:
-        series = orig_series
 
     ar_threshold: float = kwargs['step1_ar_anomaly_score_threshold']
     ar = AROutlierDetector(series, maxlag=0)
@@ -265,26 +263,27 @@ def hist_and_stationality_model(series: np.ndarray, **kwargs: Any) -> Univariate
     if len(high_density_bins) > 0:
         return UnivariateSeriesReductionResult(series, has_kept=True)
 
-    if kwargs['step1_stationality_test'] == 'kpss':
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore')
-            p_value = kpss(series, regression=kwargs['step1_stationality_test_regression'])[1]
-        if p_value <= kwargs['step1_stationality_test_alpha']:
-            return UnivariateSeriesReductionResult(series, has_kept=True)
-    elif kwargs['step1_stationality_test'] == 'adf':
-        p_value = adfuller(x=series, regression=kwargs['step1_stationality_test_regression'])[1]
-        if p_value > kwargs['step1_stationality_test_alpha']:
-            return UnivariateSeriesReductionResult(series, has_kept=True)
-    elif kwargs['step1_stationality_test'] == 'combined':
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore')
-            p_value_kpss = kpss(series, regression=kwargs['step1_stationality_test_regression'])[1]
-        has_kept_kpss = p_value_kpss <= kwargs['step1_stationality_test_alpha']
-        p_value_adf = adfuller(x=series, regression=kwargs['step1_stationality_test_regression'])[1]
-        has_kept_adf = p_value_adf > kwargs['step1_stationality_test_alpha']
-        return UnivariateSeriesReductionResult(series, has_kept=(has_kept_kpss & has_kept_adf))
-    else:
-        raise ValueError(f"Unknown stationality test {kwargs['step1_stationality_test']}")
+    match kwargs['step1_stationality_test']:
+        case 'kpss':
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore')
+                p_value = kpss(series, regression=kwargs['step1_stationality_test_regression'])[1]
+            if p_value <= kwargs['step1_stationality_test_alpha']:
+                return UnivariateSeriesReductionResult(series, has_kept=True)
+        case 'adf':
+            p_value = adfuller(x=series, regression=kwargs['step1_stationality_test_regression'])[1]
+            if p_value > kwargs['step1_stationality_test_alpha']:
+                return UnivariateSeriesReductionResult(series, has_kept=True)
+        case 'combined':
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore')
+                p_value_kpss = kpss(series, regression=kwargs['step1_stationality_test_regression'])[1]
+            has_kept_kpss = p_value_kpss <= kwargs['step1_stationality_test_alpha']
+            p_value_adf = adfuller(x=series, regression=kwargs['step1_stationality_test_regression'])[1]
+            has_kept_adf = p_value_adf > kwargs['step1_stationality_test_alpha']
+            return UnivariateSeriesReductionResult(series, has_kept=(has_kept_kpss & has_kept_adf))
+        case _:
+            raise ValueError(f"Unknown stationality test {kwargs['step1_stationality_test']}")
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
@@ -312,24 +311,25 @@ class Tsdr:
         if callable(univariate_series_func_or_name):
             setattr(self, 'univariate_series_func', univariate_series_func_or_name)
         elif type(univariate_series_func_or_name) == str:
-            if univariate_series_func_or_name == 'cv':
-                setattr(self, 'univariate_series_func', cv_model)
-            elif univariate_series_func_or_name == 'unit_root_test':
-                setattr(self, 'univariate_series_func', unit_root_based_model)
-            elif univariate_series_func_or_name == 'ar_based_ad':
-                setattr(self, 'univariate_series_func', ar_based_ad_model)
-            elif univariate_series_func_or_name == 'hotteling_t2':
-                setattr(self, 'univariate_series_func', hotteling_t2_model)
-            elif univariate_series_func_or_name == 'sst':
-                setattr(self, 'univariate_series_func', sst_model)
-            elif univariate_series_func_or_name == 'differencial_of_anomaly_score':
-                setattr(self, 'univariate_series_func', differencial_of_anomaly_score_model)
-            elif univariate_series_func_or_name == 'fluxinfer':
-                setattr(self, 'univariate_series_func', fluxinfer_model)
-            elif univariate_series_func_or_name == 'hist_and_stationality':
-                setattr(self, 'univariate_series_func', hist_and_stationality_model)
-            else:
-                raise ValueError(f'Invalid name of step1 mode: {univariate_series_func_or_name}')
+            match univariate_series_func_or_name:
+                case 'cv':
+                    setattr(self, 'univariate_series_func', cv_model)
+                case 'unit_root_test':
+                    setattr(self, 'univariate_series_func', unit_root_based_model)
+                case 'ar_based_ad':
+                    setattr(self, 'univariate_series_func', ar_based_ad_model)
+                case 'hotteling_t2':
+                    setattr(self, 'univariate_series_func', hotteling_t2_model)
+                case 'sst':
+                    setattr(self, 'univariate_series_func', sst_model)
+                case 'differencial_of_anomaly_score':
+                    setattr(self, 'univariate_series_func', differencial_of_anomaly_score_model)
+                case 'fluxinfer':
+                    setattr(self, 'univariate_series_func', fluxinfer_model)
+                case 'hist_and_stationality':
+                    setattr(self, 'univariate_series_func', hist_and_stationality_model)
+                case _:
+                    raise ValueError(f'Invalid name of step1 mode: {univariate_series_func_or_name}')
         else:
             raise TypeError(f'Invalid type of step1 mode: {type(univariate_series_func_or_name)}')
 
@@ -354,21 +354,20 @@ class Tsdr:
         metrics_dimension["total"].append(len(reduced_series1.columns))
 
         # step2
-        df_before_clustering: pd.DataFrame
-        series_type = self.params['step2_clustering_series_type']
-        if series_type == 'raw':
-            df_before_clustering = reduced_series1.apply(scipy.stats.zscore)
-        elif series_type in ['anomaly_score', 'binary_anomaly_score']:
-            tmp_dict_to_df: dict[str, np.ndarray] = {}
-            for name, res in step1_results.items():
-                if res.has_kept:
-                    if series_type == 'anomaly_score':
-                        tmp_dict_to_df[name] = scipy.stats.zscore(res.anomaly_scores)
-                    elif series_type == 'binary_anomaly_score':
-                        tmp_dict_to_df[name] = res.binary_scores()
-            df_before_clustering = pd.DataFrame(tmp_dict_to_df)
-        else:
-            raise ValueError(f'step2_clustered_series_type is invalid {series_type}')
+        match series_type := self.params['step2_clustering_series_type']:
+            case 'raw':
+                df_before_clustering = reduced_series1.apply(scipy.stats.zscore)
+            case 'anomaly_score', 'binary_anomaly_score':
+                tmp_dict_to_df: dict[str, np.ndarray] = {}
+                for name, res in step1_results.items():
+                    if res.has_kept:
+                        if series_type == 'anomaly_score':
+                            tmp_dict_to_df[name] = scipy.stats.zscore(res.anomaly_scores)
+                        elif series_type == 'binary_anomaly_score':
+                            tmp_dict_to_df[name] = res.binary_scores()
+                df_before_clustering = pd.DataFrame(tmp_dict_to_df)
+            case _:
+                raise ValueError(f'step2_clustered_series_type is invalid {series_type}')
 
         containers_of_service: dict[str, set[str]] = get_container_names_of_service(series)
 
