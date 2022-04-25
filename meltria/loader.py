@@ -58,7 +58,7 @@ def load_dataset(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """ Load metrics dataset
     """
-    dataset = pd.DataFrame()
+    df_list: list[pd.DataFrame] = []
     mappings_by_metrics_file: dict[str, Any] = {}
     with futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
         future_to_metrics_file = {}
@@ -68,9 +68,10 @@ def load_dataset(
         for future in futures.as_completed(future_to_metrics_file):
             data_df, mappings = future.result()
             if data_df is not None:
-                dataset = dataset.append(data_df)
+                df_list.append(data_df)
                 metrics_file = future_to_metrics_file[future]
                 mappings_by_metrics_file[metrics_file] = mappings
+    dataset: pd.DataFrame = pd.concat(df_list)
     return dataset.set_index(['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url']), \
         mappings_by_metrics_file
 
