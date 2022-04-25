@@ -5,7 +5,7 @@ description = ""
 authors = ["tsurubee","yuuk1"]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.10"
+python = ">=3.10,<3.11"
 numpy = "^1.21.0"
 scipy = "v1.8.0"
 fastdtw = "^0.3.4"
