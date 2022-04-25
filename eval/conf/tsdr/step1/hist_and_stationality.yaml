@@ -1,0 +1,5 @@
+model_name: 'hist_and_stationality'
+hist_ratio_threshold: 0.75
+stationality_test: 'adf'
+stationality_test_regression: 'ct'
+stationality_test_alpha: 0.01
