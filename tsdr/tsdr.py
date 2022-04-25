@@ -15,7 +15,7 @@ from arch.unitroot import PhillipsPerron
 from arch.utility.exceptions import InfeasibleTestException
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import hamming, pdist, squareform
-from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.stattools import adfuller, kpss
 from tsmoothie.smoother import BinnerSmoother
 
 from tsdr.clustering import dbscan
@@ -258,6 +258,36 @@ def fluxinfer_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReduct
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
+def hist_and_stationality_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    bincount = np.histogram(series)[0]
+    threshold: float = kwargs['step1_hist_ratio_threshold']
+    high_density_bins = np.where((bincount >= series.size * threshold) | (bincount > series.size))[0]
+    if len(high_density_bins) > 0:
+        return UnivariateSeriesReductionResult(series, has_kept=True)
+
+    if kwargs['step1_stationality_test'] == 'kpss':
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            p_value = kpss(series, regression=kwargs['step1_stationality_test_regression'])[1]
+        if p_value <= kwargs['step1_stationality_test_alpha']:
+            return UnivariateSeriesReductionResult(series, has_kept=True)
+    elif kwargs['step1_stationality_test'] == 'adf':
+        p_value = adfuller(x=series, regression=kwargs['step1_stationality_test_regression'])[1]
+        if p_value > kwargs['step1_stationality_test_alpha']:
+            return UnivariateSeriesReductionResult(series, has_kept=True)
+    elif kwargs['step1_stationality_test'] == 'combined':
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            p_value_kpss = kpss(series, regression=kwargs['step1_stationality_test_regression'])[1]
+        has_kept_kpss = p_value_kpss <= kwargs['step1_stationality_test_alpha']
+        p_value_adf = adfuller(x=series, regression=kwargs['step1_stationality_test_regression'])[1]
+        has_kept_adf = p_value_adf > kwargs['step1_stationality_test_alpha']
+        return UnivariateSeriesReductionResult(series, has_kept=(has_kept_kpss & has_kept_adf))
+    else:
+        raise ValueError(f"Unknown stationality test {kwargs['step1_stationality_test']}")
+    return UnivariateSeriesReductionResult(series, has_kept=False)
+
+
 def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
     w: int = kwargs.get('step1_ma_window_size', 2)
     return ndimg.uniform_filter1d(input=x, size=w, mode='constant', origin=-(w//2))[:-(w-1)]
@@ -296,6 +326,8 @@ class Tsdr:
                 setattr(self, 'univariate_series_func', differencial_of_anomaly_score_model)
             elif univariate_series_func_or_name == 'fluxinfer':
                 setattr(self, 'univariate_series_func', fluxinfer_model)
+            elif univariate_series_func_or_name == 'hist_and_stationality':
+                setattr(self, 'univariate_series_func', hist_and_stationality_model)
             else:
                 raise ValueError(f'Invalid name of step1 mode: {univariate_series_func_or_name}')
         else:
