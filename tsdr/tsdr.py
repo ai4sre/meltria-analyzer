@@ -259,7 +259,12 @@ def fluxinfer_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReduct
 def hist_and_stationality_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
     bincount = np.histogram(series)[0]
     threshold: float = kwargs['step1_hist_ratio_threshold']
-    high_density_bins = np.where((bincount >= series.size * threshold) | (bincount > series.size))[0]
+
+    if len(np.where(bincount == series.size)[0]) > 0:
+        # It is normal if all datapoints is in the same bin.
+        return UnivariateSeriesReductionResult(series, has_kept=False)
+
+    high_density_bins = np.where(bincount >= series.size * threshold)[0]
     if len(high_density_bins) > 0:
         return UnivariateSeriesReductionResult(series, has_kept=True)
 
