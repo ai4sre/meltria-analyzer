@@ -1236,6 +1236,24 @@ numpy = "*"
 scipy = "*"
 
 [[package]]
+name = "pyod"
+version = "1.0.0"
+description = "A Comprehensive and Scalable Python Library for Outlier Detection (Anomaly Detection)"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+joblib = "*"
+matplotlib = "*"
+numba = ">=0.35"
+numpy = ">=1.13"
+scikit_learn = ">=0.20.0"
+scipy = ">=1.3.1"
+six = "*"
+statsmodels = "*"
+
+[[package]]
 name = "pyparsing"
 version = "3.0.8"
 description = "pyparsing module - Classes and methods to define and execute parsing grammars"
@@ -1747,7 +1765,7 @@ test = ["websockets"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.10,<3.11"
-content-hash = "89cae792cf8165f578bc77622122ae64fd4f92c7d848a7e45358e6335341d87c"
+content-hash = "f4ca64c2472107a250f4950365c9165a2212b1c80564e0e2347276ec9cb322be"
 
 [metadata.files]
 antlr4-python3-runtime = [
@@ -2640,6 +2658,9 @@ pyjwt = [
 pymannkendall = [
     {file = "pymannkendall-1.4.2-py3-none-any.whl", hash = "sha256:feaed61fa55a62c59eb3e625eac520b85ce4f3da539fc73c076aa8644a8def70"},
     {file = "pymannkendall-1.4.2.tar.gz", hash = "sha256:3daf310c11d993211fc3f971d7218da215c6dc99b6eb3e20884a534021df9919"},
+]
+pyod = [
+    {file = "pyod-1.0.0.tar.gz", hash = "sha256:7b3875c91dc6bc629c297f8ec2b59200fa8b1cbca986dfe4abd21e75560818af"},
 ]
 pyparsing = [
     {file = "pyparsing-3.0.8-py3-none-any.whl", hash = "sha256:ef7b523f6356f763771559412c0d7134753f037822dad1b16945b7b846f7ad06"},
