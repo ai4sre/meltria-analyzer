@@ -1,0 +1,2 @@
+model_name: 'residual_integral'
+residual_integral_threshold: 20
