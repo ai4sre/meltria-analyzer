@@ -1,4 +1,4 @@
-from typing import Callable, Union
+from typing import Callable
 
 import numpy as np
 import scipy.sparse
@@ -14,7 +14,7 @@ def pearsonr_dist(X, Y, **kwargs):
 
 def learn_clusters(
     X: np.ndarray,
-    dist_func: Union[str, Callable] = 'pearsonr',
+    dist_func: str | Callable = 'pearsonr',
     min_pts: int = 2,
 ) -> tuple[np.ndarray, np.ndarray]:
     if dist_func == 'pearsonr':

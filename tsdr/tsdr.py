@@ -318,7 +318,7 @@ def smooth_with_binner(x: np.ndarray, **kwargs: Any) -> np.ndarray:
 class Tsdr:
     def __init__(
         self,
-        univariate_series_func_or_name: Union[Callable[[np.ndarray, Any], UnivariateSeriesReductionResult], str],
+        univariate_series_func_or_name: Callable[[np.ndarray, Any], UnivariateSeriesReductionResult] | str,
         **kwargs
     ) -> None:
         self.params = kwargs

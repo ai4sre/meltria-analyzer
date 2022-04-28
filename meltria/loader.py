@@ -2,7 +2,7 @@ import logging
 import os
 from concurrent import futures
 from multiprocessing import cpu_count
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 from eval import groundtruth
@@ -41,7 +41,7 @@ class DatasetRecord:
     def basename_of_metrics_file(self) -> str:
         return os.path.basename(self.metrics_file)
 
-    def ground_truth_metrics_frame(self) -> Optional[pd.DataFrame]:
+    def ground_truth_metrics_frame(self) -> pd.DataFrame | None:
         _, ground_truth_metrics = groundtruth.check_tsdr_ground_truth_by_route(
             metrics=self.metrics_names(),  # pre-reduced data frame
             chaos_type=self.chaos_type,
@@ -80,7 +80,7 @@ def read_metrics_file(
     metrics_file: str,
     exclude_middleware_metrics: bool = False,
     logger: logging.Logger = logging.getLogger(),
-) -> tuple[Optional[pd.DataFrame], Optional[dict[str, Any]]]:
+) -> tuple[pd.DataFrame | None, dict[str, Any] | None]:
     try:
         data_df, mappings, metrics_meta = tsdr.read_metrics_json(
             metrics_file,
