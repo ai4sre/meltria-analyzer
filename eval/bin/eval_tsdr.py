@@ -139,7 +139,7 @@ class TimeSeriesPlotter:
         """
         logger.info(f">> Uploading non-clustered plots of {record.chaos_case_file()} ...")
         if len(non_clustered_reduced_df.columns) == 0:
-            return None
+            return ''
 
         figures: list[hv.Overlay] = []
         for service, metrics in pk.group_metrics_by_service(list(non_clustered_reduced_df.columns)).items():
