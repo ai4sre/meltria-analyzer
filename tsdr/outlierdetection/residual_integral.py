@@ -21,10 +21,10 @@ def residual_integral(x: np.ndarray, standarized_resid=True) -> tuple[np.ndarray
     return np.array([np.sum(sec**2) for sec in sections]), sections
 
 
-def residual_integral_max(x: np.ndarray) -> tuple[float, tuple[int, int]]:
+def residual_integral_max(x: np.ndarray) -> tuple[float, list[tuple[int, float]]]:
     rsses, secs = residual_integral(x)
-    max_rss_idx = np.argmax(rsses)
-    max_rss_start = np.sum([sec.size for sec in secs[:max_rss_idx]]) - 1
-    max_rss_range = (max_rss_start, max_rss_start + secs[max_rss_idx].size + 1)
-    max_rss = rsses[max_rss_idx]
-    return max_rss, max_rss_range
+    max_rss_sec_idx: np.intp = np.argmax(rsses)
+    max_rss_start: int = 0 if max_rss_sec_idx == 0 else np.sum([sec.size for sec in secs[:max_rss_sec_idx]])
+    max_rss: float = rsses[max_rss_sec_idx]
+    max_rss_sec: list[tuple[int, float]] = [(max_rss_start+i, v) for i, v in enumerate(secs[max_rss_sec_idx])]
+    return max_rss, max_rss_sec

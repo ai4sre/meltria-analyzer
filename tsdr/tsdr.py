@@ -294,10 +294,10 @@ def hist_and_stationality_model(series: np.ndarray, **kwargs: Any) -> Univariate
 
 
 def residual_integral_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
-    rss, range = residual_integral_max(series)
-    outliers = np.arange(start=range[0], stop=range[1])
-    if rss >= kwargs['step1_residual_integral_threshold']:
-        return UnivariateSeriesReductionResult(series, has_kept=True, outliers=outliers)
+    max_rss, max_rss_range = residual_integral_max(series)
+    if max_rss >= kwargs['step1_residual_integral_threshold']:
+        print(max_rss_range)
+        return UnivariateSeriesReductionResult(series, has_kept=True, outliers=max_rss_range)
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
