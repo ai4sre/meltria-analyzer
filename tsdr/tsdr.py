@@ -25,6 +25,7 @@ from tsdr.clustering.sbd import sbd, silhouette_score
 from tsdr.outlierdetection.ar import AROutlierDetector
 from tsdr.outlierdetection.fluxinfer import FluxInferAD
 from tsdr.outlierdetection.knn import KNNOutlierDetector
+from tsdr.outlierdetection.residual_integral import residual_integral_max
 from tsdr.util import util
 
 TSIFTER_METHOD = 'tsifter'
@@ -292,6 +293,14 @@ def hist_and_stationality_model(series: np.ndarray, **kwargs: Any) -> Univariate
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
+def residual_integral_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    max_rss, max_rss_range = residual_integral_max(series)
+    if max_rss >= kwargs['step1_residual_integral_threshold']:
+        print(max_rss_range)
+        return UnivariateSeriesReductionResult(series, has_kept=True, outliers=max_rss_range)
+    return UnivariateSeriesReductionResult(series, has_kept=False)
+
+
 def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
     w: int = kwargs.get('step1_ma_window_size', 2)
     return ndimg.uniform_filter1d(input=x, size=w, mode='constant', origin=-(w//2))[:-(w-1)]
@@ -333,6 +342,8 @@ class Tsdr:
                     setattr(self, 'univariate_series_func', fluxinfer_model)
                 case 'hist_and_stationality':
                     setattr(self, 'univariate_series_func', hist_and_stationality_model)
+                case 'residual_integral':
+                    setattr(self, 'univariate_series_func', residual_integral_model)
                 case _:
                     raise ValueError(f'Invalid name of step1 mode: {univariate_series_func_or_name}')
         else:

@@ -7,7 +7,6 @@ from collections import defaultdict
 from concurrent import futures
 from functools import reduce
 from multiprocessing import cpu_count
-from multiprocessing.sharedctypes import Value
 from operator import add
 
 import eval.priorknowledge as pk
