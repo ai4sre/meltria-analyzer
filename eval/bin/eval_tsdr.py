@@ -213,7 +213,7 @@ def save_scores(
         d = {
             'tp': tp,
             'fn': fn,
-            'accuracy': tp / x.size,
+            'accuracy': tp / (tp + fn),
             'reduction_rate_mean': (1 - x['num_series_reduced'] / x['num_series_total']).mean(),
             'reduction_rate_max': (1 - x['num_series_reduced'] / x['num_series_total']).max(),
             'reduction_rate_min': (1 - x['num_series_reduced'] / x['num_series_total']).min(),
@@ -232,6 +232,8 @@ def save_scores(
         ['chaos_type', 'chaos_comp', 'step'],
     ).apply(agg_score).reset_index().set_index(['chaos_type', 'chaos_comp', 'step'])
     total_scores: pd.Series = scores_by_step.loc['step2']
+    for col in ['elapsed_time', 'elapsed_time_max', 'elapsed_time_min']:
+        total_scores[col] = scores_by_step.loc['step1'][col] + scores_by_step.loc['step2'][col]
 
     run['scores'] = total_scores.to_dict()
     run['scores/summary_by_step'].upload(neptune.types.File.as_html(scores_by_step))
@@ -276,7 +278,6 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 max_workers=cpu_count(),
             )
 
-            elapsed_time_by_step['total'] = elapsed_time_by_step['step1'] + elapsed_time_by_step['step2']
             num_series_each_step: dict[str, float] = {
                 'total': metrics_dimension['total'][0],
                 'step1': metrics_dimension['total'][1],
