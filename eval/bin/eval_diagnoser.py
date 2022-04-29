@@ -6,6 +6,7 @@ from concurrent import futures
 from functools import reduce
 from multiprocessing import cpu_count
 from operator import add
+from typing import Any
 
 import diagnoser.metric_node as mn
 import holoviews as hv
@@ -173,14 +174,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
     )
     logger.info("Dataset loading complete.")
 
-    tests_df = pd.DataFrame(
-        columns=[
-            'chaos_type', 'chaos_comp', 'metrics_file', 'graph_ok', 'building_graph_elapsed_sec',
-            'num_series', 'init_g_num_nodes', 'init_g_num_edges', 'g_num_nodes', 'g_num_edges', 'g_density',
-            'g_flow_hierarchy', 'found_routes', 'found_cause_metrics', 'grafana_dashboard_url',
-        ],
-        index=['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'],
-    ).dropna()
+    tests_records: list[dict[str, Any]] = []
 
     for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
         graph_building_elapsed_secs: list[float] = []
@@ -190,10 +184,10 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
-            tsdr_param = {f'step1_{k}': v for k, v in OmegaConf.to_container(cfg.step1, resolve=True).items()}
-            tsdr_param.update({f'step2_{k}': v for k, v in OmegaConf.to_container(cfg.step2, resolve=True).items()})
-            reducer = tsdr.Tsdr(cfg.step1.model_name, **tsdr_param)
-            _, reduced_df_by_step, metrics_dimension, _ = reducer.run(
+            tsdr_param = {f'step1_{k}': v for k, v in OmegaConf.to_container(cfg.tsdr.step1, resolve=True).items()}
+            tsdr_param.update({f'step2_{k}': v for k, v in OmegaConf.to_container(cfg.tsdr.step2, resolve=True).items()})
+            reducer = tsdr.Tsdr(cfg.tsdr.step1.model_name, **tsdr_param)
+            _, reduced_df_by_step, metrics_dimension, _, _ = reducer.run(
                 series=data_df,
                 max_workers=cpu_count(),
             )
@@ -225,22 +219,28 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             if not graph_ok:
                 logger.info(f"wrong causal graph in {record.chaos_case_file()}")
             graph_building_elapsed_secs.append(stats['building_graph_elapsed_sec'])
-            tests_df = tests_df.append(
-                pd.Series(
-                    [
-                        chaos_type, chaos_comp, metrics_file, graph_ok, stats['building_graph_elapsed_sec'],
-                        metrics_dimension['total'][2],
-                        stats['init_graph_nodes_num'], stats['init_graph_edges_num'],
-                        stats['causal_graph_nodes_num'], stats['causal_graph_edges_num'],
-                        stats['causal_graph_density'], stats['causal_graph_flow_hierarchy'],
-                        ', '.join([route.liststr() for route in routes]),
-                        found_cause_nodes.liststr(), grafana_dashboard_url,
-                    ], index=tests_df.columns,
-                ), ignore_index=True,
-            )
+            tests_records.append({
+                'chaos_type': chaos_type,
+                'chaos_comp': chaos_comp,
+                'metrics_file': metrics_file,
+                'graph_ok': graph_ok,
+                'building_graph_elapsed_sec': stats['building_graph_elapsed_sec'],
+                'num_series': metrics_dimension['total'][2],
+                'init_g_num_nodes': stats['init_graph_nodes_num'],
+                'init_g_num_edges': stats['init_graph_edges_num'],
+                'causal_g_num_nodes': stats['causal_graph_nodes_num'],
+                'causal_g_num_edges': stats['causal_graph_edges_num'],
+                'causal_graph_density': stats['causal_graph_density'],
+                'causal_graph_flow_hierarchy': stats['causal_graph_flow_hierarchy'],
+                'found_routes': ', '.join([route.liststr() for route in routes]),
+                'found_cause_metrics': ', '.join(found_cause_nodes.liststr()),
+                'grafana_dashboard_url': grafana_dashboard_url,
+            })
             logger.info(f">> Logging causal graph including chaos-injected metrics of {record.chaos_case_file()}")
             log_causal_graph(run, causal_subgraphs, record, routes, reduced_df)
 
+    tests_df = pd.DataFrame(tests_records).set_index(
+        ['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url'])
     run['scores/summary'].upload(neptune.types.File.as_html(tests_df))
 
     tests_df['accurate'] = np.where(tests_df.graph_ok, 1, 0)
