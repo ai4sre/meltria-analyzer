@@ -2,8 +2,6 @@
 
 import logging
 import os
-import statistics
-from collections import defaultdict
 from concurrent import futures
 from functools import reduce
 from multiprocessing import cpu_count
@@ -25,7 +23,6 @@ from eval import groundtruth
 from meltria.loader import DatasetRecord
 from neptune.new.integrations.python_logger import NeptuneHandler
 from omegaconf import DictConfig, OmegaConf
-from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from tsdr import tsdr
 
 hv.extension('bokeh')
@@ -34,9 +31,6 @@ hv.extension('bokeh')
 # see https://docs.neptune.ai/api-reference/integrations/python-logger
 logger = logging.getLogger('root_experiment')
 logger.setLevel(logging.INFO)
-
-# algorithms
-STEP1_METHODS = ['df', 'adf']
 
 
 class TimeSeriesPlotter:
@@ -198,66 +192,55 @@ class TimeSeriesPlotter:
         )
 
 
-def get_scores_by_index(scores_df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
-    df = scores_df.groupby(indexes).agg({
-        'tn': 'sum',
-        'fp': 'sum',
-        'fn': 'sum',
-        'tp': 'sum',
-        'reduction_rate': 'mean',
-        'elapsed_time': 'mean',
-    })
-    df['accuracy'] = (df['tp'] + df['tn']) / (df['tn'] + df['fp'] + df['fn'] + df['tp'])
-    return df
-
-
 def save_scores(
     run: neptune.Run,
-    scores: list[dict[str, Any]], tests: list[dict[str, Any]],
-    clustering: list[dict[str, Any]], non_clustered: list[dict[str, Any]],
+    tests: list[dict[str, Any]], clustering: list[dict[str, Any]], non_clustered: list[dict[str, Any]],
 ) -> None:
     clustering_df = pd.DataFrame(clustering).set_index(
         ['chaos_type', 'chaos_comp', 'metrics_file', 'representative_metric', 'sub_metrics'])
     non_clustered_df = pd.DataFrame(non_clustered).set_index(['chaos_type', 'chaos_comp', 'metrics_file'])
-    scores_df = pd.DataFrame(scores).set_index(['chaos_type', 'chaos_comp', 'step'])
     tests_df = pd.DataFrame(tests).set_index(
         ['chaos_type', 'chaos_comp', 'metrics_file', 'grafana_dashboard_url', 'step'])
 
     run['tests/clustering/clustered_table'].upload(neptune.types.File.as_html(clustering_df))
     run['tests/clustering/non_clustered_table'].upload(neptune.types.File.as_html(non_clustered_df))
 
-    run['tests/table'].upload(neptune.types.File.as_html(tests_df))
+    run['scores/summary'].upload(neptune.types.File.as_html(tests_df))
 
-    tn = scores_df['tn'].sum()
-    fp = scores_df['fp'].sum()
-    fn = scores_df['fn'].sum()
-    tp = scores_df['tp'].sum()
-    run['scores/tn'] = tn
-    run['scores/fp'] = fp
-    run['scores/fn'] = fn
-    run['scores/tp'] = tp
-    run['scores/accuracy'] = (tp + tn) / (tn + fp + fn + tp)
-    run['scores/reduction_rate'] = {
-        'mean': scores_df['reduction_rate'].mean(),
-        'max': scores_df['reduction_rate'].max(),
-        'min': scores_df['reduction_rate'].min(),
-    }
-    run['scores/elapsed_time'] = {
-        'mean': scores_df['elapsed_time'].mean(),
-        'max': scores_df['elapsed_time'].max(),
-        'min': scores_df['elapsed_time'].min(),
-    }
-    run['scores/table'].upload(neptune.types.File.as_html(scores_df))
+    def agg_score(x: pd.DataFrame) -> pd.Series:
+        tp = int(x['ok'].sum())
+        fn = int((~x['ok']).sum())
+        d = {
+            'tp': tp,
+            'fn': fn,
+            'accuracy': tp / x.size,
+            'reduction_rate_mean': (1 - x['num_series_reduced'] / x['num_series_total']).mean(),
+            'reduction_rate_max': (1 - x['num_series_reduced'] / x['num_series_total']).max(),
+            'reduction_rate_min': (1 - x['num_series_reduced'] / x['num_series_total']).min(),
+            'elapsed_time': x['elapsed_time'].mean(),
+            'elapsed_time_max': x['elapsed_time'].max(),
+            'elapsed_time_min': x['elapsed_time'].min(),
+        }
+        return pd.Series(d)
 
-    scores_df_by_chaos_type = get_scores_by_index(scores_df, ['chaos_type', 'step'])
-    run['scores/table_grouped_by_chaos_type'].upload(neptune.types.File.as_html(scores_df_by_chaos_type))
-    scores_df_by_chaos_comp = get_scores_by_index(scores_df, ['chaos_comp', 'step'])
-    run['scores/table_grouped_by_chaos_comp'].upload(neptune.types.File.as_html(scores_df_by_chaos_comp))
+    scores_by_step = tests_df.groupby('step').apply(agg_score).reset_index().set_index('step')
+    scores_by_chaos_type = tests_df.groupby(
+        ['chaos_type', 'step']).apply(agg_score).reset_index().set_index(['chaos_type', 'step'])
+    scores_by_chaos_comp = tests_df.groupby(
+        ['chaos_comp', 'step']).apply(agg_score).reset_index().set_index(['chaos_comp', 'step'])
+    scores_by_chaos_type_and_comp = tests_df.groupby(
+        ['chaos_type', 'chaos_comp', 'step'],
+    ).apply(agg_score).reset_index().set_index(['chaos_type', 'chaos_comp', 'step'])
+    total_scores: pd.Series = scores_by_step.loc['step2']
 
-    logger.info(tests_df.head())
-    logger.info(scores_df.head())
-    logger.info(scores_df_by_chaos_type)
-    logger.info(scores_df_by_chaos_comp)
+    run['scores'] = total_scores.to_dict()
+    run['scores/summary_by_step'].upload(neptune.types.File.as_html(scores_by_step))
+    run['scores/summary_by_chaos_type'].upload(neptune.types.File.as_html(scores_by_chaos_type))
+    run['scores/summary_by_chaos_comp'].upload(neptune.types.File.as_html(scores_by_chaos_comp))
+    run['scores/summary_by_chaos_type_and_chaos_comp'].upload(neptune.types.File.as_html(scores_by_chaos_type_and_comp))
+    for df in [scores_by_step, scores_by_chaos_type, scores_by_chaos_comp, scores_by_chaos_type_and_comp]:
+        with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+            logger.info("\n"+df.to_string())
 
 
 def eval_tsdr(run: neptune.Run, cfg: DictConfig):
@@ -275,15 +258,9 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
     clustering_records: list[dict[str, Any]] = []
     non_clustered_records: list[dict[str, Any]] = []
-    scores_records: list[dict[str, Any]] = []
     tests_records: list[dict[str, Any]] = []
 
     for (chaos_type, chaos_comp), sub_df in dataset.groupby(level=[0, 1]):
-        y_true_by_step: dict[str, list[int]] = defaultdict(lambda: list())
-        y_pred_by_step: dict[str, list[int]] = defaultdict(lambda: list())
-        num_series: dict[str, list[float]] = defaultdict(lambda: list())
-        elapsed_time: dict[str, list[float]] = defaultdict(lambda: list())
-
         for (metrics_file, grafana_dashboard_url), data_df in sub_df.groupby(level=[2, 3]):
             record = DatasetRecord(chaos_type, chaos_comp, metrics_file, data_df)
 
@@ -305,10 +282,6 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 'step1': metrics_dimension['total'][1],
                 'step2': metrics_dimension['total'][2],
             }
-            num_series['total'].append(num_series_each_step['total'])
-            num_series_str: str = '/'.join(
-                [f"{num_series_each_step[s]}" for s in ['total', 'step1', 'step2']]
-            )
 
             for step, df in reduced_df_by_step.items():
                 ok, found_metrics = groundtruth.check_tsdr_ground_truth_by_route(
@@ -316,14 +289,11 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                     chaos_type=chaos_type,
                     chaos_comp=chaos_comp,
                 )
-                y_true_by_step[step].append(1)
-                y_pred_by_step[step].append(1 if ok else 0)
-                num_series[step].append(num_series_each_step[step])
-                elapsed_time[step].append(elapsed_time_by_step[step])
                 tests_records.append({
                     'chaos_type': chaos_type, 'chaos_comp': chaos_comp, 'metrics_file': metrics_file, 'step': step,
                     'ok': ok,
-                    'num_series': num_series_str,
+                    'num_series_total': num_series_each_step['total'],
+                    'num_series_reduced': num_series_each_step[step],
                     'elapsed_time': elapsed_time_by_step[step],
                     'found_metrics': ','.join(found_metrics),
                     'grafana_dashboard_url': grafana_dashboard_url,
@@ -346,28 +316,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
             ts_plotter.log_clustering_plots_as_html(clustering_info, non_clustered_reduced_df, record, anomaly_points)
 
-        mean_num_series_str: str = '/'.join(
-            [f"{statistics.mean(num_series[s])}" for s in ['total', 'step1', 'step2']]
-        )
-        for step, y_true in y_true_by_step.items():
-            y_pred = y_pred_by_step[step]
-            tn, fp, fn, tp = confusion_matrix(
-                y_true=y_true, y_pred=y_pred, labels=[0, 1],
-            ).ravel()
-            accuracy: float = accuracy_score(y_true, y_pred)
-            recall: float = recall_score(y_true, y_pred)
-            mean_reduction_rate: float = 1 - np.mean(np.divide(num_series[step], num_series['total']))
-            mean_elapsed_time: float = np.mean(elapsed_time[step])
-            scores_records.append({
-                'chaos_type': chaos_type, 'chaos_comp': chaos_comp, 'step': step,
-                'tn': tn, 'fp': fp, 'fn': fn, 'tp': tp,
-                'accuracy': accuracy, 'recall': recall,
-                'num_series': mean_num_series_str,
-                'reduction_rate': mean_reduction_rate,
-                'elapsed_time': mean_elapsed_time,
-            })
-
-    save_scores(run, scores_records, tests_records, clustering_records, non_clustered_records)
+    save_scores(run, tests_records, clustering_records, non_clustered_records)
 
 
 @hydra.main(config_path='../conf/tsdr', config_name='config')
