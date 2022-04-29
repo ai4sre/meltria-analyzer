@@ -210,13 +210,15 @@ def save_scores(
     def agg_score(x: pd.DataFrame) -> pd.Series:
         tp = int(x['ok'].sum())
         fn = int((~x['ok']).sum())
+        rate = (1 - x['num_series_reduced'] / x['num_series_total'])
         d = {
             'tp': tp,
             'fn': fn,
             'accuracy': tp / (tp + fn),
-            'reduction_rate_mean': (1 - x['num_series_reduced'] / x['num_series_total']).mean(),
-            'reduction_rate_max': (1 - x['num_series_reduced'] / x['num_series_total']).max(),
-            'reduction_rate_min': (1 - x['num_series_reduced'] / x['num_series_total']).min(),
+            'num_series': f"{int(x['num_series_reduced'].mean())}/{int(x['num_series_total'].mean())}",
+            'reduction_rate_mean': rate.mean(),
+            'reduction_rate_max': rate.max(),
+            'reduction_rate_min': rate.min(),
             'elapsed_time': x['elapsed_time'].mean(),
             'elapsed_time_max': x['elapsed_time'].max(),
             'elapsed_time_min': x['elapsed_time'].min(),
