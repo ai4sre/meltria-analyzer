@@ -827,8 +827,9 @@ def read_metrics_json(data_file: str,
     data_df = pd.DataFrame(metrics_name_to_values).round(4)
     if interporate:
         try:
-            data_df = data_df.interpolate(
-                method="spline", order=3, limit_direction="both")
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                data_df = data_df.interpolate(method="spline", order=3, limit_direction="both")
         except:  # To cacth `dfitpack.error: (m>k) failed for hidden m: fpcurf0:m=3`
             raise ValueError("calculating spline error") from None
     return data_df, raw_json['mappings'], raw_json['meta']
