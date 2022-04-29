@@ -364,8 +364,7 @@ class Tsdr:
         reduced_series1, step1_results, anomaly_points = self.reduce_univariate_series(series, max_workers)
 
         time_adf: float = round(time.time() - start, 2)
-        metrics_dimension = util.count_metrics(
-            metrics_dimension, reduced_series1, 1)
+        metrics_dimension = util.count_metrics(metrics_dimension, reduced_series1, 1)
         metrics_dimension["total"].append(len(reduced_series1.columns))
 
         # step2
@@ -504,9 +503,8 @@ class Tsdr:
                     )
                 for container in containers:
                     # perform clustering in each type of metric
-                    container_metrics_df = series.loc[:, series.columns.str.startswith(f"c-{container}_")]
-                    # TODO: middleware
-                    # middleware_metrics_df = series.loc[:, series.columns.str.startswith(("m-{}_".format(ser), "m-{}-".format(ser)))]
+                    container_metrics_df = series.loc[
+                        :, series.columns.str.startswith((f"c-{container}_", f"m-{container}_"))]
                     if len(container_metrics_df.columns) <= 1:
                         continue
                     future_list.append(
@@ -515,7 +513,7 @@ class Tsdr:
             for future in futures.as_completed(future_list):
                 c_info, remove_list = future.result()
                 clustering_info.update(c_info)
-                series = series.drop(remove_list, axis=1)
+                series.drop(remove_list, axis=1, inplace=True)
         return series, clustering_info
 
 
@@ -860,7 +858,6 @@ def get_container_names_of_service(data_df: pd.DataFrame) -> dict[str, set[str]]
             service_cols.append(col)
         if col.startswith('c-'):
             container_cols.append(col)
-    # TODO: middleware
 
     components: dict[str, set[str]] = {}
     services: set[str] = set([])
