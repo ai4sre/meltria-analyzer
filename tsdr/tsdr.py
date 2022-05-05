@@ -420,30 +420,6 @@ class Tsdr:
                 results[col] = result
                 if result.has_kept:
                     reduced_cols.append(col)
-
-        # mses = {col: np.log1p(np.sum(res.anomaly_scores) / res.anomaly_scores.size) for col, res in results.items()}
-        # mses_map = {i: (k, v) for i, (k, v) in enumerate(mses.items())}
-        # # mse_outliers = banpei.Hotelling().detect(list(mses.values()), 0.05)
-        # # if len(mse_outliers) > 1:
-        # #     for (i, v) in mse_outliers:
-        # #         col = mses_map[i][0]
-        # #         mses.pop(col)
-        # #         print('deleted', col, mses_map[i][1])
-
-        # mse_vals = list(mses.values())
-        # print(np.histogram(~np.isnan(list(mse_vals)), bins='auto'))
-
-        # mse_mean = np.mean(mse_vals)
-        # mse_std = np.std(mse_vals)
-        # sigma = 1
-        # lower, upper = mse_mean - sigma * mse_std, mse_mean + sigma * mse_std
-        # for (col, mse) in mses.items():
-        #     if lower < mse and mse < upper:
-        #         results.pop(col)
-        #         reduced_cols.remove(col)
-        #     else:
-        #         print(mse, col, upper, lower)
-
         anomaly_points = {col: res.outliers for col, res in results.items()}
         return useries[reduced_cols], results, anomaly_points
 
