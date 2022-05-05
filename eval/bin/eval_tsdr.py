@@ -250,7 +250,7 @@ def save_scores(
 def eval_tsdr(run: neptune.Run, cfg: DictConfig):
     ts_plotter: TimeSeriesPlotter = TimeSeriesPlotter(
         run=run,
-        enable_upload_plots=(cfg.neptune.mode != 'debug') or cfg.upload_plots,
+        enable_upload_plots=cfg.upload_plots,
         logger=logger,
     )
 
