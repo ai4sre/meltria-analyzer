@@ -300,6 +300,23 @@ def residual_integral_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeri
     return UnivariateSeriesReductionResult(series, has_kept=False)
 
 
+def two_samp_test_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    alpha: float = kwargs['step1_two_samp_test_alpha']
+    train_x, test_x = np.split(series, 2)
+    match method := kwargs['step1_two_samp_test_method']:
+        case 'ks':
+            pval: float = scipy.stats.ks_2samp(train_x, test_x).pvalue
+        case 'ad':
+            pval: float = scipy.stats.anderson_ksamp([train_x, test_x])[2]
+        case 'es':
+            pval: float = scipy.stats.epps_singleton_2samp(train_x, test_x)[1]
+        case _:
+            raise ValueError(f"Unknown two-sample test method {method}")
+    if pval <= alpha:
+        return UnivariateSeriesReductionResult(series, has_kept=True)
+    return UnivariateSeriesReductionResult(series, has_kept=False)
+
+
 def smooth_with_ma(x: np.ndarray, **kwargs: Any) -> np.ndarray:
     w: int = kwargs.get('step1_ma_window_size', 2)
     return ndimg.uniform_filter1d(input=x, size=w, mode='constant', origin=-(w//2))[:-(w-1)]
@@ -343,6 +360,8 @@ class Tsdr:
                     setattr(self, 'univariate_series_func', hist_and_stationality_model)
                 case 'residual_integral':
                     setattr(self, 'univariate_series_func', residual_integral_model)
+                case 'two_samp_test':
+                    setattr(self, 'univariate_series_func', two_samp_test_model)
                 case _:
                     raise ValueError(f'Invalid name of step1 mode: {univariate_series_func_or_name}')
         else:

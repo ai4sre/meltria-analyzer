@@ -1,0 +1,3 @@
+model_name: two_samp_test
+two_samp_test_method: 'ks' # 'ks' or 'ad' or 'es'
+two_samp_test_alpha: 0.05
