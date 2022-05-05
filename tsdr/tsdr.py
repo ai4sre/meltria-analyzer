@@ -363,7 +363,7 @@ class Tsdr:
 
         reduced_series1, step1_results, anomaly_points = self.reduce_univariate_series(series, max_workers)
 
-        time_adf: float = round(time.time() - start, 2)
+        time_step1: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(metrics_dimension, reduced_series1, 1)
         metrics_dimension["total"].append(len(reduced_series1.columns))
 
@@ -391,11 +391,11 @@ class Tsdr:
             df_before_clustering.copy(), containers_of_service, max_workers,
         )
 
-        time_clustering: float = round(time.time() - start, 2)
+        time_step2: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(metrics_dimension, reduced_series2, 2)
         metrics_dimension["total"].append(len(reduced_series2.columns))
 
-        return {'step1': time_adf, 'step2': time_clustering}, \
+        return {'step1': time_step1, 'step2': time_step2}, \
             {'step1': df_before_clustering, 'step2': reduced_series2}, \
             metrics_dimension, clustering_info, anomaly_points
 
