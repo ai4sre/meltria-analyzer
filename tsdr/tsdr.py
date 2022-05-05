@@ -3,7 +3,7 @@ import random
 import time
 import warnings
 from concurrent import futures
-from typing import Any, Callable, Union
+from typing import Any, Callable
 
 import banpei
 import numpy as np
