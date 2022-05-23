@@ -8,6 +8,7 @@ from typing import Any, Callable
 import banpei
 import numpy as np
 import pandas as pd
+import ruptures as rpt
 import scipy.ndimage as ndimg
 import scipy.signal
 import scipy.stats
@@ -294,10 +295,21 @@ def hist_and_stationality_model(series: np.ndarray, **kwargs: Any) -> Univariate
 
 
 def residual_integral_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
+    # step1: in-sample residuals
     max_rss, max_rss_range = residual_integral_max(series)
-    if max_rss >= kwargs['step1_residual_integral_threshold']:
-        return UnivariateSeriesReductionResult(series, has_kept=True, outliers=max_rss_range)
-    return UnivariateSeriesReductionResult(series, has_kept=False)
+    if max_rss < kwargs['step1_residual_integral_threshold']:
+        return UnivariateSeriesReductionResult(series, has_kept=False)
+
+    if kwargs['step1_residual_integral_change_start_point']:
+        # step2: detect change start time and out-sample errors
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            algo: rpt.Binseg = rpt.Binseg(model='normal').fit(series)
+        bkp: int = algo.predict(n_bkps=1)[0]
+        max_rss, max_rss_range = residual_integral_max(series, bkp=bkp)
+        change_start_time: int = max_rss_range[0][0]
+
+    return UnivariateSeriesReductionResult(series, has_kept=True, outliers=max_rss_range)
 
 
 def two_samp_test_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
