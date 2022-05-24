@@ -8,3 +8,5 @@ defaults:
 upload_plots: false  # upload graph image to Neptune
 neptune:
   mode: debug
+time:
+  fault_inject_time_index: 99

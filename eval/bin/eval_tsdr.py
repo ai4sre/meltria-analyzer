@@ -272,7 +272,8 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
 
             logger.info(f">> Running tsdr {record.chaos_case_file()} ...")
 
-            tsdr_param = {f'step1_{k}': v for k, v in OmegaConf.to_container(cfg.step1, resolve=True).items()}
+            tsdr_param = {'time_fault_inject_time_index': cfg.time.fault_inject_time_index}
+            tsdr_param.update({f'step1_{k}': v for k, v in OmegaConf.to_container(cfg.step1, resolve=True).items()})
             tsdr_param.update({f'step2_{k}': v for k, v in OmegaConf.to_container(cfg.step2, resolve=True).items()})
             reducer = tsdr.Tsdr(cfg.step1.model_name, **tsdr_param)
             elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info, anomaly_points = reducer.run(

@@ -55,6 +55,40 @@ class Tsdr:
     def filter_out_no_change_metrics(self, series: pd.DataFrame) -> pd.DataFrame:
         return series.loc[:, series.apply(lambda x: x.sum() != 0. and not np.isnan(x.sum()) and not np.all(x == x[0]))]
 
+    def detect_failure_start_point(self, sli: np.ndarray, sigma_threshold=3) -> tuple[int, float]:
+        """ Detect failure start point in SLO metrics.
+        The method uses outliter detection with 'robust z-score' and 3-sigma rule.
+        """
+        fi_time = self.params['time_fault_inject_time_index']
+        train, test = np.split(sli, [fi_time])
+        coeff = scipy.stats.norm.ppf(0.75)-scipy.stats.norm.ppf(0.25)
+        iqr = np.quantile(train, 0.75) - np.quantile(train, 0.25)
+        niqr = iqr / coeff
+        median = np.median(train)
+        for i, v in enumerate(test):
+            if np.abs((v - median)/niqr) > sigma_threshold:
+                return (fi_time+i, v)
+        return (0, 0.0)
+
+    def reduce_by_failure_start_time(
+        self,
+        series: pd.DataFrame,
+        results: dict[str, UnivariateSeriesReductionResult],
+    ) -> pd.DataFrame:
+        """ reduce series by failure start time
+        """
+        sli = series['s-front-end_latency'].to_numpy()
+        failure_start_time: int = self.detect_failure_start_point(sli)[0]
+
+        kept_series_labels: list[str] = []
+        for resuts_col, res in results.items():
+            if not res.has_kept:
+                continue
+            change_start_time = res.change_start_point[0]
+            if failure_start_time == 0 or failure_start_time >= change_start_time:
+                kept_series_labels.append(resuts_col)
+        return series[kept_series_labels]
+
     def run(
         self, X: pd.DataFrame, max_workers: int,
     ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any], dict[str, np.ndarray]]:
@@ -70,6 +104,9 @@ class Tsdr:
         time_step1: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(metrics_dimension, reduced_series1, 1)
         metrics_dimension["total"].append(reduced_series1.shape[1])
+
+        # step1.5
+        reduced_series1 = self.reduce_by_failure_start_time(series, step1_results)
 
         # step2
         match series_type := self.params['step2_clustering_series_type']:
