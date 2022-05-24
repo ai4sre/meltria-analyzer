@@ -52,11 +52,14 @@ class Tsdr:
     def univariate_series_func(self, series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
         return unireducer.ar_based_ad_model(series, **kwargs)
 
+    def filter_out_no_change_metrics(self, series: pd.DataFrame) -> pd.DataFrame:
+        return series.loc[:, series.apply(lambda x: x.sum() != 0. and not np.isnan(x.sum()) and not np.all(x == x[0]))]
+
     def run(
-        self,
-        series: pd.DataFrame,
-        max_workers: int,
+        self, X: pd.DataFrame, max_workers: int,
     ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any], dict[str, np.ndarray]]:
+        # step0
+        series: pd.DataFrame = self.filter_out_no_change_metrics(X)
         metrics_dimension: dict[str, Any] = aggregate_dimension(series)
 
         # step1
@@ -66,7 +69,7 @@ class Tsdr:
 
         time_step1: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(metrics_dimension, reduced_series1, 1)
-        metrics_dimension["total"].append(len(reduced_series1.columns))
+        metrics_dimension["total"].append(reduced_series1.shape[1])
 
         # step2
         match series_type := self.params['step2_clustering_series_type']:
@@ -94,7 +97,7 @@ class Tsdr:
 
         time_step2: float = round(time.time() - start, 2)
         metrics_dimension = util.count_metrics(metrics_dimension, reduced_series2, 2)
-        metrics_dimension["total"].append(len(reduced_series2.columns))
+        metrics_dimension["total"].append(reduced_series2.shape[1])
 
         return {'step1': time_step1, 'step2': time_step2}, \
             {'step1': df_before_clustering, 'step2': reduced_series2}, \
@@ -110,8 +113,6 @@ class Tsdr:
             future_to_col = {}
             for col in useries.columns:
                 series: np.ndarray = useries[col].to_numpy()
-                if series.sum() == 0. or len(np.unique(series)) == 1 or np.isnan(series.sum()):
-                    continue
                 future = executor.submit(self.univariate_series_func, series, **self.params)
                 future_to_col[future] = col
             reduced_cols: list[str] = []

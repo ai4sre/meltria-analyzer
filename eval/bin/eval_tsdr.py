@@ -215,7 +215,7 @@ def save_scores(
             'tp': tp,
             'fn': fn,
             'accuracy': tp / (tp + fn),
-            'num_series': f"{int(x['num_series_reduced'].mean())}/{int(x['num_series_total'].mean())}",
+            'num_series': f"{int(x['num_series_reduced'].mean())}/{int(x['num_series_total'].mean())}/{int(x['num_series_raw'].mean())}",
             'reduction_rate_mean': rate.mean(),
             'reduction_rate_max': rate.max(),
             'reduction_rate_min': rate.min(),
@@ -276,11 +276,12 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             tsdr_param.update({f'step2_{k}': v for k, v in OmegaConf.to_container(cfg.step2, resolve=True).items()})
             reducer = tsdr.Tsdr(cfg.step1.model_name, **tsdr_param)
             elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info, anomaly_points = reducer.run(
-                series=data_df,
+                X=data_df,
                 max_workers=cpu_count(),
             )
 
             num_series_each_step: dict[str, float] = {
+                'raw': data_df.shape[1],
                 'total': metrics_dimension['total'][0],
                 'step1': metrics_dimension['total'][1],
                 'step2': metrics_dimension['total'][2],
@@ -295,6 +296,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 tests_records.append({
                     'chaos_type': chaos_type, 'chaos_comp': chaos_comp, 'metrics_file': metrics_file, 'step': step,
                     'ok': ok,
+                    'num_series_raw': num_series_each_step['raw'],
                     'num_series_total': num_series_each_step['total'],
                     'num_series_reduced': num_series_each_step[step],
                     'elapsed_time': elapsed_time_by_step[step],
