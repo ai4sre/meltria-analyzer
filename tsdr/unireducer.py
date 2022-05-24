@@ -26,12 +26,14 @@ class UnivariateSeriesReductionResult:
         anomaly_scores: np.ndarray = np.array([]),
         abn_th: float = 0.0,
         outliers: list[tuple[int, float]] = [],
+        change_start_point: tuple[int, float] = (0, 0.0),
     ) -> None:
         self._original_series: np.ndarray = original_series
         self._has_kept: bool = has_kept
         self._anomaly_scores: np.ndarray = anomaly_scores
         self._abn_th: float = abn_th
         self._outliers: np.ndarray = np.array(outliers, dtype=object)  # mix int and float
+        self._change_start_point = change_start_point
 
     @property
     def original_series(self) -> np.ndarray:
@@ -48,6 +50,10 @@ class UnivariateSeriesReductionResult:
     @property
     def outliers(self) -> np.ndarray:
         return self._outliers
+
+    @property
+    def change_start_point(self) -> tuple[int, float]:
+        return self._change_start_point
 
     def binary_scores(self) -> np.ndarray:
         bin_scores = np.empty(self.anomaly_scores.size, dtype=np.uint8)
@@ -303,6 +309,7 @@ def residual_integral_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeri
     if max_rss < kwargs['step1_residual_integral_threshold']:
         return UnivariateSeriesReductionResult(series, has_kept=False)
 
+    change_start_time = 0
     if kwargs['step1_residual_integral_change_start_point']:
         # step2: detect change start time and out-sample errors
         with warnings.catch_warnings():
@@ -312,7 +319,9 @@ def residual_integral_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeri
         max_rss, max_rss_range = residual_integral_max(series, bkp=bkp)
         change_start_time: int = max_rss_range[0][0]
 
-    return UnivariateSeriesReductionResult(series, has_kept=True, outliers=max_rss_range)
+    return UnivariateSeriesReductionResult(
+        series, has_kept=True, outliers=max_rss_range,
+        change_start_point=(change_start_time, series[change_start_time]))
 
 
 def two_samp_test_model(series: np.ndarray, **kwargs: Any) -> UnivariateSeriesReductionResult:
