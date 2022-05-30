@@ -20,12 +20,7 @@ from tsdr.clustering.metricsnamecluster import cluster_words
 from tsdr.clustering.sbd import sbd, silhouette_score
 from tsdr.unireducer import UnivariateSeriesReductionResult, has_variation
 
-TSIFTER_METHOD = 'tsifter'
-SIEVE_METHOD = 'sieve'
-
 PLOTS_NUM = 120
-SIGNIFICANCE_LEVEL = 0.05
-THRESHOLD_DIST = 0.01
 TARGET_DATA = {
     "containers": "all",
     "services": "all",
@@ -478,8 +473,8 @@ def read_metrics_json(
     interporate: bool = True,
     exclude_middlewares: bool = False,
 ) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
-    """ Read metrics data file """
-
+    """ Read metrics data file
+    """
     with open(data_file) as f:
         raw_json = json.load(f)
     raw_data = pd.read_json(data_file)
@@ -494,14 +489,10 @@ def read_metrics_json(
                     continue
                 metric_name = metric["metric_name"].replace(
                     "container_", "").replace("node_", "")
-                target_name = metric[
-                    "{}_name".format(
-                        target[:-1]) if target != "middlewares" else "container_name"
-                ]
+                target_name = metric["{}_name".format(target[:-1]) if target != "middlewares" else "container_name"]
                 if target_name in ["queue-master", "rabbitmq", "session-db"]:
                     continue
-                metric_name = "{}-{}_{}".format(target[0],
-                                                target_name, metric_name)
+                metric_name = "{}-{}_{}".format(target[0], target_name, metric_name)
                 metrics_name_to_values[metric_name] = np.array(
                     metric["values"], dtype=np.float64,
                 )[:, 1][-PLOTS_NUM:]
@@ -517,7 +508,8 @@ def read_metrics_json(
 
 
 def prepare_services_list(data_df: pd.DataFrame) -> list[str]:
-    # Prepare list of services
+    """ prepare list of services
+    """
     services_list: list[str] = []
     for col in data_df.columns:
         if not col.startswith('s-'):
