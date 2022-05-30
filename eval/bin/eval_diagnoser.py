@@ -187,11 +187,8 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
             tsdr_param = {f'step1_{k}': v for k, v in OmegaConf.to_container(cfg.tsdr.step1, resolve=True).items()}
             tsdr_param.update({f'step2_{k}': v for k, v in OmegaConf.to_container(cfg.tsdr.step2, resolve=True).items()})
             reducer = tsdr.Tsdr(cfg.tsdr.step1.model_name, **tsdr_param)
-            _, reduced_df_by_step, metrics_dimension, _, _ = reducer.run(
-                series=data_df,
-                max_workers=cpu_count(),
-            )
-            reduced_df: pd.DataFrame = reduced_df_by_step['step2']
+            tsdr_stat, _, _ = reducer.run(X=data_df, max_workers=cpu_count())
+            reduced_df: pd.DataFrame = tsdr_stat[-1][0]
 
             logger.info(f">> Running diagnosis of {record.chaos_case_file()} ...")
 
@@ -225,7 +222,7 @@ def eval_diagnoser(run: neptune.Run, cfg: DictConfig) -> None:
                 'metrics_file': metrics_file,
                 'graph_ok': graph_ok,
                 'building_graph_elapsed_sec': stats['building_graph_elapsed_sec'],
-                'num_series': metrics_dimension['total'][2],
+                'num_series': tsdr_stat[1][1]['count'].sum(),
                 'init_g_num_nodes': stats['init_graph_nodes_num'],
                 'init_g_num_edges': stats['init_graph_edges_num'],
                 'causal_g_num_nodes': stats['causal_graph_nodes_num'],
