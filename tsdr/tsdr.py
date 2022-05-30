@@ -473,39 +473,11 @@ def sieve_clustering(reduced_df, services_list, max_workers):
     return reduced_df, clustering_info
 
 
-def run_sieve(
-    data_df: pd.DataFrame,
-    metrics_dimension: dict[str, Any],
-    services_list: list[str],
-    max_workers: int,
-) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
-    # step1
-    start = time.time()
-
-    reduced_by_st_df = sieve_reduce_series(data_df)
-
-    time_cv = round(time.time() - start, 2)
-    metrics_dimension = count_metrics(metrics_dimension, reduced_by_st_df, 1)
-    metrics_dimension["total"].append(len(reduced_by_st_df.columns))
-
-    # step2
-    start = time.time()
-
-    reduced_df, clustering_info = sieve_clustering(
-        reduced_by_st_df.copy(), services_list, max_workers)
-
-    time_clustering = round(time.time() - start, 2)
-    metrics_dimension = count_metrics(metrics_dimension, reduced_df, 2)
-    metrics_dimension["total"].append(len(reduced_df.columns))
-
-    return {'step1': time_cv, 'step2': time_clustering}, \
-        {'step1': reduced_by_st_df, 'step2': reduced_df}, metrics_dimension, clustering_info
-
-
-def read_metrics_json(data_file: str,
-                      interporate: bool = True,
-                      exclude_middlewares: bool = False,
-                      ) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
+def read_metrics_json(
+    data_file: str,
+    interporate: bool = True,
+    exclude_middlewares: bool = False,
+) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
     """ Read metrics data file """
 
     with open(data_file) as f:
@@ -594,15 +566,3 @@ def count_metrics(df: pd.DataFrame) -> pd.DataFrame:
                 counter[comp_type][comp_name] += 1
     clist = [{'comp_type': t, 'comp_name': n, 'count': cnt} for t, v in counter.items() for n, cnt in v.items()]
     return pd.DataFrame(clist).set_index(['comp_type', 'comp_name'])
-
-
-def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs,
-             ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any]]:
-    if method == TSIFTER_METHOD:
-        tsdr = Tsdr(**kwargs)
-        return tsdr.run(data_df, max_workers)
-    elif method == SIEVE_METHOD:
-        services: list[str] = prepare_services_list(data_df)
-        metrics_dimension: dict[str, Any] = aggregate_dimension(data_df)
-        return run_sieve(data_df, metrics_dimension, services, max_workers)
-    return {}, {}, {}, {}
