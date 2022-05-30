@@ -2,6 +2,7 @@ import json
 import random
 import time
 import warnings
+from collections import defaultdict
 from concurrent import futures
 from typing import Any, Callable
 
@@ -18,7 +19,6 @@ from tsdr.clustering.kshape import kshape
 from tsdr.clustering.metricsnamecluster import cluster_words
 from tsdr.clustering.sbd import sbd, silhouette_score
 from tsdr.unireducer import UnivariateSeriesReductionResult, has_variation
-from tsdr.util import util
 
 TSIFTER_METHOD = 'tsifter'
 SIEVE_METHOD = 'sieve'
@@ -91,22 +91,32 @@ class Tsdr:
 
     def run(
         self, X: pd.DataFrame, max_workers: int,
-    ) -> tuple[dict[str, float], dict[str, pd.DataFrame], dict[str, Any], dict[str, Any], dict[str, np.ndarray]]:
+    ) -> tuple[list[tuple[pd.DataFrame, pd.DataFrame, float]], dict[str, Any], dict[str, np.ndarray]]:
+        stat: list[tuple[pd.DataFrame, pd.DataFrame, float]] = []
+        stat.append((X, count_metrics(X), 0.0))
+
         # step0
+        start: float = time.time()
+
         series: pd.DataFrame = self.filter_out_no_change_metrics(X)
-        metrics_dimension: dict[str, Any] = aggregate_dimension(series)
+
+        elapsed_time: float = round(time.time() - start, 2)
+        stat.append((series, count_metrics(series), elapsed_time))
 
         # step1
-        start: float = time.time()
+        start = time.time()
 
         reduced_series1, step1_results, anomaly_points = self.reduce_univariate_series(series, max_workers)
 
-        time_step1: float = round(time.time() - start, 2)
-        metrics_dimension = util.count_metrics(metrics_dimension, reduced_series1, 1)
-        metrics_dimension["total"].append(reduced_series1.shape[1])
+        elapsed_time = round(time.time() - start, 2)
+        stat.append((reduced_series1, count_metrics(reduced_series1), elapsed_time))
 
         # step1.5
+        start = time.time()
+
         reduced_series1 = self.reduce_by_failure_start_time(series, step1_results)
+
+        elapsed_time = round(time.time() - start, 2)
 
         # step2
         match series_type := self.params['step2_clustering_series_type']:
@@ -124,6 +134,8 @@ class Tsdr:
             case _:
                 raise ValueError(f'step2_clustered_series_type is invalid {series_type}')
 
+        stat.append((df_before_clustering, count_metrics(df_before_clustering), elapsed_time))
+
         containers_of_service: dict[str, set[str]] = get_container_names_of_service(series)
 
         start = time.time()
@@ -132,13 +144,10 @@ class Tsdr:
             df_before_clustering.copy(), containers_of_service, max_workers,
         )
 
-        time_step2: float = round(time.time() - start, 2)
-        metrics_dimension = util.count_metrics(metrics_dimension, reduced_series2, 2)
-        metrics_dimension["total"].append(reduced_series2.shape[1])
+        elapsed_time = round(time.time() - start, 2)
+        stat.append((reduced_series2, count_metrics(reduced_series2), elapsed_time))
 
-        return {'step1': time_step1, 'step2': time_step2}, \
-            {'step1': df_before_clustering, 'step2': reduced_series2}, \
-            metrics_dimension, clustering_info, anomaly_points
+        return stat, clustering_info, anomaly_points
 
     def reduce_univariate_series(
         self,
@@ -476,8 +485,7 @@ def run_sieve(
     reduced_by_st_df = sieve_reduce_series(data_df)
 
     time_cv = round(time.time() - start, 2)
-    metrics_dimension = util.count_metrics(
-        metrics_dimension, reduced_by_st_df, 1)
+    metrics_dimension = count_metrics(metrics_dimension, reduced_by_st_df, 1)
     metrics_dimension["total"].append(len(reduced_by_st_df.columns))
 
     # step2
@@ -487,7 +495,7 @@ def run_sieve(
         reduced_by_st_df.copy(), services_list, max_workers)
 
     time_clustering = round(time.time() - start, 2)
-    metrics_dimension = util.count_metrics(metrics_dimension, reduced_df, 2)
+    metrics_dimension = count_metrics(metrics_dimension, reduced_df, 2)
     metrics_dimension["total"].append(len(reduced_df.columns))
 
     return {'step1': time_cv, 'step2': time_clustering}, \
@@ -575,13 +583,17 @@ def get_container_names_of_service(data_df: pd.DataFrame) -> dict[str, set[str]]
     return components
 
 
-def aggregate_dimension(data_df: pd.DataFrame) -> dict[str, Any]:
-    metrics_dimension: dict[str, Any] = {}
-    for target in TARGET_DATA:
-        metrics_dimension[target] = {}
-    metrics_dimension = util.count_metrics(metrics_dimension, data_df, 0)
-    metrics_dimension["total"] = [len(data_df.columns)]
-    return metrics_dimension
+def count_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    map_type: list[tuple[str, str]] = [
+        ('c-', 'containers'), ('s-', 'services'), ('m-', 'middlewares'), ('n-', 'nodes')]
+    counter: dict[str, Any] = defaultdict(lambda: defaultdict(lambda: 0))
+    for col in df.columns:
+        for prefix, comp_type in map_type:
+            if col.startswith(prefix):
+                comp_name = col.split('_')[0].replace(prefix, '')
+                counter[comp_type][comp_name] += 1
+    clist = [{'comp_type': t, 'comp_name': n, 'count': cnt} for t, v in counter.items() for n, cnt in v.items()]
+    return pd.DataFrame(clist).set_index(['comp_type', 'comp_name'])
 
 
 def run_tsdr(data_df: pd.DataFrame, method: str, max_workers: int, **kwargs,

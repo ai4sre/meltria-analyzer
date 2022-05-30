@@ -276,31 +276,28 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
             tsdr_param.update({f'step1_{k}': v for k, v in OmegaConf.to_container(cfg.step1, resolve=True).items()})
             tsdr_param.update({f'step2_{k}': v for k, v in OmegaConf.to_container(cfg.step2, resolve=True).items()})
             reducer = tsdr.Tsdr(cfg.step1.model_name, **tsdr_param)
-            elapsed_time_by_step, reduced_df_by_step, metrics_dimension, clustering_info, anomaly_points = reducer.run(
+            tsdr_stat, clustering_info, anomaly_points = reducer.run(
                 X=data_df,
                 max_workers=cpu_count(),
             )
 
-            num_series_each_step: dict[str, float] = {
-                'raw': data_df.shape[1],
-                'total': metrics_dimension['total'][0],
-                'step1': metrics_dimension['total'][1],
-                'step2': metrics_dimension['total'][2],
-            }
-
-            for step, df in reduced_df_by_step.items():
+            # skip the first item of tsdr_stat because it
+            for i, (reduced_df, stat_df, elapsed_time) in enumerate(tsdr_stat[1:], start=1):
                 ok, found_metrics = groundtruth.check_tsdr_ground_truth_by_route(
-                    metrics=list(df.columns),
+                    metrics=list(reduced_df.columns),
                     chaos_type=chaos_type,
                     chaos_comp=chaos_comp,
                 )
+                # 'raw': tsdr_stat[0]
+                # 'prefiltered_total': tsdr_stat[1]
                 tests_records.append({
-                    'chaos_type': chaos_type, 'chaos_comp': chaos_comp, 'metrics_file': metrics_file, 'step': step,
+                    'chaos_type': chaos_type, 'chaos_comp': chaos_comp, 'metrics_file': metrics_file,
+                    'step': f"step{i}",
                     'ok': ok,
-                    'num_series_raw': num_series_each_step['raw'],
-                    'num_series_total': num_series_each_step['total'],
-                    'num_series_reduced': num_series_each_step[step],
-                    'elapsed_time': elapsed_time_by_step[step],
+                    'num_series_raw': tsdr_stat[0][1]['count'].sum(),
+                    'num_series_total': tsdr_stat[1][1]['count'].sum(),
+                    'num_series_reduced': stat_df['count'].sum(),
+                    'elapsed_time': elapsed_time,
                     'found_metrics': ','.join(found_metrics),
                     'grafana_dashboard_url': grafana_dashboard_url,
                 })
@@ -313,7 +310,7 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 })
 
             rep_metrics: list[str] = list(clustering_info.keys())
-            post_clustered_reduced_df = reduced_df_by_step['step2']
+            post_clustered_reduced_df = tsdr_stat[-1][0]  # the last item pf tsdr_stat should be clustered result.
             non_clustered_reduced_df: pd.DataFrame = post_clustered_reduced_df.drop(columns=rep_metrics)
             non_clustered_records.append({
                 'chaos_type': chaos_type, 'chaos_comp': chaos_comp, 'metrics_file': metrics_file,
