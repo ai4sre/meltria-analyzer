@@ -280,7 +280,6 @@ def eval_tsdr(run: neptune.Run, cfg: DictConfig):
                 X=data_df,
                 max_workers=cpu_count(),
             )
-
             # skip the first item of tsdr_stat because it
             for i, (reduced_df, stat_df, elapsed_time) in enumerate(tsdr_stat[1:], start=1):
                 ok, found_metrics = groundtruth.check_tsdr_ground_truth_by_route(
