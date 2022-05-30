@@ -18,6 +18,7 @@ from tsdr.clustering import dbscan
 from tsdr.clustering.kshape import kshape
 from tsdr.clustering.metricsnamecluster import cluster_words
 from tsdr.clustering.sbd import sbd, silhouette_score
+from tsdr.outlierdetection.n_sigma_rule import detect_with_n_sigma_rule
 from tsdr.unireducer import UnivariateSeriesReductionResult, has_variation
 
 PLOTS_NUM = 120
@@ -65,22 +66,27 @@ class Tsdr:
                 return (fi_time+i, v)
         return (0, 0.0)
 
-    def reduce_by_failure_start_time(
+    def reduce_by_failure_detection_time(
         self,
         series: pd.DataFrame,
         results: dict[str, UnivariateSeriesReductionResult],
     ) -> pd.DataFrame:
-        """ reduce series by failure start time
+        """ reduce series by failure detection time
         """
         sli = series['s-front-end_latency'].to_numpy()
-        failure_start_time: int = self.detect_failure_start_point(sli)[0]
+        outliers = detect_with_n_sigma_rule(
+            x=sli,
+            test_start_time=self.params['time_fault_inject_time_index'],
+            sigma_threshold=3,
+        )
+        failure_detection_time: int = 0 if outliers.size == 0 else outliers[0]
 
         kept_series_labels: list[str] = []
         for resuts_col, res in results.items():
             if not res.has_kept:
                 continue
             change_start_time = res.change_start_point[0]
-            if failure_start_time == 0 or failure_start_time >= change_start_time:
+            if failure_detection_time == 0 or failure_detection_time >= change_start_time:
                 kept_series_labels.append(resuts_col)
         return series[kept_series_labels]
 
@@ -109,7 +115,7 @@ class Tsdr:
         # step1.5
         start = time.time()
 
-        reduced_series1 = self.reduce_by_failure_start_time(series, step1_results)
+        reduced_series1 = self.reduce_by_failure_detection_time(series, step1_results)
 
         elapsed_time = round(time.time() - start, 2)
 
